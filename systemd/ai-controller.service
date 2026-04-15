@@ -1,0 +1,18 @@
+[Unit]
+Description=AI Controller Service
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/ai-os/app-controller
+ExecStart=/usr/local/bin/python /root/ai-os/app-controller/main.py
+Restart=always
+RestartSec=5
+Environment="PYTHONPATH=/root/ai-os/app-controller"
+Environment="REDIS_URL=redis://localhost:6379"
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

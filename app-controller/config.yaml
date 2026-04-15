@@ -1,0 +1,21 @@
+models:
+  gemma-2-9b:
+    service: vllm-gemma
+    port: 8000
+    required_memory: 12GB
+  
+  llama-3-8b:
+    service: vllm-llama
+    port: 8001
+    required_memory: 10GB
+  
+  mistral-7b:
+    service: vllm-mistral
+    port: 8002
+    required_memory: 8GB
+
+settings:
+  concurrency_limit: 4
+  min_available_memory: 2GB
+  request_timeout: 60
+  model_start_timeout: 60
