@@ -3,19 +3,29 @@ models:
     service: vllm-gemma
     port: 8000
     required_memory: 12GB
+    preload: true
+    keep_alive: true
   
   llama-3-8b:
     service: vllm-llama
     port: 8001
     required_memory: 10GB
+    preload: false
+    keep_alive: true
   
   mistral-7b:
     service: vllm-mistral
     port: 8002
     required_memory: 8GB
+    preload: false
+    keep_alive: false
 
 settings:
   concurrency_limit: 4
   min_available_memory: 2GB
   request_timeout: 60
   model_start_timeout: 60
+  preload_timeout: 120
+  idle_timeout: 300
+  memory_flush_interval: 300
+  default_memory_strategy: balanced

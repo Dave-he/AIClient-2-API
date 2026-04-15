@@ -1,8 +1,40 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from core.scheduler import Scheduler
+from core.scheduler import Scheduler, _parse_memory_size
 from core.monitor import GPUMonitor
 from core.sys_ctl import SystemController
+
+class TestMemoryParsing:
+    def test_parse_memory_bytes(self):
+        assert _parse_memory_size("1024") == 1024
+        assert _parse_memory_size("0") == 0
+        assert _parse_memory_size("1000000") == 1000000
+
+    def test_parse_memory_kb(self):
+        assert _parse_memory_size("1KB") == 1024
+        assert _parse_memory_size("1024KB") == 1024 * 1024
+
+    def test_parse_memory_mb(self):
+        assert _parse_memory_size("1MB") == 1024 ** 2
+        assert _parse_memory_size("1024MB") == 1024 ** 3
+
+    def test_parse_memory_gb(self):
+        assert _parse_memory_size("1GB") == 1024 ** 3
+        assert _parse_memory_size("12GB") == 12 * 1024 ** 3
+
+    def test_parse_memory_tb(self):
+        assert _parse_memory_size("1TB") == 1024 ** 4
+
+    def test_parse_memory_case_insensitive(self):
+        assert _parse_memory_size("1gb") == 1024 ** 3
+        assert _parse_memory_size("1Gb") == 1024 ** 3
+
+    def test_parse_memory_with_spaces(self):
+        assert _parse_memory_size(" 12 GB ") == 12 * 1024 ** 3
+
+    def test_parse_memory_invalid(self):
+        assert _parse_memory_size("invalid") == 0
+        assert _parse_memory_size("") == 0
 
 class TestScheduler:
     @pytest.fixture
@@ -99,3 +131,19 @@ class TestScheduler:
 
     def test_get_min_available_memory(self, scheduler):
         assert scheduler.get_min_available_memory() == 2 * 1024 ** 3
+
+    def test_acquire_request(self, scheduler):
+        result = scheduler.acquire_request("gemma-2-9b")
+        assert result is True
+
+    def test_release_request(self, scheduler):
+        scheduler.acquire_request("gemma-2-9b")
+        scheduler.release_request("gemma-2-9b")
+
+    def test_get_active_requests(self, scheduler):
+        scheduler.acquire_request("gemma-2-9b")
+        count = scheduler.get_active_requests("gemma-2-9b")
+        assert count >= 0
+
+    def test_can_accept_request(self, scheduler):
+        assert scheduler.can_accept_request("gemma-2-9b") is True

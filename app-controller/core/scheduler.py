@@ -5,6 +5,35 @@ from typing import Dict, Optional, List, Set
 from datetime import datetime, timedelta
 from .rate_limiter import RateLimiter
 
+def _parse_memory_size(size_str: str) -> int:
+    if not size_str:
+        return 0
+    
+    size_str = str(size_str).strip().upper()
+    multipliers = {
+        'TB': 1024 ** 4,
+        'GB': 1024 ** 3,
+        'MB': 1024 ** 2,
+        'KB': 1024,
+        'B': 1
+    }
+    
+    for suffix, multiplier in multipliers.items():
+        if size_str.endswith(suffix):
+            num_str = size_str[:-len(suffix)].strip()
+            if num_str:
+                try:
+                    num = float(num_str)
+                    return int(num * multiplier)
+                except ValueError:
+                    pass
+            break
+    
+    try:
+        return int(size_str)
+    except ValueError:
+        return 0
+
 class Scheduler:
     def __init__(self, gpu_monitor, sys_controller):
         self.gpu_monitor = gpu_monitor
@@ -51,8 +80,15 @@ class Scheduler:
     
     def _init_preloaded_models(self):
         preload_models = [name for name, cfg in self.config.get("models", {}).items() if cfg.get("preload", False)]
-        for model_name in preload_models:
-            asyncio.create_task(self._preload_model(model_name))
+        if not preload_models:
+            return
+        
+        try:
+            loop = asyncio.get_running_loop()
+            for model_name in preload_models:
+                asyncio.create_task(self._preload_model(model_name))
+        except RuntimeError:
+            pass
     
     async def _preload_model(self, model_name: str):
         try:
@@ -104,7 +140,11 @@ class Scheduler:
     
     def release_request(self, model_name: str):
         self.rate_limiter.decrement_request(model_name)
-        asyncio.create_task(self._check_idle_timeout(model_name))
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self._check_idle_timeout(model_name))
+        except RuntimeError:
+            pass
     
     def get_preloaded_models(self) -> List[str]:
         return list(self.preloaded_models)
@@ -131,7 +171,7 @@ class Scheduler:
             return False
         
         service_name = model_config.get("service")
-        required_memory = model_config.get("required_memory", 0)
+        required_memory = _parse_memory_size(model_config.get("required_memory", 0))
         
         if self.is_model_running(model_name):
             return True
@@ -179,7 +219,7 @@ class Scheduler:
             return False
         
         target_config = self.get_model_config(target_model)
-        target_memory = target_config.get("required_memory", 0)
+        target_memory = _parse_memory_size(target_config.get("required_memory", 0))
         
         if mem_info.get("available", 0) >= target_memory:
             return await self.start_model(target_model)
@@ -201,7 +241,7 @@ class Scheduler:
         return self.config.get("settings", {}).get("concurrency_limit", 4)
     
     def get_min_available_memory(self) -> int:
-        return self.config.get("settings", {}).get("min_available_memory", 2 * 1024 ** 3)
+        return _parse_memory_size(self.config.get("settings", {}).get("min_available_memory", 2 * 1024 ** 3))
     
     def get_model_last_used(self, model_name: str) -> Optional[datetime]:
         return self.model_last_used.get(model_name)

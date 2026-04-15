@@ -5,7 +5,10 @@ from typing import Optional, Dict, Any
 
 class SystemController:
     def __init__(self):
-        self._use_sudo = os.geteuid() != 0 if hasattr(os, 'geteuid') else True
+        if os.name == 'nt':
+            self._use_sudo = False
+        else:
+            self._use_sudo = os.geteuid() != 0 if hasattr(os, 'geteuid') else True
     
     def _run_command(self, cmd: list) -> subprocess.CompletedProcess:
         if self._use_sudo and os.name != 'nt':

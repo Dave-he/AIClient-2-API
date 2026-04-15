@@ -1,19 +1,27 @@
 import pytest
-from unittest.mock import Mock, patch
+import os
+from unittest.mock import Mock, patch, MagicMock
 from core.sys_ctl import SystemController
 
 class TestSystemController:
-    @patch('os.geteuid')
-    def test_init_use_sudo(self, mock_geteuid):
-        mock_geteuid.return_value = 1000
-        controller = SystemController()
-        assert controller._use_sudo is True
+    def test_init_windows(self):
+        with patch('os.name', 'nt'):
+            controller = SystemController()
+            assert controller._use_sudo is False
 
-    @patch('os.geteuid')
-    def test_init_root_user(self, mock_geteuid):
-        mock_geteuid.return_value = 0
-        controller = SystemController()
-        assert controller._use_sudo is False
+    @pytest.mark.skipif(os.name == 'nt', reason="os.geteuid not available on Windows")
+    def test_init_linux_non_root(self):
+        with patch('os.name', 'posix'):
+            with patch.object(os, 'geteuid', return_value=1000):
+                controller = SystemController()
+                assert controller._use_sudo is True
+
+    @pytest.mark.skipif(os.name == 'nt', reason="os.geteuid not available on Windows")
+    def test_init_linux_root(self):
+        with patch('os.name', 'posix'):
+            with patch.object(os, 'geteuid', return_value=0):
+                controller = SystemController()
+                assert controller._use_sudo is False
 
     @patch('subprocess.run')
     def test_start_service_success(self, mock_run):

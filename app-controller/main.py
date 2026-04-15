@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any, Union, Set
+from typing import Optional, List, Dict, Any, Union
 import asyncio
 import httpx
 import json
@@ -11,6 +11,24 @@ from datetime import datetime
 from core.scheduler import Scheduler
 from core.monitor import GPUMonitor
 from core.sys_ctl import SystemController
+from core.logger import setup_logger
+from core.websocket_manager import WebSocketManager
+from core.config_watcher import ConfigWatcher
+from core.metrics import MetricsCollector
+from middleware.error_handler import (
+    http_exception_handler,
+    generic_exception_handler,
+    controller_exception_handler,
+    ControllerException,
+    ModelNotFoundException,
+    InsufficientMemoryException,
+    TooManyRequestsException,
+    ModelServiceUnavailableException
+)
+from middleware.rate_limit import RateLimitMiddleware
+from middleware.timeout_handler import TimeoutHandlerMiddleware
+
+logger = setup_logger()
 
 app = FastAPI(title="AI Controller API", version="1.0.0")
 
@@ -22,54 +40,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.middleware("http")(RateLimitMiddleware(max_requests=100, window_seconds=60))
+app.middleware("http")(TimeoutHandlerMiddleware(timeout_seconds=60))
+
 gpu_monitor = GPUMonitor()
 sys_controller = SystemController()
 scheduler = Scheduler(gpu_monitor, sys_controller)
+ws_manager = WebSocketManager()
+metrics = MetricsCollector()
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Set[WebSocket] = set()
-    
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.add(websocket)
-    
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-    
-    async def broadcast(self, message: Dict[str, Any]):
-        disconnected = []
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except:
-                disconnected.append(connection)
-        
-        for conn in disconnected:
-            self.disconnect(conn)
+config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+config_watcher = ConfigWatcher(config_path)
 
-manager = ConnectionManager()
+def on_config_changed(new_config: Dict):
+    logger.info("Configuration updated, reloading scheduler")
+    scheduler.config = new_config
 
-async def gpu_monitor_task():
-    while True:
-        try:
-            gpu_status = gpu_monitor.get_gpu_status()
-            model_status = scheduler.get_model_status()
-            queue_status = scheduler.rate_limiter.get_all_queue_status()
-            
-            message = {
-                "type": "status_update",
-                "timestamp": datetime.now().isoformat(),
-                "gpu": gpu_status,
-                "models": model_status,
-                "queue": queue_status
-            }
-            
-            await manager.broadcast(message)
-        except Exception as e:
-            pass
-        
-        await asyncio.sleep(1)
+config_watcher.register_callback(on_config_changed)
+config_watcher.start_watching()
+
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
+app.add_exception_handler(ControllerException, controller_exception_handler)
 
 class ChatCompletionRequest(BaseModel):
     model: str
@@ -96,138 +88,4 @@ class ChatCompletionResponse(BaseModel):
     usage: Optional[Dict[str, int]] = None
 
 class ChatCompletionChunk(BaseModel):
-    id: str = Field(default_factory=lambda: f"chatcmpl-{os.urandom(12).hex()}")
-    object: str = "chat.completion.chunk"
-    created: int = Field(default_factory=lambda: int(asyncio.get_event_loop().time()))
-    model: str
-    choices: List[Dict[str, Any]]
-
-@app.get("/v1/models")
-async def list_models():
-    models = scheduler.get_available_models()
-    return {"object": "list", "data": [{"id": m, "object": "model", "created": 0, "owned_by": "local"} for m in models]}
-
-@app.post("/v1/chat/completions")
-async def chat_completions(request: ChatCompletionRequest):
-    model_name = request.model
-    stream = request.stream or False
-    
-    if not scheduler.is_model_available(model_name):
-        raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
-    
-    if not scheduler.acquire_request(model_name):
-        active = scheduler.get_active_requests(model_name)
-        limit = scheduler.get_concurrency_limit()
-        raise HTTPException(status_code=429, detail=f"Too Many Requests: {active}/{limit} concurrent requests")
-    
-    try:
-        gpu_status = gpu_monitor.get_gpu_status()
-        if gpu_status and gpu_status['available_memory'] < 2 * 1024 ** 3:
-            raise HTTPException(status_code=503, detail="Insufficient GPU memory available")
-        
-        if not scheduler.is_model_running(model_name):
-            await scheduler.start_model(model_name)
-            await asyncio.sleep(5)
-        
-        vllm_port = scheduler.get_model_port(model_name)
-        vllm_url = f"http://localhost:{vllm_port}/v1/chat/completions"
-        
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(
-                vllm_url,
-                json=request.dict(exclude_unset=True),
-                timeout=60
-            )
-            response.raise_for_status()
-            
-            if stream:
-                async def generate():
-                    async for chunk in response.aiter_lines():
-                        if chunk.startswith("data: "):
-                            chunk_data = chunk[6:]
-                            if chunk_data == "[DONE]":
-                                yield "data: [DONE]\n\n"
-                                break
-                            try:
-                                json_chunk = json.loads(chunk_data)
-                                json_chunk['id'] = f"chatcmpl-{os.urandom(12).hex()}"
-                                yield f"data: {json.dumps(json_chunk)}\n\n"
-                            except:
-                                yield f"data: {chunk_data}\n\n"
-                return generate()
-            else:
-                result = response.json()
-                result['id'] = f"chatcmpl-{os.urandom(12).hex()}"
-                return result
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=503, detail=f"Model service unavailable: {str(e)}")
-    finally:
-        scheduler.release_request(model_name)
-
-@app.get("/manage/gpu")
-async def get_gpu_status():
-    status = gpu_monitor.get_gpu_status()
-    if not status:
-        return {"status": "unavailable", "message": "No GPU detected"}
-    return status
-
-@app.get("/manage/models")
-async def get_model_status():
-    models = scheduler.get_available_models()
-    status = {}
-    for model in models:
-        status[model] = {
-            "running": scheduler.is_model_running(model),
-            "port": scheduler.get_model_port(model),
-            "service": scheduler.get_model_service(model),
-            "active_requests": scheduler.get_active_requests(model)
-        }
-    return status
-
-@app.get("/manage/queue")
-async def get_queue_status():
-    models = scheduler.get_available_models()
-    queue_info = {}
-    for model in models:
-        queue_info[model] = {
-            "active_requests": scheduler.get_active_requests(model),
-            "concurrency_limit": scheduler.get_concurrency_limit(),
-            "can_accept": scheduler.can_accept_request(model)
-        }
-    return queue_info
-
-@app.post("/manage/models/{model_name}/start")
-async def start_model(model_name: str):
-    if not scheduler.is_model_available(model_name):
-        raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
-    
-    if scheduler.is_model_running(model_name):
-        return {"status": "already_running", "model": model_name}
-    
-    success = await scheduler.start_model(model_name)
-    if success:
-        return {"status": "starting", "model": model_name}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to start model {model_name}")
-
-@app.post("/manage/models/{model_name}/stop")
-async def stop_model(model_name: str):
-    if not scheduler.is_model_available(model_name):
-        raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
-    
-    if not scheduler.is_model_running(model_name):
-        return {"status": "already_stopped", "model": model_name}
-    
-    success = await scheduler.stop_model(model_name)
-    if success:
-        return {"status": "stopped", "model": model_name}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to stop model {model_name}")
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    id: str = Field(default_factory=lambda: f"chatcm
