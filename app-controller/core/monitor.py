@@ -8,7 +8,6 @@ from typing import Dict, Optional, List
 
 class GPUMonitor:
     def __init__(self):
-        self._nvidia_smi_available = self._check_nvidia_smi()
         self._last_flush_time = datetime.now()
         self._flush_interval = 300  # 5分钟
         self._memory_strategy = "balanced"  # conservative, balanced, aggressive
@@ -26,7 +25,7 @@ class GPUMonitor:
             return False
     
     def get_gpu_status(self) -> Optional[Dict]:
-        if not self._nvidia_smi_available:
+        if not self._check_nvidia_smi():
             return None
         
         try:
@@ -49,13 +48,18 @@ class GPUMonitor:
             for line in lines:
                 parts = line.split(',')
                 if len(parts) >= 6:
+                    total_mb = int(parts[1].strip())
+                    used_mb = int(parts[2].strip())
+                    free_mb = int(parts[3].strip())
+                    
                     gpu_info = {
                         "name": parts[0].strip(),
-                        "total_memory": int(parts[1].strip()) * 1024 ** 2,
-                        "used_memory": int(parts[2].strip()) * 1024 ** 2,
-                        "available_memory": int(parts[3].strip()) * 1024 ** 2,
+                        "total_memory": total_mb,
+                        "used_memory": used_mb,
+                        "available_memory": free_mb,
                         "temperature": int(parts[4].strip()),
-                        "utilization": int(parts[5].strip())
+                        "utilization": int(parts[5].strip()),
+                        "memory_utilization": int(used_mb / total_mb * 100) if total_mb > 0 else 0
                     }
                     gpus.append(gpu_info)
             
@@ -64,6 +68,13 @@ class GPUMonitor:
                 return {
                     "status": "available",
                     "gpu_count": len(gpus),
+                    "name": primary_gpu["name"],
+                    "total_memory": primary_gpu["total_memory"],
+                    "used_memory": primary_gpu["used_memory"],
+                    "available_memory": primary_gpu["available_memory"],
+                    "temperature": primary_gpu["temperature"],
+                    "utilization": primary_gpu["utilization"],
+                    "memory_utilization": primary_gpu["memory_utilization"],
                     "primary": primary_gpu,
                     "all_gpus": gpus
                 }
@@ -76,9 +87,9 @@ class GPUMonitor:
         status = self.get_gpu_status()
         if status:
             return {
-                "total": status["primary"]["total_memory"],
-                "used": status["primary"]["used_memory"],
-                "available": status["primary"]["available_memory"]
+                "total": status["total_memory"],
+                "used": status["used_memory"],
+                "available": status["available_memory"]
             }
         return None
     

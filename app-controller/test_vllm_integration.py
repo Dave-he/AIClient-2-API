@@ -76,11 +76,14 @@ def test_controller_chat():
         print(f"请求模型: {payload['model']}")
         print(f"请求消息: {payload['messages'][0]['content']}")
         
+        start_time = time.time()
         response = requests.post(f"{CONTROLLER_URL}/v1/chat/completions", json=payload)
+        latency = time.time() - start_time
         
         if response.status_code == 200:
             result = response.json()
             print(f"响应状态: ✅ 成功")
+            print(f"响应延迟: {latency:.2f}s")
             print(f"响应ID: {result.get('id', '')}")
             if 'choices' in result and len(result['choices']) > 0:
                 content = result['choices'][0]['message'].get('content', '')
@@ -124,6 +127,21 @@ def test_vllm_direct_chat():
     except Exception as e:
         print(f"vLLM直接测试: ❌ 连接失败 - {e}")
 
+def test_model_management():
+    print("\n=== 测试模型管理接口 ===")
+    try:
+        response = requests.get(f"{CONTROLLER_URL}/manage/models")
+        if response.status_code == 200:
+            model_status = response.json()
+            print(f"模型状态获取: ✅ 成功")
+            for model_name, status in model_status.items():
+                status_icon = "🟢" if status.get('running') else "🔴"
+                print(f"  {status_icon} {model_name}: running={status.get('running')}, active_requests={status.get('active_requests')}")
+        else:
+            print(f"模型状态获取: ❌ 失败 (状态码: {response.status_code})")
+    except Exception as e:
+        print(f"模型管理测试: ❌ 连接失败 - {e}")
+
 def main():
     print("=" * 60)
     print("AI Controller 与 vLLM 服务联调测试")
@@ -133,6 +151,7 @@ def main():
     test_controller_models()
     test_controller_gpu()
     test_controller_health()
+    test_model_management()
     test_controller_chat()
     test_vllm_direct_chat()
     

@@ -200,10 +200,11 @@ async def chat_completions(request: ChatCompletionRequest):
         
         gpu_status = gpu_monitor.get_gpu_status()
         min_memory = scheduler.get_min_available_memory()
-        if gpu_status and gpu_status.get('primary', {}).get('available_memory', 0) < min_memory:
-            available_memory = gpu_status['primary']['available_memory']
+        available_mb = gpu_status.get('available_memory', 0) if gpu_status else 0
+        min_memory_mb = min_memory // (1024 ** 2)
+        if gpu_status and available_mb < min_memory_mb:
             logger.warning(f"Insufficient GPU memory for {model_name}")
-            raise InsufficientMemoryException(available_memory, min_memory)
+            raise InsufficientMemoryException(available_mb, min_memory_mb)
         
         if not scheduler.is_model_running(model_name):
             logger.info(f"Model {model_name} not running, starting...")
@@ -230,7 +231,7 @@ async def chat_completions(request: ChatCompletionRequest):
                 json=request_data,
                 timeout=60
             )
-            await response.raise_for_status()
+            response.raise_for_status()
             
             if stream:
                 async def generate():
@@ -248,7 +249,7 @@ async def chat_completions(request: ChatCompletionRequest):
                                 yield f"data: {chunk_data}\n\n"
                 return generate()
             else:
-                result = await response.json()
+                result = response.json()
                 result['id'] = f"chatcmpl-{os.urandom(12).hex()}"
                 logger.info(f"Request completed successfully for {model_name}")
                 return result
