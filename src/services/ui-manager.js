@@ -19,7 +19,7 @@ export { broadcastEvent, initializeUIManagement, handleUploadOAuthCredentials, u
 
 /**
  * Serve static files for the UI
- * @param {string} path - The request path
+ * @param {string} pathParam - The request path
  * @param {http.ServerResponse} res - The HTTP response object
  */
 export async function serveStaticFiles(pathParam, res) {

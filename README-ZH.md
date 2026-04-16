@@ -167,3 +167,739 @@
 
 使用 AIClient-2-API 最推荐的方式是通过自动化脚本启动，并直接在 **Web UI 控制台** 进行可视化配置。
 
+---
+
+### 🐳 Docker 部署
+
+#### 方式一：Docker Run 快捷启动（推荐）
+
+```bash
+docker run -d \
+  -p 3000:3000 \
+  -p 8085-8087:8085-8087 \
+  -p 1455:1455 \
+  -p 19876-19880:19876-19880 \
+  --restart=always \
+  -v "指定路径:/app/configs" \
+  --name aiclient2api \
+  justlikemaki/aiclient-2-api
+```
+
+**参数说明**：
+- `-d`：后台运行容器
+- `-p 3000:3000`：Web UI 管理控制台端口
+- `-p 8085-8087:8085-8087`：OAuth 回调端口（Gemini: 8085, Antigravity: 8086, 预留: 8087）
+- `-p 1455:1455`：Codex OAuth 回调端口
+- `-p 19876-19880:19876-19880`：Kiro OAuth 回调端口范围
+- `--restart=always`：容器自动重启策略
+- `-v "指定路径:/app/configs"`：挂载配置目录（请将"指定路径"替换为实际路径，如 `/home/user/aiclient-configs`）
+- `--name aiclient2api`：容器名称
+
+#### 方式二：Docker Compose 部署
+
+```bash
+cd docker
+mkdir -p configs
+docker compose up -d
+```
+
+如需从源码构建而非使用预构建镜像，请编辑 `docker-compose.yml`：
+1. 注释掉 `image: justlikemaki/aiclient-2-api:latest` 行
+2. 取消 `build:` 部分的注释
+3. 运行 `docker compose up -d --build`
+
+#### Docker Compose 配置文件说明
+
+```yaml
+services:
+  aiclient-api:
+    image: justlikemaki/aiclient-2-api:latest
+    container_name: aiclient2api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"        # Web UI
+      - "8085-8087:8085-8087"  # OAuth回调端口
+      - "1455:1455"        # Codex OAuth
+      - "19876-19880:19876-19880"  # Kiro OAuth
+    volumes:
+      - ./configs:/app/configs
+    environment:
+      - ARGS=
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.js"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+```
+
+---
+
+### ⚙️ 本地部署
+
+#### 前置条件
+
+- Node.js >= 20.0.0
+- npm >= 10.0.0
+- Go >= 1.20（如需启用 TLS Sidecar 功能）
+
+#### 安装步骤
+
+**1. 克隆项目**
+```bash
+git clone https://github.com/justlovemaki/AIClient-2-API.git
+cd AIClient-2-API
+```
+
+**2. 安装依赖**
+```bash
+npm install
+```
+
+**3. （可选）编译 TLS Sidecar**
+
+如需使用 Grok 等需要 TLS 指纹绕过的服务，需编译 Go Sidecar：
+```bash
+cd tls-sidecar
+go build -o tls-sidecar
+cd ..
+```
+
+**4. 启动服务**
+
+使用自动化脚本启动（推荐）：
+```bash
+# Linux/macOS
+chmod +x install-and-run.sh && ./install-and-run.sh
+
+# Windows
+双击运行 install-and-run.bat
+```
+
+或手动启动：
+```bash
+npm start
+```
+
+#### 启动参数说明
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `--dev` | 开发模式 | `npm start -- --dev` |
+| `--port` | 指定服务端口 | `npm start -- --port 3001` |
+| `--project-id` | 指定 Google Cloud 项目 ID | `npm start -- --project-id my-project` |
+| `--provider-pools-file` | 指定账号池配置文件路径 | `npm start -- --provider-pools-file ./configs/provider_pools.json` |
+
+---
+
+### 🔧 前端工程说明
+
+本项目的前端界面是纯静态 HTML/CSS/JavaScript，无需额外构建工具，随服务端一起部署。
+
+#### 前端文件结构
+
+```
+static/
+├── index.html          # 主入口页面
+├── login.html          # 登录页面
+├── favicon.ico         # 网站图标
+├── app/                # 前端应用逻辑
+│   ├── app.js          # 主应用入口
+│   ├── config-manager.js   # 配置管理
+│   ├── provider-manager.js # 提供商管理
+│   ├── event-handlers.js   # 事件处理
+│   └── ...
+├── components/         # UI 组件
+│   ├── header.html     # 顶部导航
+│   ├── sidebar.html    # 侧边栏
+│   ├── section-config.html    # 配置页面
+│   ├── section-dashboard.html # 仪表盘
+│   └── ...
+└── img/                # 图片资源
+```
+
+#### 前端功能特性
+
+- **响应式设计**：支持桌面端和移动端
+- **主题切换**：支持亮色/暗色主题
+- **多语言支持**：支持中文、英文、日文
+- **实时日志**：WebSocket 实时日志推送
+- **配置热更新**：无需重启服务即可生效
+
+#### 访问前端界面
+
+服务启动后，打开浏览器访问：
+- **Web UI 管理控制台**: http://localhost:3000
+- **默认密码**: `admin123`（登录后可在控制台或修改 `pwd` 文件变更）
+
+---
+
+### 🤝 与 app-controller 集成
+
+`app-controller` 是一个基于 Python FastAPI 的本地 LLM 模型管理服务，可与 AIClient-2-API 配合使用，实现本地模型的智能调度和资源管理。
+
+#### 架构关系
+
+```
+┌──────────────────────────┐
+│   AIClient-2-API        │  ← 入口层：鉴权、UI、协议转发 (Node.js)
+└──────────┬──────────────┘
+           │ OpenAI 协议
+           ▼
+┌──────────────────────────┐
+│   AI Controller         │  ← 控制层：逻辑调度、资源监控、队列管理 (Python/FastAPI)
+└──────────┬──────────────┘
+           │
+           ▼
+┌──────────────────────────┐
+│     vLLM Instance       │  ← 推理层：实际模型推理
+└──────────────────────────┘
+```
+
+#### 集成步骤
+
+**1. 启动 app-controller**
+
+```bash
+cd app-controller
+pip install -r requirements.txt
+python main.py
+```
+
+服务将在 `http://localhost:5000` 启动
+
+**2. 在 AIClient-2-API 中配置自定义渠道**
+
+登录 Web UI 管理后台：
+1. 进入 **"配置管理"** → **"提供商配置"**
+2. 添加新的自定义渠道（Custom Provider）
+3. 设置：
+   - **类型**: Custom 或 OpenAI
+   - **Base URL**: `http://localhost:5000`
+   - **API Key**: 任意值（本地使用不验证）
+
+**3. 配置模型**
+
+编辑 `app-controller/config.yaml`：
+```yaml
+models:
+  gemma-2-9b:
+    service: vllm-gemma
+    port: 8000
+    required_memory: 12GB
+
+settings:
+  concurrency_limit: 4
+  min_available_memory: 2GB
+```
+
+#### app-controller 部署方式
+
+**方式一：Docker Compose**
+```bash
+cd app-controller
+docker compose up -d
+```
+
+**方式二：Systemd 服务**
+```bash
+sudo cp app-controller/systemd/*.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable ai-controller
+sudo systemctl start ai-controller
+```
+
+---
+
+### 📋 核心功能
+
+#### Web UI 管理控制台
+
+![Web UI](src/img/zh.png)
+
+功能完善的 Web 管理界面，包含：
+
+**📊 仪表盘**：系统概览、交互式路由示例、客户端配置指南
+
+**⚙️ 配置管理**：实时参数修改，支持所有提供商（Gemini、Antigravity、OpenAI、Claude、Kiro），包含高级设置和文件上传
+
+**🔗 提供商池**：监控活动连接、提供商健康统计、启用/禁用管理
+
+**📁 配置文件**：OAuth 凭据集中管理，支持搜索过滤和文件操作
+
+**📜 实时日志**：系统日志和请求日志实时显示，带管理控制
+
+**🔐 登录验证**：默认密码 `admin123`，可通过 `pwd` 文件修改
+
+访问：`http://localhost:3000` → 登录 → 侧边栏导航 → 立即生效
+
+#### 多模态输入能力
+支持图片、文档等多种类型的输入，为您提供更丰富的交互体验和更强大的应用场景。
+
+#### 最新模型支持
+无缝支持以下最新大模型，仅需在 Web UI 或 [`configs/config.json`](./configs/config.json) 中配置相应的端点：
+*   **Grok 3 / Grok 4** - xAI 旗舰模型，现已通过 Grok Cookie/SSO 支持，支持思考模型、图片生成及视频生成
+*   **Claude 4.5 Opus** - Anthropic 史上最强模型，现已通过 Kiro, Antigravity 支持
+*   **Gemini 3 Pro** - Google 下一代架构预览版，现已通过 Gemini, Antigravity 支持
+*   **Kimi K2 / MiniMax M2** - 国内顶级旗舰模型同步支持，现已通过自定义OpenAI，Claude 支持
+
+---
+
+### 🔐 授权配置指南
+
+<details>
+<summary>点击展开查看各提供商授权配置详细步骤</summary>
+
+> **💡 提示**：为了获得最佳体验，建议通过 **Web UI 控制台** 进行可视化授权管理。
+
+#### 🌐 Web UI 快捷授权 (推荐)
+在 Web UI 管理界面中，您可以极速完成授权配置：
+1. **生成授权**：在 **"提供商池"** 页面或**"配置管理"** 页面，点击对应提供商（如 Gemini）右上角的 **"生成授权"** 按钮。
+2. **扫码/登录**：系统将弹出授权对话框，您可以点击 **"在浏览器中打开"** 进行登录验证。对于 Gemini，Antigravity 需完成 Google 账号授权。
+3. **自动保存**：授权成功后，系统会自动获取凭据并保存至 `configs/` 对应目录下，您可以在 **"配置文件"** 页面看到新生成的凭据。
+4. **可视化管理**：您可以随时在 Web UI 中上传、删除凭据，或通过 **"快速关联"** 功能将已有的凭据文件一键绑定到提供商。
+
+#### Gemini CLI OAuth 配置
+1. **获取OAuth凭据**：访问 [Google Cloud Console](https://console.cloud.google.com/) 创建项目，启用Gemini API
+2. **项目配置**：可能需要提供有效的Google Cloud项目ID，可通过启动参数 `--project-id` 指定
+3. **确保项目ID**：在 Web UI 中配置时，确保输入的项目ID与 Google Cloud Console 和 Gemini CLI 中显示的项目ID一致。
+
+#### Antigravity OAuth 配置
+1. **个人账号**：个人账号需要单独授权，已关闭申请渠道。
+2. **Pro会员**：Antigravity 暂时对 Pro 会员开放，需要先购买 Pro 会员。
+3. **组织账号**：组织账号需要单独授权，联系管理员获取授权。
+
+#### Kiro API 配置
+1. **环境准备**：[下载并安装 Kiro 客户端](https://kiro.dev/pricing/)
+2. **完成授权**：在客户端中登录账号，生成 `kiro-auth-token.json` 凭据文件
+3. **最佳实践**：推荐配合 **Claude Code** 使用，可获得最优体验
+4. **重要提示**：Kiro 服务使用政策已更新，请访问官方网站查看最新使用限制和条款
+
+#### Kiro 扩展思考 (Claude 模型)
+AIClient-2-API 在使用路由到 `claude-kiro-oauth` 的 Claude 兼容请求 (`/v1/messages`) 或 OpenAI 兼容请求 (`/v1/chat/completions`) 时支持 Kiro 扩展思考。
+
+**Claude 兼容接口 (`/v1/messages`)**:
+```bash
+curl http://localhost:3000/claude-kiro-oauth/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-api-key" \
+  -d '{
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 1024,
+    "thinking": { "type": "enabled", "budget_tokens": 10000 },
+    "messages": [{ "role": "user", "content": "逐步解决这个问题。" }]
+  }'
+```
+
+**OpenAI 兼容接口 (`/v1/chat/completions`)**:
+```bash
+curl http://localhost:3000/claude-kiro-oauth/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-api-key" \
+  -d '{
+    "model": "claude-sonnet-4-5",
+    "messages": [{ "role": "user", "content": "逐步解决这个问题。" }],
+    "extra_body": {
+      "anthropic": {
+        "thinking": { "type": "enabled", "budget_tokens": 10000 }
+      }
+    }
+  }'
+```
+
+**自适应模式**:
+- Claude: `"thinking": { "type": "adaptive", "effort": "high" }`
+- OpenAI: `"extra_body.anthropic.thinking": { "type": "adaptive", "effort": "high" }`
+
+注意：
+- `budget_tokens` 被限制在 `[1024, 24576]` 之间（如果省略或无效，默认值为 `20000`）。
+- Token 获取/刷新/池轮换机制保持不变。
+
+#### Codex OAuth 配置
+1. **生成授权**：在 Web UI 的"提供商池"或"配置管理"页面，点击 Codex 的"生成授权"按钮
+2. **浏览器登录**：系统将打开 OpenAI Codex 授权页面，完成 OAuth 登录
+3. **自动保存**：授权成功后，系统会自动保存 Codex 的 OAuth 凭据文件
+4. **回调端口**：确保 OAuth 回调端口 `1455` 未被占用
+
+#### Grok Cookie/SSO 配置
+1. **获取 SSO 令牌**：登录 [Grok 官网](https://grok.com/)，在浏览器开发者工具的 Application -> Cookies 中复制 `sso` 的值
+2. **填入配置**：在 Web UI 的"配置管理"或直接修改配置文件，将令牌填入 `GROK_COOKIE_TOKEN`
+3. **支持功能**：
+   - 聊天与思考模型（Grok 3 Thinking）
+   - 图片生成（Grok Imagine）
+   - 视频生成（Grok Video）
+4. **注意事项**：确保 `GROK_USER_AGENT` 与您获取 Cookie 时使用的浏览器一致以避免被拦截
+
+#### 账号池管理配置
+1. **创建号池配置文件**：参考 [provider_pools.json.example](./configs/provider_pools.json.example) 创建配置文件
+2. **配置号池参数**：在 `configs/config.json` 中设置 `PROVIDER_POOLS_FILE_PATH` 指向号池配置文件
+3. **启动参数配置**：使用 `--provider-pools-file <path>` 参数指定号池配置文件路径
+4. **健康检查**：系统会定期自动执行健康检查，不使用不健康的提供商
+
+</details>
+
+### 📁 授权文件存储路径
+
+<details>
+<summary>点击展开查看各服务授权凭据的默认存储位置</summary>
+
+各服务的授权凭据文件默认存储位置：
+
+| 服务 | 默认路径 | 说明 |
+|------|---------|------|
+| **Gemini** | `~/.gemini/oauth_creds.json` | OAuth 认证凭据 |
+| **Kiro** | `~/.aws/sso/cache/kiro-auth-token.json` | Kiro 认证令牌 |
+| **Antigravity** | `~/.antigravity/oauth_creds.json` | Antigravity OAuth 凭据 (支持 Claude 4.5 Opus) |
+| **Codex** | `~/.codex/oauth_creds.json` | Codex OAuth 凭据 |
+
+> **说明**：`~` 表示用户主目录（Windows: `C:\Users\用户名`，Linux/macOS: `/home/用户名` 或 `/Users/用户名`）
+
+> **自定义路径**：可通过配置文件中的相关参数或环境变量指定自定义存储位置
+
+</details>
+
+---
+
+### 高级配置
+
+<details>
+<summary>点击展开查看代理配置、模型过滤及 Fallback 等高级设置</summary>
+
+#### 1. 代理配置
+
+本项目支持灵活的代理配置，可以为不同的提供商配置统一代理或使用提供商自带的已代理端点。
+
+**配置方式**：
+
+1. **Web UI 配置**（推荐）：便捷的配置管理
+
+  在 Web UI 的"配置管理"页面中，可以可视化配置所有代理选项：
+  - **统一代理**：在"代理设置"区域填入代理地址，勾选需要使用代理的提供商
+  - **提供商端点**：在各提供商配置区域，直接修改 Base URL 为已代理的端点
+  - **点击"保存配置"**：即可生效，无需重启服务
+
+2. **统一代理配置**：配置全局代理，并指定哪些提供商使用该代理
+
+   - **Web UI 配置**：在"配置管理"页面的"代理设置"区域填入代理地址，勾选需要使用代理的提供商
+   - **配置文件**：在 `configs/config.json` 中配置
+   ```json
+   {
+     "PROXY_URL": "http://127.0.0.1:7890",
+      "PROXY_ENABLED_PROVIDERS": [
+        "gemini-cli-oauth",
+        "gemini-antigravity",
+        "claude-kiro-oauth",
+        "grok-custom"
+      ]
+}
+   ```
+
+3. **提供商自带代理端点**：某些提供商（如 OpenAI、Claude）支持配置已代理的 API 端点
+
+   - **Web UI 配置**：在"配置管理"页面的各提供商配置区域，修改对应的 Base URL
+   - **配置文件**：在 `configs/config.json` 中配置
+   ```json
+   {
+     "OPENAI_BASE_URL": "https://your-proxy-endpoint.com/v1",
+     "CLAUDE_BASE_URL": "https://your-proxy-endpoint.com"
+   }
+   ```
+
+**代理类型支持**：
+- **HTTP 代理**：`http://127.0.0.1:7890`
+- **HTTPS 代理**：`https://127.0.0.1:7890`
+- **SOCKS5 代理**：`socks5://127.0.0.1:1080`
+
+**使用场景**：
+- **网络受限环境**：在无法直接访问 Google、OpenAI 等服务的网络环境中使用
+- **混合配置**：部分提供商使用统一代理，部分使用自带的已代理端点
+- **灵活切换**：可以随时在 Web UI 中启用/禁用特定提供商的代理
+
+**注意事项**：
+- 代理配置优先级：统一代理配置 > 提供商自带端点 > 直接连接
+- 确保代理服务稳定可用，否则可能影响服务质量
+- SOCKS5 代理通常比 HTTP 代理性能更好
+
+#### 2. 模型过滤配置
+
+支持通过 `notSupportedModels` 配置排除不支持的模型，系统会自动跳过这些提供商。
+
+**配置方式**：在 `configs/provider_pools.json` 中为提供商添加 `notSupportedModels` 字段：
+
+```json
+{
+  "gemini-cli-oauth": [
+    {
+      "uuid": "provider-1",
+      "notSupportedModels": ["gemini-3.0-pro", "gemini-3.5-flash"],
+      "checkHealth": true
+    }
+  ]
+}
+```
+
+**工作原理**：
+- 当请求特定模型时，系统会自动过滤掉配置了该模型为不支持的提供商
+- 只有支持该模型的提供商才会被选中处理请求
+
+**使用场景**：
+- 某些账号因配额或权限限制无法访问特定模型
+- 需要为不同账号分配不同的模型访问权限
+
+#### 3. 跨类型 Fallback 配置
+
+当某一 Provider Type（如 `gemini-cli-oauth`）下的所有账号都因 429 配额耗尽或被标记为 unhealthy 时，系统能够自动 fallback 到另一个兼容的 Provider Type（如 `gemini-antigravity`），而不是直接返回错误。
+
+**配置方式**：在 `configs/config.json` 中添加 `providerFallbackChain` 配置：
+
+```json
+{
+  "providerFallbackChain": {
+    "gemini-cli-oauth": ["gemini-antigravity"],
+    "gemini-antigravity": ["gemini-cli-oauth"],
+    "claude-kiro-oauth": ["claude-custom"],
+    "claude-custom": ["claude-kiro-oauth"]
+  }
+}
+```
+
+**工作原理**：
+1. 尝试从主 Provider Type 池选取 healthy 账号
+2. 如果该类型所有账号都 unhealthy：
+   - 查找配置的 fallback 类型
+   - 检查 fallback 类型是否支持当前请求的模型（协议兼容性检查）
+   - 从 fallback 类型的池中选取 healthy 账号
+3. 支持多级降级链：`gemini-cli-oauth → gemini-antigravity → openai-custom`
+4. 如果所有 fallback 类型也不可用，才返回错误
+
+**使用场景**：
+- 批量任务场景下，单一 Provider Type 的免费 RPD 配额容易在短时间内耗尽
+- 通过跨类型 Fallback，可以充分利用多种 Provider 的独立配额，提高整体可用性和吞吐量
+
+**注意事项**：
+- Fallback 只会在协议兼容的类型之间进行（如 `gemini-*` 之间、`claude-*` 之间）
+- 系统会自动检查目标 Provider Type 是否支持当前请求的模型
+
+#### 4. TLS Sidecar (Bypass 403/Cloudflare)
+
+针对 Grok 等对 TLS 指纹（JA3/JA4）校验严格的服务，本项目集成了基于 Go uTLS 的 Sidecar 代理，通过模拟浏览器 TLS 特征有效解决 403 Forbidden 报错。
+
+**配置说明**：
+
+1.  **编译二进制文件**：
+    由于 TLS 模拟需要 Go 语言支持，您需要先编译 sidecar：
+    ```bash
+    cd tls-sidecar
+    go build -o tls-sidecar
+    ```
+    *Windows 用户编译后请确保生成的 `tls-sidecar.exe` 位于 `tls-sidecar/` 或根目录。*
+
+2.  **启用配置**：
+    在 Web UI 的"配置管理"中开启 **TLS Sidecar**，或修改 `configs/config.json`：
+    ```json
+    {
+      "TLS_SIDECAR_ENABLED": true,
+      "TLS_SIDECAR_PORT": 9090
+    }
+    ```
+
+3.  **工作原理**：
+    - 开启后系统自动启动并管理该 Go 进程。
+    - 针对特定提供商（如 Grok）的请求会自动路由至 Sidecar。
+    - Sidecar 使用 Chrome 最新指纹进行 TLS 握手，支持 HTTP/2 自动协商。
+
+**注意事项**：
+- 本地运行需安装 Go 环境（1.20+）。
+- **Docker 用户**：镜像已内置编译好的二进制，只需在配置中开启即可，无需手动编译。
+
+</details>
+
+---
+
+## ❓ 常见问题
+
+<details>
+<summary>点击展开查看常见问题及解决方案（端口占用、Docker 启动、429 错误等）</summary>
+
+### 1. OAuth 授权失败
+
+**问题描述**：点击"生成授权"后，浏览器打开授权页面但授权失败或无法完成。
+
+**解决方案**：
+- **检查网络连接**：确保能够正常访问 Google、阿里云等服务
+- **检查端口占用**：OAuth 回调需要特定端口（Gemini: 8085, Antigravity: 8086, Codex: 1455, Kiro: 19876-19880），确保这些端口未被占用
+- **清除浏览器缓存**：尝试使用无痕模式或清除浏览器缓存后重试
+- **检查防火墙设置**：确保防火墙允许本地回调端口的访问
+- **Docker 用户**：确保已正确映射所有 OAuth 回调端口
+
+### 2. 端口被占用
+
+**问题描述**：启动服务时提示端口已被占用（如 `EADDRINUSE`）。
+
+**解决方案**：
+```bash
+# Windows - 查找占用端口的进程
+netstat -ano | findstr :3000
+# 然后使用任务管理器结束对应 PID 的进程
+
+# Linux/macOS - 查找并结束占用端口的进程
+lsof -i :3000
+kill -9 <PID>
+```
+
+或者修改 `configs/config.json` 中的端口配置使用其他端口。
+
+### 3. Docker 容器无法启动
+
+**问题描述**：Docker 容器启动失败或立即退出。
+
+**解决方案**：
+- **检查日志**：`docker logs aiclient2api` 查看错误信息
+- **检查挂载路径**：确保 `-v` 参数中的本地路径存在且有读写权限
+- **检查端口冲突**：确保所有映射的端口在宿主机上未被占用
+- **重新拉取镜像**：`docker pull justlikemaki/aiclient-2-api:latest`
+
+### 4. 凭据文件无法识别
+
+**问题描述**：上传或配置凭据文件后，系统提示无法识别或格式错误。
+
+**解决方案**：
+- **检查文件格式**：确保凭据文件是有效的 JSON 格式
+- **检查文件路径**：确保文件路径正确，Docker 用户需确保文件在挂载目录内
+- **检查文件权限**：确保服务有权限读取凭据文件
+- **重新生成凭据**：如果凭据已过期，尝试重新进行 OAuth 授权
+
+### 5. 请求返回 429 错误
+
+**问题描述**：API 请求频繁返回 429 Too Many Requests 错误。
+
+**解决方案**：
+- **配置账号池**：添加多个账号到 `provider_pools.json`，启用轮询机制
+- **配置 Fallback**：在 `config.json` 中配置 `providerFallbackChain`，实现跨类型降级
+- **降低请求频率**：适当增加请求间隔，避免触发速率限制
+- **等待配额重置**：免费配额通常每日或每分钟重置
+
+### 6. 模型不可用或返回错误
+
+**问题描述**：请求特定模型时返回错误或提示模型不可用。
+
+**解决方案**：
+- **检查模型名称**：确保使用正确的模型名称（区分大小写）
+- **检查提供商支持**：确认当前配置的提供商支持该模型
+- **检查账号权限**：某些高级模型可能需要特定账号权限
+- **配置模型过滤**：使用 `notSupportedModels` 排除不支持的模型
+
+### 7. Web UI 无法访问
+
+**问题描述**：浏览器无法打开 `http://localhost:3000`。
+
+**解决方案**：
+- **检查服务状态**：确认服务已成功启动，查看终端输出
+- **检查端口映射**：Docker 用户确保 `-p 3000:3000` 参数正确
+- **尝试其他地址**：尝试访问 `http://127.0.0.1:3000`
+- **检查防火墙**：确保防火墙允许 3000 端口的访问
+
+### 8. 流式响应中断
+
+**问题描述**：使用流式输出时，响应中途中断或不完整。
+
+**解决方案**：
+- **检查网络稳定性**：确保网络连接稳定
+- **增加超时时间**：在客户端配置中增加请求超时时间
+- **检查代理设置**：如使用代理，确保代理支持长连接
+- **查看服务日志**：检查是否有错误信息
+
+### 9. 配置修改不生效
+
+**问题描述**：在 Web UI 中修改配置后，服务行为未改变。
+
+**解决方案**：
+- **刷新页面**：修改后刷新 Web UI 页面
+- **检查保存状态**：确认配置已成功保存（查看提示信息）
+- **重启服务**：某些配置可能需要重启服务才能生效
+- **检查配置文件**：直接查看 `configs/config.json` 确认修改已写入
+
+### 10. 访问接口返回 404
+
+**问题描述**：调用 API 接口时返回 404 Not Found 错误。
+
+**解决方案**：
+- **检查接口路径**：确保使用正确的接口路径，如 `/v1/chat/completions` 等
+- **检查客户端自动补全**：某些客户端（如 Cherry-Studio、NextChat）会自动在 Base URL 后追加路径（如 `/v1/chat/completions`），导致路径重复。请查看控制台中的实际请求 URL，移除多余的路径部分
+- **检查服务状态**：确认服务已正常启动，访问 `http://localhost:3000` 查看 Web UI
+- **检查端口配置**：确保请求发送到正确的端口（默认 3000）
+- **查看可用路由**：在 Web UI 仪表盘页面查看"交互式路由示例"了解所有可用接口
+
+### 11. Unauthorized: API key is invalid or missing
+
+**问题描述**：调用 API 接口时返回 `Unauthorized: API key is invalid or missing.` 错误。
+
+**解决方案**：
+- **检查 API Key 配置**：确保在 `configs/config.json` 或 Web UI 中正确配置API Key
+- **检查请求头格式**：确保请求中包含正确格式的 Authorization 头，如 `Authorization: Bearer your-api-key`
+- **查看服务日志**：在 Web UI 的"实时日志"页面查看详细错误信息，定位具体原因
+
+### 12. No available and healthy providers for type
+
+**问题描述**：调用 API 时返回 `No available and healthy providers for type xxx` 错误。
+
+**解决方案**：
+- **检查提供商状态**：在 Web UI 的"提供商池"页面查看对应类型的提供商是否处于健康状态
+- **检查凭据有效性**：确认 OAuth 凭据未过期，如已过期需重新生成授权
+- **检查配额限制**：某些提供商可能已达到免费配额上限，等待配额重置或添加更多账号
+- **启用 Fallback**：在 `config.json` 中配置 `providerFallbackChain`，当主提供商不可用时自动切换到备用提供商
+- **查看详细日志**：在 Web UI 的"实时日志"页面查看具体的健康检查失败原因
+
+### 13. 请求返回 403 Forbidden 错误
+
+**问题描述**：API 请求返回 403 Forbidden 错误。
+
+**解决方案**：
+- **开启 TLS Sidecar**：针对 Grok 等服务，403 通常是因为 TLS 指纹被屏蔽。请参考 [高级配置 - TLS Sidecar](#5-tls-sidecar-bypass-403cloudflare) 开启并编译 Sidecar。
+- **检查节点状态**：如果在 Web UI 的"提供商池"页面中看到节点状态正常（健康检查通过），则可以忽略此报错，系统会自动处理
+- **检查账号权限**：确认使用的账号有权限访问请求的模型或服务
+- **检查 API Key 权限**：某些提供商的 API Key 可能有访问范围限制，确保 Key 有足够权限
+- **检查地区限制**：部分服务可能有地区访问限制，尝试使用代理或 VPN
+- **检查凭据状态**：OAuth 凭据可能已被撤销或失效，尝试重新生成授权
+- **检查请求频率**：某些提供商对请求频率有严格限制，降低请求频率后重试
+- **查看提供商文档**：访问对应提供商的官方文档，了解具体的访问限制和要求
+
+</details>
+
+---
+
+## 📄 开源许可
+
+本项目遵循 [**GNU General Public License v3 (GPLv3)**](https://www.gnu.org/licenses/gpl-3.0) 开源许可。详情请查看根目录下的 `LICENSE` 文件。
+
+## 🙏 致谢
+
+本项目的开发受到了官方 Google Gemini CLI 的极大启发，并参考了Cline 3.18.0 版本 `gemini-cli.ts` 的部分代码实现。在此对 Google 官方团队和 Cline 开发团队的卓越工作表示衷心的感谢！
+
+### 贡献者列表
+
+感谢以下所有为 AIClient-2-API 项目做出贡献的开发者：
+
+[![Contributors](https://contrib.rocks/image?repo=justlovemaki/AIClient-2-API)](https://github.com/justlovemaki/AIClient-2-API/graphs/contributors)
+
+
+### 🌟 Star History
+
+
+[![Star History Chart](https://api.star-history.com/svg?repos=justlovemaki/AIClient-2-API&type=Timeline)](https://www.star-history.com/#justlovemaki/AIClient-2-API&Timeline)
+
+---
+
+## ⚠️ 免责声明
+
+### 使用风险提示
+本项目（AIClient-2-API）仅供学习和研究使用。用户在使用本项目时，应自行承担所有风险。作者不对因使用本项目而导致的任何直接、间接或 consequential 损失承担责任。
+
+### 第三方服务责任说明
+本项目是一个API代理工具，不提供任何AI模型服务。所有AI模型服务由相应的第三方提供商（如Google、OpenAI、Anthropic等）提供。用户在使用本项目访问这些第三方服务时，应遵守各第三方服务的使用条款和政策。作者不对第三方服务的可用性、质量、安全性或合法性承担责任。
+
+### 数据隐私说明
+本项目在本地运行，不会收集或上传用户的任何数据。但用户在使用本项目时，应注意保护自己的API密钥和其他敏感信息。建议用户定期检查和更新自己的API密钥，并避免在不安全的网络环境中使用本项目。
+
+### 法律合规提醒
+用户在使用本项目时，应遵守所在国家/地区的法律法规。严禁将本项目用于任何非法用途。如因用户违反法律法规而导致的任何后果，由用户自行承担全部责任。

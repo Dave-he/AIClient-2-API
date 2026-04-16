@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Union
 import asyncio
@@ -247,7 +248,7 @@ async def chat_completions(request: ChatCompletionRequest):
                                 yield f"data: {json.dumps(json_chunk)}\n\n"
                             except:
                                 yield f"data: {chunk_data}\n\n"
-                return generate()
+                return StreamingResponse(generate(), media_type="text/event-stream")
             else:
                 result = response.json()
                 result['id'] = f"chatcmpl-{os.urandom(12).hex()}"
