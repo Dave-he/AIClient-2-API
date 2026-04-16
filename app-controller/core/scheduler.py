@@ -111,11 +111,13 @@ class Scheduler:
         return self.config.get('settings', {}).get('concurrency_limit', 4)
     
     def is_model_running(self, model_name: str) -> bool:
-        service_name = self.get_model_service(model_name)
-        if service_name and self.sys_controller.is_service_running(service_name):
-            if model_name not in self.running_models:
-                self.running_models[model_name] = datetime.now()
-            return True
+        port = self.get_model_port(model_name)
+        if port:
+            process_info = self.sys_controller.get_process_info(port)
+            if process_info:
+                if model_name not in self.running_models:
+                    self.running_models[model_name] = datetime.now()
+                return True
         
         if model_name in self.running_models:
             del self.running_models[model_name]

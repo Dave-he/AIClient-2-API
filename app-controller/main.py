@@ -200,9 +200,10 @@ async def chat_completions(request: ChatCompletionRequest):
         
         gpu_status = gpu_monitor.get_gpu_status()
         min_memory = scheduler.get_min_available_memory()
-        if gpu_status and gpu_status['available_memory'] < min_memory:
+        if gpu_status and gpu_status.get('primary', {}).get('available_memory', 0) < min_memory:
+            available_memory = gpu_status['primary']['available_memory']
             logger.warning(f"Insufficient GPU memory for {model_name}")
-            raise InsufficientMemoryException(gpu_status['available_memory'], min_memory)
+            raise InsufficientMemoryException(available_memory, min_memory)
         
         if not scheduler.is_model_running(model_name):
             logger.info(f"Model {model_name} not running, starting...")
@@ -215,12 +216,18 @@ async def chat_completions(request: ChatCompletionRequest):
         vllm_port = scheduler.get_model_port(model_name)
         vllm_url = f"http://localhost:{vllm_port}/v1/chat/completions"
         
-        logger.info(f"Forwarding request to vLLM at {vllm_url}")
+        model_config = scheduler.get_model_config(model_name)
+        vllm_model_name = model_config.get('model_path', model_name) if model_config else model_name
+        
+        logger.info(f"Forwarding request to vLLM at {vllm_url} with model: {vllm_model_name}")
+        
+        request_data = request.model_dump(exclude_unset=True)
+        request_data['model'] = vllm_model_name
         
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
                 vllm_url,
-                json=request.model_dump(exclude_unset=True),
+                json=request_data,
                 timeout=60
             )
             await response.raise_for_status()

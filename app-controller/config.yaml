@@ -1,10 +1,11 @@
 models:
-  gemma-2-9b:
+  gemma-4-31b:
     service: vllm-gemma
     port: 8000
     required_memory: 12GB
     preload: true
     keep_alive: true
+    model_path: /mnt/pve_models/Gemma-4-31B-Abliterated
   
   llama-3-8b:
     service: vllm-llama
