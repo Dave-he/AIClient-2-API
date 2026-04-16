@@ -291,7 +291,7 @@ async function copyCurlExample(provider, options = {}) {
         case 'claude-custom':
         case 'claude-kiro-oauth':
             if (protocol === 'openai') {
-                curlCommand = `curl http://localhost:3000${path} \\
+                curlCommand = `curl ${window.location.origin}${path} \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -300,7 +300,7 @@ async function copyCurlExample(provider, options = {}) {
     "max_tokens": 1000
   }'`;
             } else {
-                curlCommand = `curl http://localhost:3000${path} \\
+                curlCommand = `curl ${window.location.origin}${path} \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "${model}",
@@ -313,7 +313,7 @@ async function copyCurlExample(provider, options = {}) {
         case 'openai-custom':
         case 'openai-qwen-oauth':
             if (protocol === 'openai') {
-                curlCommand = `curl http://localhost:3000${path} \\
+                curlCommand = `curl ${window.location.origin}${path} \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -322,7 +322,7 @@ async function copyCurlExample(provider, options = {}) {
     "max_tokens": 1000
   }'`;
             } else {
-                curlCommand = `curl http://localhost:3000${path} \\
+                curlCommand = `curl ${window.location.origin}${path} \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: YOUR_API_KEY" \\
   -d '{
@@ -335,7 +335,7 @@ async function copyCurlExample(provider, options = {}) {
             
         case 'gemini-cli-oauth':
             if (protocol === 'openai') {
-                curlCommand = `curl http://localhost:3000${path} \\
+                curlCommand = `curl ${window.location.origin}${path} \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "gemini-3.1-pro-preview",
@@ -343,7 +343,7 @@ async function copyCurlExample(provider, options = {}) {
     "max_tokens": 1000
   }'`;
             } else {
-                curlCommand = `curl http://localhost:3000${path} \\
+                curlCommand = `curl ${window.location.origin}${path} \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "gemini-3.1-pro-preview",
@@ -355,7 +355,7 @@ async function copyCurlExample(provider, options = {}) {
             
         case 'openaiResponses-custom':
             if (protocol === 'openai') {
-                curlCommand = `curl http://localhost:3000${path} \\
+                curlCommand = `curl ${window.location.origin}${path} \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -364,7 +364,7 @@ async function copyCurlExample(provider, options = {}) {
     "max_output_tokens": 1000
   }'`;
             } else {
-                curlCommand = `curl http://localhost:3000${path} \\
+                curlCommand = `curl ${window.location.origin}${path} \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: YOUR_API_KEY" \\
   -d '{
@@ -376,7 +376,7 @@ async function copyCurlExample(provider, options = {}) {
             break;
         case 'grok-custom':
             if (protocol === 'openai') {
-                curlCommand = `curl http://localhost:3000${path} \\
+                curlCommand = `curl ${window.location.origin}${path} \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -385,7 +385,7 @@ async function copyCurlExample(provider, options = {}) {
     "stream": true
   }'`;
             } else {
-                curlCommand = `curl http://localhost:3000${path} \\
+                curlCommand = `curl ${window.location.origin}${path} \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: YOUR_API_KEY" \\
   -d '{
