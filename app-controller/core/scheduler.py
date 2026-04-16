@@ -162,6 +162,14 @@ class Scheduler:
         """获取队列长度"""
         return self.rate_limiter.get_queue_length(model_name)
     
+    def get_wait_time_estimate(self, model_name: str) -> float:
+        """估算等待时间"""
+        return self.rate_limiter.get_wait_time_estimate(model_name, self.get_concurrency_limit())
+    
+    async def wait_for_slot(self, model_name: str, timeout: int = 30) -> bool:
+        """等待可用槽位，支持优雅降级"""
+        return await self.rate_limiter.wait_for_slot(model_name, self.get_concurrency_limit(), timeout)
+    
     def enqueue_request(self, model_name: str, request_data: Dict, priority: str = "normal") -> str:
         """将请求加入队列（支持优先级）"""
         return self.rate_limiter.enqueue_request(model_name, request_data, priority)
@@ -228,7 +236,9 @@ class Scheduler:
         if mem_info:
             required_memory = _parse_memory_size(config.get('required_memory', 0))
             if mem_info.get('available', 0) < required_memory + self.get_min_available_memory():
-                await self._free_up_memory(model_name)
+                success = await self._free_up_memory(model_name)
+                if not success:
+                    return False
         
         success = self.sys_controller.start_service(service_name)
         if success:
@@ -267,13 +277,13 @@ class Scheduler:
         if not target_config:
             return False
         
-        target_required = target_config.get('required_memory', 0)
-        gpu_status = self.gpu_monitor.get_gpu_status()
+        target_required = _parse_memory_size(target_config.get('required_memory', 0))
+        mem_info = self.gpu_monitor.get_memory_usage()
         
-        if not gpu_status:
+        if not mem_info:
             return False
         
-        available_memory = gpu_status.get('available_memory', 0)
+        available_memory = mem_info.get('available', 0)
         needed_memory = target_required + self.get_min_available_memory()
         
         if available_memory >= needed_memory:

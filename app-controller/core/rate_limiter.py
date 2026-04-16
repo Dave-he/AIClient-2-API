@@ -73,6 +73,10 @@ class RateLimiter:
         active = self.get_active_requests(model_name)
         return active < max_concurrent
     
+    def can_accept_request(self, model_name: str, max_concurrent: int) -> bool:
+        """兼容旧接口：检查是否可以接受请求"""
+        return self.is_available(model_name, max_concurrent)
+    
     def is_queue_available(self, model_name: str) -> bool:
         """检查队列是否还有空间"""
         if not self.client:
