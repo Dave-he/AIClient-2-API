@@ -15,7 +15,7 @@ import { fetch } from 'undici';
  */
 
 // Test server configuration
-const TEST_SERVER_BASE_URL = 'http://192.168.1.232:3000';
+const TEST_SERVER_BASE_URL = 'http://localhost:3000';
 const TEST_API_KEY = '123456'; // You may need to adjust this based on your server config
 const MODEL_PROVIDER = {
     // Model provider constants
@@ -574,7 +574,7 @@ describe('API Integration Tests with HTTP Requests', () => {
         // npx jest ./tests/api-integration.test.js -t "Accept query parameter authentication"
         test('Accept query parameter authentication', async () => {
             const response = await makeRequest(
-                `${TEST_SERVER_BASE_URL}/v1/models`,
+                `${TEST_SERVER_BASE_URL}/health`,
                 'GET',
                 'query'
             );
@@ -587,7 +587,7 @@ describe('API Integration Tests with HTTP Requests', () => {
         // npx jest ./tests/api-integration.test.js -t "Accept Bearer token authentication"
         test('Accept Bearer token authentication', async () => {
             const response = await makeRequest(
-                `${TEST_SERVER_BASE_URL}/v1/models`,
+                `${TEST_SERVER_BASE_URL}/health`,
                 'GET',
                 'bearer'
             );
@@ -600,7 +600,7 @@ describe('API Integration Tests with HTTP Requests', () => {
         // npx jest ./tests/api-integration.test.js -t "Accept x-goog-api-key authentication"
         test('Accept x-goog-api-key authentication', async () => {
             const response = await makeRequest(
-                `${TEST_SERVER_BASE_URL}/v1/models`,
+                `${TEST_SERVER_BASE_URL}/health`,
                 'GET',
                 'goog'
             );
@@ -613,7 +613,7 @@ describe('API Integration Tests with HTTP Requests', () => {
         // npx jest ./tests/api-integration.test.js -t "Accept x-api-key authentication for Claude"
         test('Accept x-api-key authentication for Claude', async () => {
             const response = await makeRequest(
-                `${TEST_SERVER_BASE_URL}/v1/models`,
+                `${TEST_SERVER_BASE_URL}/health`,
                 'GET',
                 'anthropic'
             );

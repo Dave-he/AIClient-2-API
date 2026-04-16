@@ -24,24 +24,29 @@ export class ForwardApiService {
         this.useSystemProxy = config?.USE_SYSTEM_PROXY_FORWARD ?? false;
         this.headerName = config?.FORWARD_HEADER_NAME || 'Authorization';
         this.headerValuePrefix = config?.FORWARD_HEADER_VALUE_PREFIX || 'Bearer ';
+        this.timeout = config.FORWARD_TIMEOUT || 300000;
+        this.maxRetries = config.REQUEST_MAX_RETRIES || 3;
+        this.baseDelay = config.REQUEST_BASE_DELAY || 1000;
+        this.maxDelay = config.REQUEST_MAX_DELAY || 30000; // 最大重试延迟，默认30秒
 
-        logger.info(`[Forward] Base URL: ${this.baseUrl}, System proxy ${this.useSystemProxy ? 'enabled' : 'disabled'}`);
+        logger.info(`[Forward] Base URL: ${this.baseUrl}, System proxy ${this.useSystemProxy ? 'enabled' : 'disabled'}, Timeout: ${this.timeout}ms`);
 
         const httpAgent = new http.Agent({
             keepAlive: true,
             maxSockets: 100,
             maxFreeSockets: 5,
-            timeout: 120000,
+            timeout: this.timeout,
         });
         const httpsAgent = new https.Agent({
             keepAlive: true,
             maxSockets: 100,
             maxFreeSockets: 5,
-            timeout: 120000,
+            timeout: this.timeout,
         });
 
         const headers = {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream'
         };
         headers[this.headerName] = `${this.headerValuePrefix}${this.apiKey}`;
 
@@ -50,6 +55,9 @@ export class ForwardApiService {
             httpAgent,
             httpsAgent,
             headers,
+            timeout: this.timeout,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
         };
         
         if (!this.useSystemProxy) {
@@ -66,14 +74,16 @@ export class ForwardApiService {
     }
 
     async callApi(endpoint, body, isRetry = false, retryCount = 0) {
-        const maxRetries = this.config.REQUEST_MAX_RETRIES || 3;
-        const baseDelay = this.config.REQUEST_BASE_DELAY || 1000;
+        const maxRetries = this.maxRetries;
+        const baseDelay = this.baseDelay;
+        const maxDelay = this.maxDelay;
 
         try {
             const axiosConfig = {
                 method: 'post',
                 url: endpoint,
-                data: body
+                data: body,
+                timeout: this.timeout,
             };
             this._applySidecar(axiosConfig);
             const response = await this.axiosInstance.request(axiosConfig);
@@ -90,9 +100,26 @@ export class ForwardApiService {
                 throw error;
             }
 
-            if ((status === 429 || (status >= 500 && status < 600) || isNetworkError) && retryCount < maxRetries) {
-                const delay = baseDelay * Math.pow(2, retryCount);
-                logger.info(`[Forward API] Error ${status || errorCode}. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+            if (status === 429 && retryCount < maxRetries) {
+                const retryAfter = error.response?.headers?.['retry-after'];
+                const rawDelay = retryAfter ? parseInt(retryAfter) * 1000 : baseDelay * Math.pow(2, retryCount);
+                const delay = Math.min(rawDelay, maxDelay);
+                logger.warn(`[Forward API] Received 429 (Too Many Requests). Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return this.callApi(endpoint, body, isRetry, retryCount + 1);
+            }
+
+            if ((status >= 500 && status < 600) && retryCount < maxRetries) {
+                const delay = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+                logger.warn(`[Forward API] Received ${status} server error. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return this.callApi(endpoint, body, isRetry, retryCount + 1);
+            }
+
+            if (isNetworkError && retryCount < maxRetries) {
+                const delay = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+                const errorIdentifier = errorCode || errorMessage.substring(0, 50);
+                logger.warn(`[Forward API] Network error (${errorIdentifier}). Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 return this.callApi(endpoint, body, isRetry, retryCount + 1);
             }
@@ -103,15 +130,18 @@ export class ForwardApiService {
     }
 
     async *streamApi(endpoint, body, isRetry = false, retryCount = 0) {
-        const maxRetries = this.config.REQUEST_MAX_RETRIES || 3;
-        const baseDelay = this.config.REQUEST_BASE_DELAY || 1000;
+        const maxRetries = this.maxRetries;
+        const baseDelay = this.baseDelay;
+        const maxDelay = this.maxDelay;
+        let anyDataSent = false;
 
         try {
             const axiosConfig = {
                 method: 'post',
                 url: endpoint,
                 data: body,
-                responseType: 'stream'
+                responseType: 'stream',
+                timeout: 0,
             };
             this._applySidecar(axiosConfig);
             const response = await this.axiosInstance.request(axiosConfig);
@@ -123,38 +153,76 @@ export class ForwardApiService {
                 buffer += chunk.toString();
                 let newlineIndex;
                 while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-                    const line = buffer.substring(0, newlineIndex).trim();
+                    const line = buffer.substring(0, newlineIndex);
                     buffer = buffer.substring(newlineIndex + 1);
 
-                    if (line.startsWith('data: ')) {
-                        const jsonData = line.substring(6).trim();
-                        if (jsonData === '[DONE]') {
+                    if (line.startsWith('event: ')) {
+                        const eventName = line.substring(7).trim();
+                        yield { type: 'event', name: eventName };
+                    } else if (line.startsWith('data: ')) {
+                        const jsonData = line.substring(6);
+                        if (jsonData.trim() === '[DONE]') {
+                            yield { type: 'done' };
                             return;
                         }
                         try {
                             const parsedChunk = JSON.parse(jsonData);
+                            anyDataSent = true;
                             yield parsedChunk;
                         } catch (e) {
-                            // If it's not JSON, it might be a different format, but for a forwarder we try to parse common SSE formats
-                            logger.warn("[ForwardApiService] Failed to parse stream chunk JSON:", e.message, "Data:", jsonData);
+                            if (jsonData.trim()) {
+                                anyDataSent = true;
+                                yield { type: 'raw', data: jsonData.trim() };
+                            }
                         }
+                    } else if (line.startsWith('id: ')) {
+                        continue;
+                    } else if (line.startsWith('retry: ')) {
+                        continue;
+                    } else if (line.trim() === '') {
+                        continue;
+                    } else if (line.startsWith('error: ')) {
+                        logger.error(`[Forward API] Stream error: ${line.substring(7)}`);
                     }
                 }
             }
         } catch (error) {
             const status = error.response?.status;
             const errorCode = error.code;
+            const errorMessage = error.message || '';
             const isNetworkError = isRetryableNetworkError(error);
             
-            if ((status === 429 || (status >= 500 && status < 600) || isNetworkError) && retryCount < maxRetries) {
-                const delay = baseDelay * Math.pow(2, retryCount);
-                logger.info(`[Forward API] Stream error ${status || errorCode}. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+            if (anyDataSent) {
+                logger.warn(`[Forward API] Cannot retry stream - data already sent to client`);
+                throw error;
+            }
+
+            if (status === 429 && retryCount < maxRetries) {
+                const retryAfter = error.response?.headers?.['retry-after'];
+                const delay = retryAfter ? parseInt(retryAfter) * 1000 : baseDelay * Math.pow(2, retryCount);
+                logger.warn(`[Forward API] Stream received 429. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 yield* this.streamApi(endpoint, body, isRetry, retryCount + 1);
                 return;
             }
 
-            const errorMessage = error.message || '';
+            if ((status >= 500 && status < 600) && retryCount < maxRetries) {
+                const delay = baseDelay * Math.pow(2, retryCount);
+                logger.warn(`[Forward API] Stream received ${status} server error. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                yield* this.streamApi(endpoint, body, isRetry, retryCount + 1);
+                return;
+            }
+
+            if (isNetworkError && retryCount < maxRetries) {
+                const delay = baseDelay * Math.pow(2, retryCount);
+                const errorIdentifier = errorCode || errorMessage.substring(0, 50);
+                logger.warn(`[Forward API] Stream network error (${errorIdentifier}). Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                yield* this.streamApi(endpoint, body, isRetry, retryCount + 1);
+                return;
+            }
+
             logger.error(`[Forward API] Error calling streaming API (Status: ${status || errorCode}):`, errorMessage);
             throw error;
         }

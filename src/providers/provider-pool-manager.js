@@ -56,6 +56,7 @@ export class ProviderPoolManager {
         'openai-codex-oauth': 'gpt-5-codex-mini',
         'openaiResponses-custom': 'gpt-4o-mini',
         'forward-api': 'gpt-4o-mini',
+        'local-model': 'gemma-2-9b-it',
     };
 
     constructor(providerPools, options = {}) {

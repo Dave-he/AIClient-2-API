@@ -9,6 +9,7 @@ import { IFlowApiService } from './openai/iflow-core.js';
 import { CodexApiService } from './openai/codex-core.js';
 import { ForwardApiService } from './forward/forward-core.js';
 import { GrokApiService } from './grok/grok-core.js';
+import { LocalApiService } from './local/local-core.js';
 import { MODEL_PROVIDER } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 
@@ -688,6 +689,50 @@ export class GrokApiServiceAdapter extends ApiServiceAdapter {
     }
 }
 
+// Local Model API 服务适配器
+export class LocalApiServiceAdapter extends ApiServiceAdapter {
+    constructor(config) {
+        super();
+        this.localApiService = new LocalApiService(config);
+    }
+
+    async generateContent(model, requestBody) {
+        return this.localApiService.generateContent(model, requestBody);
+    }
+
+    async *generateContentStream(model, requestBody) {
+        yield* this.localApiService.generateContentStream(model, requestBody);
+    }
+
+    async listModels() {
+        return this.localApiService.listModels();
+    }
+
+    async refreshToken() {
+        return Promise.resolve();
+    }
+
+    async forceRefreshToken() {
+        return Promise.resolve();
+    }
+
+    isExpiryDateNear() {
+        return false;
+    }
+
+    async getGPUStatus() {
+        return this.localApiService.getGPUStatus();
+    }
+
+    async startModel(modelName) {
+        return this.localApiService.startModel(modelName);
+    }
+
+    async stopModel(modelName) {
+        return this.localApiService.stopModel(modelName);
+    }
+}
+
 // 注册所有内置适配器
 registerAdapter(MODEL_PROVIDER.OPENAI_CUSTOM, OpenAIApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.OPENAI_CUSTOM_RESPONSES, OpenAIResponsesApiServiceAdapter);
@@ -697,6 +742,7 @@ registerAdapter(MODEL_PROVIDER.ANTIGRAVITY, AntigravityApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.KIRO_API, KiroApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.CODEX_API, CodexApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.GROK_CUSTOM, GrokApiServiceAdapter);
+registerAdapter(MODEL_PROVIDER.LOCAL_MODEL, LocalApiServiceAdapter);
 // registerAdapter(MODEL_PROVIDER.FORWARD_API, ForwardApiServiceAdapter);
 // registerAdapter(MODEL_PROVIDER.QWEN_API, QwenApiServiceAdapter);
 // registerAdapter(MODEL_PROVIDER.IFLOW_API, IFlowApiServiceAdapter);

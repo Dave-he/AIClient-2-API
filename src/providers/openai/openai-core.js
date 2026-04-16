@@ -5,7 +5,6 @@ import * as https from 'https';
 import { configureAxiosProxy, configureTLSSidecar } from '../../utils/proxy-utils.js';
 import { isRetryableNetworkError, MODEL_PROVIDER } from '../../utils/common.js';
 
-// Assumed OpenAI API specification service for interacting with third-party models
 export class OpenAIApiService {
     constructor(config) {
         if (!config.OPENAI_API_KEY) {
@@ -15,20 +14,23 @@ export class OpenAIApiService {
         this.apiKey = config.OPENAI_API_KEY;
         this.baseUrl = config.OPENAI_BASE_URL;
         this.useSystemProxy = config?.USE_SYSTEM_PROXY_OPENAI ?? false;
-        logger.info(`[OpenAI] System proxy ${this.useSystemProxy ? 'enabled' : 'disabled'}`);
+        this.timeout = config.OPENAI_TIMEOUT || 300000;
+        this.maxRetries = config.REQUEST_MAX_RETRIES || 3;
+        this.baseDelay = config.REQUEST_BASE_DELAY || 1000;
 
-        // 配置 HTTP/HTTPS agent 限制连接池大小，避免资源泄漏
+        logger.info(`[OpenAI] Base URL: ${this.baseUrl}, System proxy ${this.useSystemProxy ? 'enabled' : 'disabled'}, Timeout: ${this.timeout}ms`);
+
         const httpAgent = new http.Agent({
             keepAlive: true,
             maxSockets: 100,
             maxFreeSockets: 5,
-            timeout: 120000,
+            timeout: this.timeout,
         });
         const httpsAgent = new https.Agent({
             keepAlive: true,
             maxSockets: 100,
             maxFreeSockets: 5,
-            timeout: 120000,
+            timeout: this.timeout,
         });
 
         const axiosConfig = {
@@ -37,16 +39,18 @@ export class OpenAIApiService {
             httpsAgent,
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`
+                'Authorization': `Bearer ${this.apiKey}`,
+                'Accept': 'application/json, text/event-stream'
             },
+            timeout: this.timeout,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
         };
         
-        // 禁用系统代理以避免HTTPS代理错误
         if (!this.useSystemProxy) {
             axiosConfig.proxy = false;
         }
         
-        // 配置自定义代理
         configureAxiosProxy(axiosConfig, config, config.MODEL_PROVIDER || MODEL_PROVIDER.OPENAI_CUSTOM);
         
         this.axiosInstance = axios.create(axiosConfig);
@@ -57,14 +61,15 @@ export class OpenAIApiService {
     }
 
     async callApi(endpoint, body, isRetry = false, retryCount = 0) {
-        const maxRetries = this.config.REQUEST_MAX_RETRIES || 3;
-        const baseDelay = this.config.REQUEST_BASE_DELAY || 1000;  // 1 second base delay
+        const maxRetries = this.maxRetries;
+        const baseDelay = this.baseDelay;
 
         try {
             const axiosConfig = {
                 method: 'post',
                 url: endpoint,
-                data: body
+                data: body,
+                timeout: this.timeout,
             };
             this._applySidecar(axiosConfig);
             const response = await this.axiosInstance.request(axiosConfig);
@@ -74,8 +79,6 @@ export class OpenAIApiService {
             const data = error.response?.data;
             const errorCode = error.code;
             const errorMessage = error.message || '';
-            
-            // 检查是否为可重试的网络错误
             const isNetworkError = isRetryableNetworkError(error);
             
             if (status === 401 || status === 403) {
@@ -83,27 +86,25 @@ export class OpenAIApiService {
                 throw error;
             }
 
-            // Handle 429 (Too Many Requests) with exponential backoff
             if (status === 429 && retryCount < maxRetries) {
-                const delay = baseDelay * Math.pow(2, retryCount);
-                logger.info(`[OpenAI API] Received 429 (Too Many Requests). Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+                const retryAfter = error.response?.headers?.['retry-after'];
+                const delay = retryAfter ? parseInt(retryAfter) * 1000 : baseDelay * Math.pow(2, retryCount);
+                logger.warn(`[OpenAI API] Received 429 (Too Many Requests). Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 return this.callApi(endpoint, body, isRetry, retryCount + 1);
             }
 
-            // Handle other retryable errors (5xx server errors)
-            if (status >= 500 && status < 600 && retryCount < maxRetries) {
+            if ((status >= 500 && status < 600) && retryCount < maxRetries) {
                 const delay = baseDelay * Math.pow(2, retryCount);
-                logger.info(`[OpenAI API] Received ${status} server error. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+                logger.warn(`[OpenAI API] Received ${status} server error. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 return this.callApi(endpoint, body, isRetry, retryCount + 1);
             }
 
-            // Handle network errors (ECONNRESET, ETIMEDOUT, etc.) with exponential backoff
             if (isNetworkError && retryCount < maxRetries) {
                 const delay = baseDelay * Math.pow(2, retryCount);
                 const errorIdentifier = errorCode || errorMessage.substring(0, 50);
-                logger.info(`[OpenAI API] Network error (${errorIdentifier}). Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+                logger.warn(`[OpenAI API] Network error (${errorIdentifier}). Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 return this.callApi(endpoint, body, isRetry, retryCount + 1);
             }
@@ -114,10 +115,10 @@ export class OpenAIApiService {
     }
 
     async *streamApi(endpoint, body, isRetry = false, retryCount = 0) {
-        const maxRetries = this.config.REQUEST_MAX_RETRIES || 3;
-        const baseDelay = this.config.REQUEST_BASE_DELAY || 1000;  // 1 second base delay
+        const maxRetries = this.maxRetries;
+        const baseDelay = this.baseDelay;
+        let anyDataSent = false;
 
-        // OpenAI 的流式请求需要将 stream 设置为 true
         const streamRequestBody = { ...body, stream: true };
 
         try {
@@ -125,7 +126,8 @@ export class OpenAIApiService {
                 method: 'post',
                 url: endpoint,
                 data: streamRequestBody,
-                responseType: 'stream'
+                responseType: 'stream',
+                timeout: 0,
             };
             this._applySidecar(axiosConfig);
             const response = await this.axiosInstance.request(axiosConfig);
@@ -137,62 +139,70 @@ export class OpenAIApiService {
                 buffer += chunk.toString();
                 let newlineIndex;
                 while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-                    const line = buffer.substring(0, newlineIndex).trim();
+                    const line = buffer.substring(0, newlineIndex);
                     buffer = buffer.substring(newlineIndex + 1);
 
                     if (line.startsWith('data: ')) {
-                        const jsonData = line.substring(6).trim();
-                        if (jsonData === '[DONE]') {
-                            return; // Stream finished
+                        const jsonData = line.substring(6);
+                        if (jsonData.trim() === '[DONE]') {
+                            yield { type: 'done' };
+                            return;
                         }
                         try {
                             const parsedChunk = JSON.parse(jsonData);
+                            anyDataSent = true;
                             yield parsedChunk;
                         } catch (e) {
-                            logger.warn("[OpenAIApiService] Failed to parse stream chunk JSON:", e.message, "Data:", jsonData);
+                            if (jsonData.trim()) {
+                                anyDataSent = true;
+                                yield { type: 'raw', data: jsonData.trim() };
+                            }
                         }
-                    } else if (line === '') {
-                        // Empty line, end of an event
+                    } else if (line.startsWith('event: ')) {
+                        const eventName = line.substring(7).trim();
+                        yield { type: 'event', name: eventName };
+                    } else if (line.startsWith('id: ') || line.startsWith('retry: ') || line.trim() === '') {
+                        continue;
                     }
                 }
             }
         } catch (error) {
             const status = error.response?.status;
-            const data = error.response?.data;
             const errorCode = error.code;
             const errorMessage = error.message || '';
-            
-            // 检查是否为可重试的网络错误
             const isNetworkError = isRetryableNetworkError(error);
             
+            if (anyDataSent) {
+                logger.warn(`[OpenAI API] Cannot retry stream - data already sent to client`);
+                throw error;
+            }
+
             if (status === 401 || status === 403) {
                 logger.error(`[OpenAI API] Received ${status} during stream. API Key might be invalid or expired.`);
                 throw error;
             }
 
-            // Handle 429 (Too Many Requests) with exponential backoff
             if (status === 429 && retryCount < maxRetries) {
-                const delay = baseDelay * Math.pow(2, retryCount);
-                logger.info(`[OpenAI API] Received 429 (Too Many Requests) during stream. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+                const retryAfter = error.response?.headers?.['retry-after'];
+                const delay = retryAfter ? parseInt(retryAfter) * 1000 : baseDelay * Math.pow(2, retryCount);
+                logger.warn(`[OpenAI API] Received 429 during stream. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 yield* this.streamApi(endpoint, body, isRetry, retryCount + 1);
                 return;
             }
 
-            // Handle other retryable errors (5xx server errors)
-            if (status >= 500 && status < 600 && retryCount < maxRetries) {
+            if ((status >= 500 && status < 600) && retryCount < maxRetries) {
                 const delay = baseDelay * Math.pow(2, retryCount);
-                logger.info(`[OpenAI API] Received ${status} server error during stream. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+                logger.warn(`[OpenAI API] Received ${status} server error during stream. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 yield* this.streamApi(endpoint, body, isRetry, retryCount + 1);
                 return;
             }
 
-            // Handle network errors (ECONNRESET, ETIMEDOUT, etc.) with exponential backoff
             if (isNetworkError && retryCount < maxRetries) {
                 const delay = baseDelay * Math.pow(2, retryCount);
                 const errorIdentifier = errorCode || errorMessage.substring(0, 50);
-                logger.info(`[OpenAI API] Network error (${errorIdentifier}) during stream. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+                logger.warn(`[OpenAI API] Network error (${errorIdentifier}) during stream. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 yield* this.streamApi(endpoint, body, isRetry, retryCount + 1);
                 return;

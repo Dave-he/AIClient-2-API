@@ -9,6 +9,214 @@ export let PROMPT_LOG_FILENAME = ''; // Make PROMPT_LOG_FILENAME exportable
 
 const ALL_MODEL_PROVIDERS = Object.values(MODEL_PROVIDER);
 
+const VALIDATION_RULES = {
+    SERVER_PORT: {
+        type: 'int',
+        min: 1,
+        max: 65535,
+        required: true,
+        errorMsg: 'SERVER_PORT must be between 1 and 65535'
+    },
+    LOGIN_EXPIRY: {
+        type: 'int',
+        min: 60,
+        max: 86400,
+        errorMsg: 'LOGIN_EXPIRY must be between 60 and 86400 seconds'
+    },
+    LOGIN_MAX_ATTEMPTS: {
+        type: 'int',
+        min: 1,
+        max: 100,
+        errorMsg: 'LOGIN_MAX_ATTEMPTS must be between 1 and 100'
+    },
+    LOGIN_LOCKOUT_DURATION: {
+        type: 'int',
+        min: 60,
+        max: 86400,
+        errorMsg: 'LOGIN_LOCKOUT_DURATION must be between 60 and 86400 seconds'
+    },
+    LOGIN_MIN_INTERVAL: {
+        type: 'int',
+        min: 1000,
+        max: 60000,
+        errorMsg: 'LOGIN_MIN_INTERVAL must be between 1000 and 60000 milliseconds'
+    },
+    REQUEST_MAX_RETRIES: {
+        type: 'int',
+        min: 0,
+        max: 10,
+        errorMsg: 'REQUEST_MAX_RETRIES must be between 0 and 10'
+    },
+    REQUEST_BASE_DELAY: {
+        type: 'int',
+        min: 100,
+        max: 60000,
+        errorMsg: 'REQUEST_BASE_DELAY must be between 100 and 60000 milliseconds'
+    },
+    CREDENTIAL_SWITCH_MAX_RETRIES: {
+        type: 'int',
+        min: 0,
+        max: 20,
+        errorMsg: 'CREDENTIAL_SWITCH_MAX_RETRIES must be between 0 and 20'
+    },
+    MAX_ERROR_COUNT: {
+        type: 'int',
+        min: 1,
+        max: 100,
+        errorMsg: 'MAX_ERROR_COUNT must be between 1 and 100'
+    },
+    CRON_NEAR_MINUTES: {
+        type: 'int',
+        min: 1,
+        max: 120,
+        errorMsg: 'CRON_NEAR_MINUTES must be between 1 and 120 minutes'
+    },
+    LOG_LEVEL: {
+        type: 'enum',
+        values: ['debug', 'info', 'warn', 'error'],
+        errorMsg: 'LOG_LEVEL must be one of: debug, info, warn, error'
+    },
+    LOG_OUTPUT_MODE: {
+        type: 'enum',
+        values: ['console', 'file', 'all', 'none'],
+        errorMsg: 'LOG_OUTPUT_MODE must be one of: console, file, all, none'
+    },
+    SYSTEM_PROMPT_MODE: {
+        type: 'enum',
+        values: ['overwrite', 'append'],
+        errorMsg: 'SYSTEM_PROMPT_MODE must be one of: overwrite, append'
+    },
+    PROMPT_LOG_MODE: {
+        type: 'enum',
+        values: ['none', 'console', 'file'],
+        errorMsg: 'PROMPT_LOG_MODE must be one of: none, console, file'
+    },
+    LOG_MAX_FILE_SIZE: {
+        type: 'int',
+        min: 1024,
+        max: 1073741824,
+        errorMsg: 'LOG_MAX_FILE_SIZE must be between 1024 bytes (1KB) and 1073741824 bytes (1GB)'
+    },
+    LOG_MAX_FILES: {
+        type: 'int',
+        min: 1,
+        max: 100,
+        errorMsg: 'LOG_MAX_FILES must be between 1 and 100'
+    },
+    SCHEDULED_HEALTH_CHECK: {
+        type: 'object',
+        properties: {
+            enabled: { type: 'bool' },
+            interval: { type: 'int', min: 10000, max: 86400000, errorMsg: 'SCHEDULED_HEALTH_CHECK.interval must be between 10000ms (10s) and 86400000ms (24h)' },
+            startupRun: { type: 'bool' }
+        }
+    },
+    TLS_SIDECAR_PORT: {
+        type: 'int',
+        min: 1,
+        max: 65535,
+        errorMsg: 'TLS_SIDECAR_PORT must be between 1 and 65535'
+    }
+};
+
+function validateConfig(config) {
+    const errors = [];
+    const warnings = [];
+
+    for (const [key, rule] of Object.entries(VALIDATION_RULES)) {
+        const value = config[key];
+        
+        if (rule.required && value === undefined) {
+            errors.push(`Missing required configuration: ${key}`);
+            continue;
+        }
+
+        if (value === undefined || value === null) {
+            continue;
+        }
+
+        switch (rule.type) {
+            case 'int':
+                if (!Number.isInteger(value)) {
+                    errors.push(`${key} must be an integer. Got: ${typeof value}`);
+                } else if (rule.min !== undefined && value < rule.min) {
+                    errors.push(`${key} must be >= ${rule.min}. Got: ${value}`);
+                } else if (rule.max !== undefined && value > rule.max) {
+                    errors.push(`${key} must be <= ${rule.max}. Got: ${value}`);
+                }
+                break;
+
+            case 'enum':
+                if (!rule.values.includes(value)) {
+                    errors.push(`${key} must be one of [${rule.values.join(', ')}]. Got: ${value}`);
+                }
+                break;
+
+            case 'bool':
+                if (typeof value !== 'boolean') {
+                    errors.push(`${key} must be a boolean. Got: ${typeof value}`);
+                }
+                break;
+
+            case 'object':
+                if (typeof value !== 'object') {
+                    errors.push(`${key} must be an object. Got: ${typeof value}`);
+                } else if (rule.properties) {
+                    for (const [propKey, propRule] of Object.entries(rule.properties)) {
+                        const propValue = value[propKey];
+                        if (propValue === undefined) continue;
+                        
+                        if (propRule.type === 'int') {
+                            if (!Number.isInteger(propValue)) {
+                                errors.push(`${key}.${propKey} must be an integer. Got: ${typeof propValue}`);
+                            } else if (propRule.min !== undefined && propValue < propRule.min) {
+                                errors.push(propRule.errorMsg || `${key}.${propKey} must be >= ${propRule.min}. Got: ${propValue}`);
+                            } else if (propRule.max !== undefined && propValue > propRule.max) {
+                                errors.push(propRule.errorMsg || `${key}.${propKey} must be <= ${propRule.max}. Got: ${propValue}`);
+                            }
+                        } else if (propRule.type === 'bool') {
+                            if (typeof propValue !== 'boolean') {
+                                errors.push(`${key}.${propKey} must be a boolean. Got: ${typeof propValue}`);
+                            }
+                        }
+                    }
+                }
+                break;
+        }
+    }
+
+    if (config.REQUIRED_API_KEY === '123456') {
+        warnings.push('Using default API key (123456). For security, please change this in production.');
+    }
+
+    if (config.LOG_LEVEL === 'debug' && process.env.NODE_ENV === 'production') {
+        warnings.push('Debug log level is not recommended in production environment.');
+    }
+
+    return { errors, warnings };
+}
+
+function applyConfigValidation(config) {
+    const { errors, warnings } = validateConfig(config);
+
+    if (warnings.length > 0) {
+        logger.warn('[Config Validation] Configuration warnings:');
+        warnings.forEach(warning => {
+            logger.warn(`  - ${warning}`);
+        });
+    }
+
+    if (errors.length > 0) {
+        logger.error('[Config Validation] Configuration errors detected:');
+        errors.forEach(error => {
+            logger.error(`  - ${error}`);
+        });
+        throw new Error(`Configuration validation failed with ${errors.length} error(s)`);
+    }
+
+    logger.info('[Config Validation] Configuration validation passed');
+}
+
 function normalizeConfiguredProviders(config) {
     const fallbackProvider = MODEL_PROVIDER.GEMINI_CLI;
     const dedupedProviders = [];
@@ -180,6 +388,8 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
     }
 
     normalizeConfiguredProviders(currentConfig);
+
+    applyConfigValidation(currentConfig);
 
     if (!currentConfig.SYSTEM_PROMPT_FILE_PATH) {
         currentConfig.SYSTEM_PROMPT_FILE_PATH = INPUT_SYSTEM_PROMPT_FILE;

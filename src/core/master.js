@@ -39,7 +39,25 @@ const config = {
     maxRestartAttempts: 10,
     restartDelay: 1000, // 重启延迟（毫秒）
     masterPort: parseInt(process.env.MASTER_PORT) || 3100, // 主进程管理端口
-    args: process.argv.slice(2) // 传递给子进程的参数
+    args: process.argv.slice(2), // 传递给子进程的参数
+    resourceMonitor: {
+        enabled: process.env.RESOURCE_MONITOR_ENABLED !== 'false',
+        interval: parseInt(process.env.RESOURCE_MONITOR_INTERVAL) || 5000, // 监控间隔（毫秒）
+        cpuThreshold: parseFloat(process.env.CPU_THRESHOLD) || 80, // CPU使用率阈值（百分比）
+        memoryThreshold: parseFloat(process.env.MEMORY_THRESHOLD) || 80, // 内存使用率阈值（百分比）
+        maxConsecutiveAlerts: parseInt(process.env.MAX_CONSECUTIVE_ALERTS) || 3 // 最大连续告警次数
+    }
+};
+
+// 资源监控状态
+const resourceMonitorStatus = {
+    consecutiveCpuAlerts: 0,
+    consecutiveMemoryAlerts: 0,
+    lastCpuAlertTime: null,
+    lastMemoryAlertTime: null,
+    recentCpuUsage: [],
+    recentMemoryUsage: [],
+    maxSamples: 12 // 保留最近12个样本（约1分钟数据）
 };
 
 /**
@@ -216,15 +234,189 @@ function handleWorkerMessage(message) {
 }
 
 /**
+ * 获取子进程资源使用情况
+ * @returns {Object|null}
+ */
+function getWorkerResourceUsage() {
+    if (!workerProcess) {
+        return null;
+    }
+
+    try {
+        const usage = workerProcess.resourceUsage ? workerProcess.resourceUsage() : null;
+        const memory = workerProcess.memoryUsage ? workerProcess.memoryUsage() : null;
+        
+        const totalMemory = process.platform === 'win32' 
+            ? (() => {
+                try {
+                    const cpus = require('os').cpus();
+                    return cpus.length * 4 * 1024 * 1024 * 1024; // 假设每核4GB
+                } catch {
+                    return 8 * 1024 * 1024 * 1024; // 默认8GB
+                }
+            })()
+            : require('os').totalmem();
+
+        return {
+            pid: workerProcess.pid,
+            cpu: usage ? {
+                user: usage.userCPUTime,
+                system: usage.systemCPUTime,
+                total: usage.userCPUTime + usage.systemCPUTime
+            } : null,
+            memory: memory ? {
+                rss: memory.rss,
+                heapTotal: memory.heapTotal,
+                heapUsed: memory.heapUsed,
+                external: memory.external,
+                percentage: memory.rss > 0 ? ((memory.rss / totalMemory) * 100).toFixed(2) : 0
+            } : null,
+            timestamp: new Date().toISOString()
+        };
+    } catch (error) {
+        logger.warn('[Master] Failed to get worker resource usage:', error.message);
+        return null;
+    }
+}
+
+/**
+ * 记录资源使用样本
+ */
+function recordResourceUsage() {
+    const usage = getWorkerResourceUsage();
+    if (!usage) return;
+
+    const cpuPercent = calculateCpuPercentage(usage);
+    
+    resourceMonitorStatus.recentCpuUsage.push({
+        timestamp: usage.timestamp,
+        value: cpuPercent
+    });
+    resourceMonitorStatus.recentMemoryUsage.push({
+        timestamp: usage.timestamp,
+        value: parseFloat(usage.memory?.percentage || 0)
+    });
+
+    if (resourceMonitorStatus.recentCpuUsage.length > resourceMonitorStatus.maxSamples) {
+        resourceMonitorStatus.recentCpuUsage.shift();
+    }
+    if (resourceMonitorStatus.recentMemoryUsage.length > resourceMonitorStatus.maxSamples) {
+        resourceMonitorStatus.recentMemoryUsage.shift();
+    }
+
+    checkResourceAlerts(cpuPercent, parseFloat(usage.memory?.percentage || 0));
+}
+
+/**
+ * 计算CPU使用率百分比
+ */
+function calculateCpuPercentage(usage) {
+    if (!usage.cpu) return 0;
+    
+    const cpus = require('os').cpus();
+    const elapsedMs = Date.now() - new Date(workerStatus.startTime).getTime();
+    if (elapsedMs <= 0) return 0;
+
+    const totalCpuTimeMs = (usage.cpu.user + usage.cpu.system) / 10000;
+    const cpuPercent = (totalCpuTimeMs / elapsedMs) * 100 * cpus.length;
+    
+    return Math.min(cpuPercent, 100);
+}
+
+/**
+ * 检查资源使用并触发告警
+ */
+function checkResourceAlerts(cpuPercent, memoryPercent) {
+    const { cpuThreshold, memoryThreshold, maxConsecutiveAlerts } = config.resourceMonitor;
+    const now = Date.now();
+
+    if (cpuPercent >= cpuThreshold) {
+        resourceMonitorStatus.consecutiveCpuAlerts++;
+        
+        if (resourceMonitorStatus.consecutiveCpuAlerts >= maxConsecutiveAlerts) {
+            const timeSinceLastAlert = resourceMonitorStatus.lastCpuAlertTime 
+                ? now - resourceMonitorStatus.lastCpuAlertTime 
+                : Infinity;
+            
+            if (timeSinceLastAlert >= 60000) {
+                logger.warn(`[Master] [RESOURCE ALERT] Worker CPU usage is ${cpuPercent.toFixed(2)}% (threshold: ${cpuThreshold}%)`);
+                logger.warn(`[Master] [RESOURCE ALERT] Worker PID: ${workerStatus.pid}, Uptime: ${Math.floor(process.uptime())}s`);
+                resourceMonitorStatus.lastCpuAlertTime = now;
+            }
+        }
+    } else {
+        resourceMonitorStatus.consecutiveCpuAlerts = 0;
+    }
+
+    if (memoryPercent >= memoryThreshold) {
+        resourceMonitorStatus.consecutiveMemoryAlerts++;
+        
+        if (resourceMonitorStatus.consecutiveMemoryAlerts >= maxConsecutiveAlerts) {
+            const timeSinceLastAlert = resourceMonitorStatus.lastMemoryAlertTime 
+                ? now - resourceMonitorStatus.lastMemoryAlertTime 
+                : Infinity;
+            
+            if (timeSinceLastAlert >= 60000) {
+                logger.warn(`[Master] [RESOURCE ALERT] Worker memory usage is ${memoryPercent.toFixed(2)}% (threshold: ${memoryThreshold}%)`);
+                logger.warn(`[Master] [RESOURCE ALERT] Worker PID: ${workerStatus.pid}, RSS: ${formatBytes(getWorkerResourceUsage()?.memory?.rss || 0)}`);
+                resourceMonitorStatus.lastMemoryAlertTime = now;
+            }
+        }
+    } else {
+        resourceMonitorStatus.consecutiveMemoryAlerts = 0;
+    }
+}
+
+/**
+ * 格式化字节数
+ */
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+/**
+ * 启动资源监控
+ */
+function startResourceMonitor() {
+    if (!config.resourceMonitor.enabled) {
+        logger.info('[Master] Resource monitoring is disabled');
+        return;
+    }
+
+    logger.info('[Master] Starting resource monitor...');
+    logger.info(`[Master] Resource monitor interval: ${config.resourceMonitor.interval}ms`);
+    logger.info(`[Master] CPU threshold: ${config.resourceMonitor.cpuThreshold}%`);
+    logger.info(`[Master] Memory threshold: ${config.resourceMonitor.memoryThreshold}%`);
+
+    // 立即执行一次
+    recordResourceUsage();
+
+    // 设置定时任务
+    setInterval(() => {
+        if (workerProcess && !workerStatus.isRestarting) {
+            recordResourceUsage();
+        }
+    }, config.resourceMonitor.interval);
+}
+
+/**
  * 获取状态信息
  * @returns {Object}
  */
 function getStatus() {
+    const workerUsage = getWorkerResourceUsage();
+    const cpuPercent = workerUsage ? calculateCpuPercentage(workerUsage) : 0;
+    
     return {
         master: {
             pid: process.pid,
             uptime: process.uptime(),
-            memoryUsage: process.memoryUsage()
+            memoryUsage: process.memoryUsage(),
+            memoryPercentage: ((process.memoryUsage().rss / require('os').totalmem()) * 100).toFixed(2)
         },
         worker: {
             pid: workerStatus.pid,
@@ -232,7 +424,21 @@ function getStatus() {
             restartCount: workerStatus.restartCount,
             lastRestartTime: workerStatus.lastRestartTime,
             isRestarting: workerStatus.isRestarting,
-            isRunning: workerProcess !== null
+            isRunning: workerProcess !== null,
+            resourceUsage: workerUsage,
+            cpuPercentage: cpuPercent.toFixed(2),
+            recentCpuUsage: [...resourceMonitorStatus.recentCpuUsage],
+            recentMemoryUsage: [...resourceMonitorStatus.recentMemoryUsage]
+        },
+        resourceMonitor: {
+            enabled: config.resourceMonitor.enabled,
+            interval: config.resourceMonitor.interval,
+            cpuThreshold: config.resourceMonitor.cpuThreshold,
+            memoryThreshold: config.resourceMonitor.memoryThreshold,
+            consecutiveAlerts: {
+                cpu: resourceMonitorStatus.consecutiveCpuAlerts,
+                memory: resourceMonitorStatus.consecutiveMemoryAlerts
+            }
         }
     };
 }
@@ -386,6 +592,9 @@ async function main() {
 
     // 启动子进程
     startWorker();
+
+    // 启动资源监控
+    startResourceMonitor();
 }
 
 // 启动主进程

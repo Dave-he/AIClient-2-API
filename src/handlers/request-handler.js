@@ -160,6 +160,121 @@ export function createRequestHandler(config, providerPoolManager) {
                     }
                 }
 
+                // GPU status endpoint (for Local Model integration)
+                if (method === 'GET' && path === '/manage/gpu') {
+                    try {
+                        const { getServiceAdapter, serviceInstances } = await import('../providers/adapter.js');
+                        const { MODEL_PROVIDER } = await import('../utils/constants.js');
+                        
+                        let gpuStatus = null;
+                        let error = null;
+                        
+                        const localConfig = { ...currentConfig, MODEL_PROVIDER: MODEL_PROVIDER.LOCAL_MODEL };
+                        const providerKey = localConfig.uuid ? MODEL_PROVIDER.LOCAL_MODEL + localConfig.uuid : MODEL_PROVIDER.LOCAL_MODEL;
+                        
+                        if (serviceInstances[providerKey]) {
+                            const adapter = serviceInstances[providerKey];
+                            if (typeof adapter.getGPUStatus === 'function') {
+                                gpuStatus = await adapter.getGPUStatus();
+                            }
+                        }
+                        
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            timestamp: new Date().toISOString(),
+                            gpuStatus,
+                            error
+                        }));
+                        return true;
+                    } catch (err) {
+                        logger.error(`[Server] GPU status error: ${err.message}`);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            timestamp: new Date().toISOString(),
+                            gpuStatus: null,
+                            error: err.message
+                        }));
+                        return true;
+                    }
+                }
+
+                // Model management endpoints (for Local Model integration)
+                if (method === 'POST' && path === '/manage/model/start') {
+                    try {
+                        const body = await parseRequestBody(req);
+                        const modelName = body?.model;
+                        
+                        if (!modelName) {
+                            res.writeHead(400, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Model name is required' }));
+                            return true;
+                        }
+                        
+                        const { getServiceAdapter, serviceInstances } = await import('../providers/adapter.js');
+                        const { MODEL_PROVIDER } = await import('../utils/constants.js');
+                        
+                        const localConfig = { ...currentConfig, MODEL_PROVIDER: MODEL_PROVIDER.LOCAL_MODEL };
+                        const providerKey = localConfig.uuid ? MODEL_PROVIDER.LOCAL_MODEL + localConfig.uuid : MODEL_PROVIDER.LOCAL_MODEL;
+                        
+                        if (serviceInstances[providerKey]) {
+                            const adapter = serviceInstances[providerKey];
+                            if (typeof adapter.startModel === 'function') {
+                                const result = await adapter.startModel(modelName);
+                                res.writeHead(200, { 'Content-Type': 'application/json' });
+                                res.end(JSON.stringify({ success: true, data: result }));
+                                return true;
+                            }
+                        }
+                        
+                        res.writeHead(503, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: 'Local model service not available' }));
+                        return true;
+                    } catch (err) {
+                        logger.error(`[Server] Start model error: ${err.message}`);
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                        return true;
+                    }
+                }
+
+                if (method === 'POST' && path === '/manage/model/stop') {
+                    try {
+                        const body = await parseRequestBody(req);
+                        const modelName = body?.model;
+                        
+                        if (!modelName) {
+                            res.writeHead(400, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Model name is required' }));
+                            return true;
+                        }
+                        
+                        const { getServiceAdapter, serviceInstances } = await import('../providers/adapter.js');
+                        const { MODEL_PROVIDER } = await import('../utils/constants.js');
+                        
+                        const localConfig = { ...currentConfig, MODEL_PROVIDER: MODEL_PROVIDER.LOCAL_MODEL };
+                        const providerKey = localConfig.uuid ? MODEL_PROVIDER.LOCAL_MODEL + localConfig.uuid : MODEL_PROVIDER.LOCAL_MODEL;
+                        
+                        if (serviceInstances[providerKey]) {
+                            const adapter = serviceInstances[providerKey];
+                            if (typeof adapter.stopModel === 'function') {
+                                const result = await adapter.stopModel(modelName);
+                                res.writeHead(200, { 'Content-Type': 'application/json' });
+                                res.end(JSON.stringify({ success: true, data: result }));
+                                return true;
+                            }
+                        }
+                        
+                        res.writeHead(503, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: 'Local model service not available' }));
+                        return true;
+                    } catch (err) {
+                        logger.error(`[Server] Stop model error: ${err.message}`);
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                        return true;
+                    }
+                }
+
 
                 // Handle API requests
                 // Allow overriding MODEL_PROVIDER via request header

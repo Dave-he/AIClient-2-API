@@ -1,30 +1,32 @@
 import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-/**
- * 统一日志工具类
- * 支持控制台和文件输出，自动添加请求ID和时间戳
- */
 class Logger {
     constructor() {
         this.config = {
             enabled: true,
-            outputMode: 'all', // 'console', 'file', 'all', 'none'
+            outputMode: 'all',
             logDir: 'logs',
-            logLevel: 'info', // 'debug', 'info', 'warn', 'error'
+            logLevel: 'info',
             includeRequestId: true,
             includeTimestamp: true,
-            maxFileSize: 10 * 1024 * 1024, // 10MB
-            maxFiles: 10
+            maxFileSize: 10 * 1024 * 1024,
+            maxFiles: 10,
+            flushInterval: 1000,
+            bufferSize: 100
         };
         this.currentLogFile = null;
         this.logStream = null;
-        this.asyncStorage = new AsyncLocalStorage(); // 使用 AsyncLocalStorage 存储请求上下文
-        this.requestContext = new Map(); // 存储请求上下文
-        this.contextTTL = 5 * 60 * 1000; // 请求上下文 TTL：5 分钟
+        this.asyncStorage = new AsyncLocalStorage();
+        this.requestContext = new Map();
+        this.contextTTL = 5 * 60 * 1000;
         this._contextCleanupTimer = null;
+        this._flushTimer = null;
+        this._writeBuffer = [];
+        this._isFlushing = false;
         this.levels = {
             debug: 0,
             info: 1,
@@ -33,12 +35,7 @@ class Logger {
         };
     }
 
-
-    /**
-     * 初始化日志配置
-     * @param {Object} config - 日志配置对象
-     */
-    initialize(config = {}) {
+    async initialize(config = {}) {
         this.config = { ...this.config, ...config };
         
         if (this.config.outputMode === 'none') {
@@ -47,21 +44,17 @@ class Logger {
         }
 
         if (this.config.outputMode === 'file' || this.config.outputMode === 'all') {
-            this.initializeFileLogging();
+            await this.initializeFileLogging();
+            this._startFlushTimer();
         }
     }
 
-    /**
-     * 初始化文件日志
-     */
-    initializeFileLogging() {
+    async initializeFileLogging() {
         try {
-            // 确保日志目录存在
-            if (!fs.existsSync(this.config.logDir)) {
-                fs.mkdirSync(this.config.logDir, { recursive: true });
+            if (!await this._exists(this.config.logDir)) {
+                await fsPromises.mkdir(this.config.logDir, { recursive: true });
             }
 
-            // 创建日志文件名（按本地日期）
             const date = new Date();
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -69,10 +62,8 @@ class Logger {
             const dateStr = `${year}-${month}-${day}`;
             this.currentLogFile = path.join(this.config.logDir, `app-${dateStr}.log`);
 
-            // 创建写入流
             this.logStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
             
-            // 监听错误
             this.logStream.on('error', (err) => {
                 console.error('[Logger] Failed to write to log file:', err.message);
             });
@@ -81,12 +72,52 @@ class Logger {
         }
     }
 
-    /**
-     * 在请求上下文中运行
-     * @param {string} requestId - 请求ID
-     * @param {Function} callback - 回调函数
-     * @returns {any}
-     */
+    _startFlushTimer() {
+        if (this._flushTimer) return;
+        this._flushTimer = setInterval(() => {
+            this._flushBuffer().catch(err => {
+                console.error('[Logger] Failed to flush buffer:', err.message);
+            });
+        }, this.config.flushInterval);
+        if (this._flushTimer.unref) {
+            this._flushTimer.unref();
+        }
+    }
+
+    async _flushBuffer() {
+        if (this._isFlushing || this._writeBuffer.length === 0) return;
+        
+        this._isFlushing = true;
+        const buffer = [...this._writeBuffer];
+        this._writeBuffer = [];
+        
+        try {
+            if (this.logStream && !this.logStream.destroyed && this.logStream.writable) {
+                await this._checkAndRotateLogFile();
+                const data = buffer.join('');
+                await new Promise((resolve, reject) => {
+                    this.logStream.write(data, (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+            }
+        } catch (err) {
+            console.error('[Logger] Failed to write buffered logs:', err.message);
+            this._writeBuffer = [...buffer, ...this._writeBuffer];
+        } finally {
+            this._isFlushing = false;
+        }
+    }
+
+    _exists(path) {
+        return new Promise(resolve => {
+            fs.access(path, fs.constants.F_OK, err => {
+                resolve(!err);
+            });
+        });
+    }
+
     runWithContext(requestId, callback) {
         if (!requestId) {
             requestId = randomUUID().substring(0, 8);
@@ -96,11 +127,6 @@ class Logger {
         return this.asyncStorage.run(requestId, callback);
     }
 
-    /**
-     * 设置请求上下文 (不推荐直接使用，建议使用 runWithContext)
-     * @param {string} requestId - 请求ID
-     * @param {Object} context - 上下文信息
-     */
     setRequestContext(requestId, context = {}) {
         if (!requestId) {
             requestId = randomUUID().substring(0, 8);
@@ -111,20 +137,10 @@ class Logger {
         return requestId;
     }
 
-    /**
-     * 获取当前请求ID
-     * @returns {string} 请求ID
-     */
     getCurrentRequestId() {
-        // 从 AsyncLocalStorage 中获取当前请求ID
         return this.asyncStorage.getStore();
     }
 
-    /**
-     * 获取当前请求上下文
-     * @param {string} requestId - 请求ID
-     * @returns {Object} 上下文信息
-     */
     getRequestContext(requestId) {
         if (!requestId) {
             requestId = this.getCurrentRequestId();
@@ -132,23 +148,12 @@ class Logger {
         return this.requestContext.get(requestId) || {};
     }
 
-    /**
-     * 清除请求上下文
-     * @param {string} requestId - 请求ID
-     */
     clearRequestContext(requestId) {
         if (requestId) {
             this.requestContext.delete(requestId);
         }
-        // AsyncLocalStorage 不需要手动清除，run() 会在结束时自动处理
-        // 如果使用了 enterWith，则没有简单的方法在该异步路径中清除
     }
 
-
-    /**
-     * 启动定期清理过期请求上下文的定时器（防止内存泄漏）
-     * 每 60 秒扫描一次，清除超过 contextTTL 的条目
-     */
     _ensureContextCleanup() {
         if (this._contextCleanupTimer) return;
         this._contextCleanupTimer = setInterval(() => {
@@ -163,29 +168,19 @@ class Logger {
             if (cleaned > 0) {
                 this.log('warn', [`[Logger] Cleaned ${cleaned} stale request context(s) (TTL: ${this.contextTTL}ms)`]);
             }
-            // 当 Map 为空时停止定时器
             if (this.requestContext.size === 0) {
                 clearInterval(this._contextCleanupTimer);
                 this._contextCleanupTimer = null;
             }
         }, 60_000);
-        // 不阻止进程退出
         if (this._contextCleanupTimer.unref) {
             this._contextCleanupTimer.unref();
         }
     }
 
-    /**
-     * 格式化日志消息
-     * @param {string} level - 日志级别
-     * @param {Array} args - 日志参数
-     * @param {string} requestId - 请求ID
-     * @returns {string} 格式化后的日志
-     */
     formatMessage(level, args, requestId) {
         const parts = [];
 
-        // 添加本地时间戳
         if (this.config.includeTimestamp) {
             const now = new Date();
             const year = now.getFullYear();
@@ -199,15 +194,12 @@ class Logger {
             parts.push(`[${timestamp}]`);
         }
 
-        // 添加请求ID
         if (this.config.includeRequestId && requestId) {
             parts.push(`[Req:${requestId}]`);
         }
 
-        // 添加日志级别
         parts.push(`[${level.toUpperCase()}]`);
 
-        // 添加消息内容
         const message = args.map(arg => {
             if (typeof arg === 'object') {
                 try {
@@ -224,11 +216,6 @@ class Logger {
         return parts.join(' ');
     }
 
-    /**
-     * 检查是否应该输出该级别的日志
-     * @param {string} level - 日志级别
-     * @returns {boolean}
-     */
     shouldLog(level) {
         if (!this.config.enabled) return false;
         const currentLevel = this.levels[this.config.logLevel] ?? 1;
@@ -236,55 +223,43 @@ class Logger {
         return targetLevel >= currentLevel;
     }
 
-    /**
-     * 检查并轮转日志文件
-     */
-    checkAndRotateLogFile() {
+    async _checkAndRotateLogFile() {
         try {
-            if (!this.currentLogFile || !fs.existsSync(this.currentLogFile)) {
+            if (!this.currentLogFile || !await this._exists(this.currentLogFile)) {
                 return;
             }
 
-            const stats = fs.statSync(this.currentLogFile);
+            const stats = await fsPromises.stat(this.currentLogFile);
             if (stats.size >= this.config.maxFileSize) {
-                // 关闭当前日志流
                 if (this.logStream && !this.logStream.destroyed) {
-                    this.logStream.end();
+                    await new Promise(resolve => {
+                        this.logStream.end(resolve);
+                    });
                 }
 
-                // 重命名当前日志文件，添加时间戳
                 const timestamp = new Date().getTime();
                 const ext = path.extname(this.currentLogFile);
                 const basename = path.basename(this.currentLogFile, ext);
                 const newName = path.join(this.config.logDir, `${basename}-${timestamp}${ext}`);
-                fs.renameSync(this.currentLogFile, newName);
+                await fsPromises.rename(this.currentLogFile, newName);
 
-                // 重新创建日志流
                 this.logStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
                 this.logStream.on('error', (err) => {
                     console.error('[Logger] Failed to write to log file:', err.message);
                 });
 
-                // 清理旧日志文件
-                this.cleanupOldLogs();
+                await this.cleanupOldLogs();
             }
         } catch (error) {
             console.error('[Logger] Failed to rotate log file:', error.message);
         }
     }
 
-    /**
-     * 输出日志
-     * @param {string} level - 日志级别
-     * @param {Array} args - 日志参数
-     * @param {string} requestId - 请求ID
-     */
     log(level, args, requestId = null) {
         if (!this.shouldLog(level)) return;
 
         const message = this.formatMessage(level, args, requestId);
 
-        // 输出到控制台
         if (this.config.outputMode === 'console' || this.config.outputMode === 'all') {
             const consoleMethod = level === 'error' ? console.error :
                                   level === 'warn' ? console.warn :
@@ -292,62 +267,36 @@ class Logger {
             consoleMethod(message);
         }
 
-        // 输出到文件
         if (this.config.outputMode === 'file' || this.config.outputMode === 'all') {
-            if (this.logStream && !this.logStream.destroyed && this.logStream.writable) {
-                try {
-                    // 检查文件大小并轮转
-                    this.checkAndRotateLogFile();
-                    this.logStream.write(message + '\n');
-                } catch (err) {
-                    // 如果写入失败，输出到控制台作为备份
-                    console.error('[Logger] Failed to write to log file:', err.message);
-                }
+            this._writeBuffer.push(message + '\n');
+            if (this._writeBuffer.length >= this.config.bufferSize) {
+                this._flushBuffer().catch(err => {
+                    console.error('[Logger] Failed to flush buffer:', err.message);
+                });
             }
         }
     }
 
-    /**
-     * Debug 级别日志
-     * @param {...any} args - 日志参数
-     */
     debug(...args) {
         const requestId = this.getCurrentRequestId();
         this.log('debug', args, requestId);
     }
 
-    /**
-     * Info 级别日志
-     * @param {...any} args - 日志参数
-     */
     info(...args) {
         const requestId = this.getCurrentRequestId();
         this.log('info', args, requestId);
     }
 
-    /**
-     * Warn 级别日志
-     * @param {...any} args - 日志参数
-     */
     warn(...args) {
         const requestId = this.getCurrentRequestId();
         this.log('warn', args, requestId);
     }
 
-    /**
-     * Error 级别日志
-     * @param {...any} args - 日志参数
-     */
     error(...args) {
         const requestId = this.getCurrentRequestId();
         this.log('error', args, requestId);
     }
 
-    /**
-     * 创建带请求ID的日志记录器
-     * @param {string} requestId - 请求ID
-     * @returns {Object} 带请求上下文的日志方法
-     */
     withRequest(requestId) {
         if (!requestId) {
             requestId = this.getCurrentRequestId();
@@ -361,30 +310,31 @@ class Logger {
         };
     }
 
-    /**
-     * 关闭日志流
-     */
-    close() {
+    async close() {
+        if (this._flushTimer) {
+            clearInterval(this._flushTimer);
+            this._flushTimer = null;
+        }
         if (this._contextCleanupTimer) {
             clearInterval(this._contextCleanupTimer);
             this._contextCleanupTimer = null;
         }
+        await this._flushBuffer();
         if (this.logStream && !this.logStream.destroyed) {
-            this.logStream.end();
+            await new Promise(resolve => {
+                this.logStream.end(resolve);
+            });
             this.logStream = null;
         }
     }
 
-    /**
-     * 清理旧日志文件
-     */
-    cleanupOldLogs() {
+    async cleanupOldLogs() {
         try {
-            if (!fs.existsSync(this.config.logDir)) {
+            if (!await this._exists(this.config.logDir)) {
                 return;
             }
 
-            const files = fs.readdirSync(this.config.logDir)
+            const files = (await fsPromises.readdir(this.config.logDir))
                 .filter(file => file.startsWith('app-') && file.endsWith('.log'))
                 .map(file => ({
                     name: file,
@@ -393,11 +343,10 @@ class Logger {
                 }))
                 .sort((a, b) => b.time - a.time);
 
-            // 保留最新的 maxFiles 个文件，删除其他的
             if (files.length > this.config.maxFiles) {
                 for (let i = this.config.maxFiles; i < files.length; i++) {
                     try {
-                        fs.unlinkSync(files[i].path);
+                        await fsPromises.unlink(files[i].path);
                     } catch (err) {
                         console.error('[Logger] Failed to delete old log file:', files[i].name, err.message);
                     }
@@ -408,26 +357,21 @@ class Logger {
         }
     }
 
-    /**
-     * 清空当日日志文件
-     * @returns {boolean} 是否成功清空
-     */
-    clearTodayLog() {
+    async clearTodayLog() {
         try {
-            if (!this.currentLogFile || !fs.existsSync(this.currentLogFile)) {
+            if (!this.currentLogFile || !await this._exists(this.currentLogFile)) {
                 console.warn('[Logger] No current log file to clear');
                 return false;
             }
 
-            // 关闭当前日志流
             if (this.logStream && !this.logStream.destroyed) {
-                this.logStream.end();
+                await new Promise(resolve => {
+                    this.logStream.end(resolve);
+                });
             }
 
-            // 清空文件内容
-            fs.writeFileSync(this.currentLogFile, '');
+            await fsPromises.writeFile(this.currentLogFile, '');
 
-            // 重新创建日志流
             this.logStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
             this.logStream.on('error', (err) => {
                 console.error('[Logger] Failed to write to log file:', err.message);
@@ -442,9 +386,7 @@ class Logger {
     }
 }
 
-// 创建单例实例
 const logger = new Logger();
 
-// 导出实例和类
 export default logger;
 export { Logger };
