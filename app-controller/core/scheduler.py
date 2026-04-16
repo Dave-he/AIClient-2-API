@@ -104,7 +104,8 @@ class Scheduler:
         return config.get('service', '') if config else ''
     
     def get_min_available_memory(self) -> int:
-        return self.config.get('settings', {}).get('min_available_memory', 2 * 1024 ** 3)
+        value = self.config.get('settings', {}).get('min_available_memory', '2GB')
+        return _parse_memory_size(value)
     
     def get_concurrency_limit(self) -> int:
         return self.config.get('settings', {}).get('concurrency_limit', 4)
@@ -225,7 +226,7 @@ class Scheduler:
             if gpu_status.get('available_memory', 0) < required_memory + self.get_min_available_memory():
                 await self._free_up_memory(model_name)
         
-        success = await self.sys_controller.start_service(service_name)
+        success = self.sys_controller.start_service(service_name)
         if success:
             self.running_models[model_name] = datetime.now()
             
@@ -248,7 +249,7 @@ class Scheduler:
         if not service_name:
             return False
         
-        success = await self.sys_controller.stop_service(service_name)
+        success = self.sys_controller.stop_service(service_name)
         if success:
             await self._cleanup_memory_fragmentation()
             if model_name in self.running_models:

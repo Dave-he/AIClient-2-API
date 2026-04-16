@@ -51,6 +51,17 @@ class RateLimiter:
             return 0
         return value
     
+    def acquire_request(self, model_name: str, max_concurrent: int) -> bool:
+        """兼容旧接口：获取请求槽位"""
+        if not self.is_available(model_name, max_concurrent):
+            return False
+        self.increment_request(model_name)
+        return True
+    
+    def release_request(self, model_name: str):
+        """兼容旧接口：释放请求槽位"""
+        self.decrement_request(model_name)
+    
     def get_active_requests(self, model_name: str) -> int:
         if not self.client:
             return 0
