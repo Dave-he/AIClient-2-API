@@ -111,11 +111,15 @@ class Scheduler:
         return self.config.get('settings', {}).get('concurrency_limit', 4)
     
     def is_model_running(self, model_name: str) -> bool:
+        service_name = self.get_model_service(model_name)
+        if service_name and self.sys_controller.is_service_running(service_name):
+            if model_name not in self.running_models:
+                self.running_models[model_name] = datetime.now()
+            return True
+        
         if model_name in self.running_models:
-            service_name = self.get_model_service(model_name)
-            if self.sys_controller.is_service_running(service_name):
-                return True
             del self.running_models[model_name]
+        
         return False
     
     def is_model_preloaded(self, model_name: str) -> bool:
@@ -141,11 +145,11 @@ class Scheduler:
         if not self.is_model_available(model_name):
             return False
         
-        gpu_status = self.gpu_monitor.get_gpu_status()
-        if not gpu_status:
+        mem_info = self.gpu_monitor.get_memory_usage()
+        if not mem_info:
             return False
         
-        if gpu_status.get('available_memory', 0) < self.get_min_available_memory():
+        if mem_info.get('available', 0) < self.get_min_available_memory():
             return False
         
         return self.rate_limiter.can_accept_request(model_name, self.get_concurrency_limit())
@@ -220,10 +224,10 @@ class Scheduler:
             self.running_models[model_name] = datetime.now()
             return True
         
-        gpu_status = self.gpu_monitor.get_gpu_status()
-        if gpu_status:
+        mem_info = self.gpu_monitor.get_memory_usage()
+        if mem_info:
             required_memory = _parse_memory_size(config.get('required_memory', 0))
-            if gpu_status.get('available_memory', 0) < required_memory + self.get_min_available_memory():
+            if mem_info.get('available', 0) < required_memory + self.get_min_available_memory():
                 await self._free_up_memory(model_name)
         
         success = self.sys_controller.start_service(service_name)
