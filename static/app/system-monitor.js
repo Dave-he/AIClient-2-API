@@ -339,17 +339,25 @@ export class SystemMonitor {
 
     initChart() {
         const canvas = document.getElementById('systemChart');
-        if (!canvas) return;
+        console.log('[SystemMonitor] Canvas element:', canvas);
+        
+        if (!canvas) {
+            console.log('[SystemMonitor] Canvas not found');
+            return;
+        }
 
         const ctx = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
         
         let rect = canvas.getBoundingClientRect();
+        console.log('[SystemMonitor] Canvas rect:', rect);
         
         if (rect.width === 0 || rect.height === 0) {
+            console.log('[SystemMonitor] Canvas has zero size, trying container...');
             const container = canvas.parentElement;
             if (container) {
                 const containerRect = container.getBoundingClientRect();
+                console.log('[SystemMonitor] Container rect:', containerRect);
                 rect = {
                     width: containerRect.width - 32,
                     height: containerRect.height - 32
@@ -358,9 +366,11 @@ export class SystemMonitor {
         }
 
         if (rect.width <= 0 || rect.height <= 0) {
+            console.log('[SystemMonitor] Invalid dimensions:', rect);
             return;
         }
 
+        console.log('[SystemMonitor] Setting canvas size:', rect.width * dpr, 'x', rect.height * dpr);
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
         ctx.scale(dpr, dpr);
@@ -371,17 +381,25 @@ export class SystemMonitor {
             height: rect.height,
             padding: { top: 15, right: 15, bottom: 28, left: 40 }
         };
+        
+        console.log('[SystemMonitor] Chart initialized successfully');
     }
 
     updateChart() {
+        console.log('[SystemMonitor] updateChart called');
+        
         if (!this.chart) {
+            console.log('[SystemMonitor] Initializing chart...');
             this.initChart();
         }
 
         if (!this.chart) {
+            console.log('[SystemMonitor] Chart not initialized');
             return;
         }
 
+        console.log('[SystemMonitor] Chart dimensions:', this.chart.width, 'x', this.chart.height);
+        
         const { ctx, width, height, padding } = this.chart;
         const chartWidth = width - padding.left - padding.right;
         const chartHeight = height - padding.top - padding.bottom;
@@ -390,6 +408,11 @@ export class SystemMonitor {
 
         let datasets = [];
         let dataLength = 0;
+        
+        console.log('[SystemMonitor] Current chart type:', this.currentChartType);
+        console.log('[SystemMonitor] CPU history length:', this.cpuHistoryData.length);
+        console.log('[SystemMonitor] Memory history length:', this.memoryHistoryData.length);
+        console.log('[SystemMonitor] GPU history length:', this.gpuHistoryData.length);
 
         if (this.currentChartType === 'cpu' || this.currentChartType === 'all') {
             datasets.push({

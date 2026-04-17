@@ -124,7 +124,6 @@ async function initializeComponents() {
     const componentConfigs = [
         { path: `${basePath}header.html`, container: '.container', position: 'afterbegin' },
         { path: `${basePath}sidebar.html`, container: '#sidebar-container', position: 'replace' },
-        { path: `${basePath}section-dashboard.html`, container: '#content-container', position: 'beforeend' },
         { path: `${basePath}section-config.html`, container: '#content-container', position: 'beforeend' },
         { path: `${basePath}section-upload-config.html`, container: '#content-container', position: 'beforeend' },
         { path: `${basePath}section-providers.html`, container: '#content-container', position: 'beforeend' },

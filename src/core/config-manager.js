@@ -520,5 +520,5 @@ export async function getSystemPromptFileContent(filePath) {
     }
 }
 
-export { ALL_MODEL_PROVIDERS };
+export { ALL_MODEL_PROVIDERS, normalizeConfiguredProviders };
 

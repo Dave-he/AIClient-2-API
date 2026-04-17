@@ -3,7 +3,7 @@ import logger from '../utils/logger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { CONFIG } from '../core/config-manager.js';
+import { CONFIG, normalizeConfiguredProviders } from '../core/config-manager.js';
 import { serviceInstances } from '../providers/adapter.js';
 import { initApiService } from '../services/service-manager.js';
 import { getRequestBody } from '../utils/common.js';
@@ -130,7 +130,10 @@ export async function handleUpdateConfig(req, res, currentConfig) {
             const port = Number(newConfig.SERVER_PORT);
             if (Number.isInteger(port) && port >= NETWORK.MIN_PORT && port <= NETWORK.MAX_PORT) currentConfig.SERVER_PORT = port;
         }
-        if (newConfig.MODEL_PROVIDER !== undefined) currentConfig.MODEL_PROVIDER = newConfig.MODEL_PROVIDER;
+        if (newConfig.MODEL_PROVIDER !== undefined) {
+            currentConfig.MODEL_PROVIDER = newConfig.MODEL_PROVIDER;
+            normalizeConfiguredProviders(currentConfig);
+        }
         if (newConfig.SYSTEM_PROMPT_FILE_PATH !== undefined) {
             const p = String(newConfig.SYSTEM_PROMPT_FILE_PATH);
             // 防止路径遍历：解析后的绝对路径必须在工作目录内
@@ -292,6 +295,7 @@ export async function handleUpdateConfig(req, res, currentConfig) {
                 SERVER_PORT: currentConfig.SERVER_PORT,
                 HOST: currentConfig.HOST,
                 MODEL_PROVIDER: currentConfig.MODEL_PROVIDER,
+                DEFAULT_MODEL_PROVIDERS: currentConfig.DEFAULT_MODEL_PROVIDERS,
                 SYSTEM_PROMPT_FILE_PATH: currentConfig.SYSTEM_PROMPT_FILE_PATH,
                 SYSTEM_PROMPT_MODE: currentConfig.SYSTEM_PROMPT_MODE,
                 SYSTEM_PROMPT_REPLACEMENTS: currentConfig.SYSTEM_PROMPT_REPLACEMENTS,

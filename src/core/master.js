@@ -17,6 +17,7 @@ import * as http from 'http';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { isRetryableNetworkError } from '../utils/common.js';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -249,13 +250,13 @@ function getWorkerResourceUsage() {
         const totalMemory = process.platform === 'win32' 
             ? (() => {
                 try {
-                    const cpus = require('os').cpus();
+                    const cpus = os.cpus();
                     return cpus.length * 4 * 1024 * 1024 * 1024; // 假设每核4GB
                 } catch {
                     return 8 * 1024 * 1024 * 1024; // 默认8GB
                 }
             })()
-            : require('os').totalmem();
+            : os.totalmem();
 
         return {
             pid: workerProcess.pid,
@@ -313,7 +314,7 @@ function recordResourceUsage() {
 function calculateCpuPercentage(usage) {
     if (!usage.cpu) return 0;
     
-    const cpus = require('os').cpus();
+    const cpus = os.cpus();
     const elapsedMs = Date.now() - new Date(workerStatus.startTime).getTime();
     if (elapsedMs <= 0) return 0;
 
