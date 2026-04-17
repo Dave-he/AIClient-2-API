@@ -170,7 +170,7 @@ export async function handleGetSystemMonitor(req, res) {
             total: formatBytes(total),
             used: formatBytes(used),
             free: formatBytes(free),
-            usagePercent: ((used / total) * 100).toFixed(1),
+            usagePercent: parseFloat(((used / total) * 100).toFixed(1)),
             history: systemMonitorHistory.memory
         },
         timestamp: systemMonitorHistory.timestamp,

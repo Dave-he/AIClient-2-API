@@ -8,7 +8,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm text-slate-500 mb-1">运行时间</p>
-            <h3 class="text-2xl font-bold text-slate-800">{{ systemInfo.uptime }}</h3>
+            <h3 class="text-2xl font-bold text-slate-800">{{ systemInfo.uptime || '--' }}</h3>
           </div>
           <div class="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
             <i class="fas fa-clock text-emerald-600 text-xl"></i>
@@ -137,24 +137,24 @@
           <div class="space-y-3">
             <div class="flex justify-between items-center py-2 border-b border-slate-100">
               <span class="text-slate-500">版本号</span>
-              <span class="font-medium text-slate-800">{{ systemInfo.version }}</span>
+              <span class="font-medium text-slate-800">{{ systemInfo.version || '--' }}</span>
             </div>
             <div class="flex justify-between items-center py-2 border-b border-slate-100">
               <span class="text-slate-500">Node.js</span>
-              <span class="font-medium text-slate-800">{{ systemInfo.nodeVersion }}</span>
+              <span class="font-medium text-slate-800">{{ systemInfo.nodeVersion || '--' }}</span>
             </div>
             <div class="flex justify-between items-center py-2 border-b border-slate-100">
               <span class="text-slate-500">服务器时间</span>
-              <span class="font-medium text-slate-800">{{ systemInfo.serverTime }}</span>
+              <span class="font-medium text-slate-800">{{ systemInfo.serverTime || '--' }}</span>
             </div>
             <div class="flex justify-between items-center py-2 border-b border-slate-100">
               <span class="text-slate-500">操作系统</span>
-              <span class="font-medium text-slate-800">{{ systemInfo.platform }}</span>
+              <span class="font-medium text-slate-800">{{ systemInfo.platform || '--' }}</span>
             </div>
             <div class="flex justify-between items-center py-2">
               <span class="text-slate-500">运行模式</span>
               <span class="font-medium" :class="systemInfo.mode === 'production' ? 'text-emerald-600' : 'text-blue-600'">
-                {{ systemInfo.mode }}
+                {{ systemInfo.mode || '--' }}
               </span>
             </div>
           </div>
@@ -173,7 +173,7 @@
               <i class="fas fa-refresh"></i> 刷新
             </button>
           </div>
-          <div class="grid grid-cols-2 gap-3">
+          <div v-if="providerStatus.length > 0" class="grid grid-cols-2 gap-3">
             <div 
               v-for="provider in providerStatus" 
               :key="provider.name"
@@ -197,6 +197,10 @@
               </div>
               <p class="text-xs text-slate-500">{{ provider.accounts }} 账户</p>
             </div>
+          </div>
+          <div v-else class="text-center py-8 text-slate-400">
+            <i class="fas fa-inbox text-4xl mb-2 opacity-50"></i>
+            <p>暂无提供商数据</p>
           </div>
         </div>
       </div>
@@ -230,7 +234,7 @@
             </div>
             <div>
               <h4 class="text-sm font-semibold text-slate-700 mb-3">可用模型列表</h4>
-              <div class="flex flex-wrap gap-2">
+              <div v-if="availableModels.length > 0" class="flex flex-wrap gap-2">
                 <span 
                   v-for="model in availableModels" 
                   :key="model"
@@ -239,6 +243,9 @@
                 >
                   {{ model }}
                 </span>
+              </div>
+              <div v-else class="text-center py-4 text-slate-400">
+                <p>暂无可用模型</p>
               </div>
             </div>
           </div>
@@ -250,6 +257,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import axios from 'axios'
 
 const systemInfo = ref({
   uptime: '--',
@@ -263,25 +271,8 @@ const systemInfo = ref({
   mode: 'development'
 })
 
-const providerStatus = ref([
-  { name: 'Gemini', status: 'healthy', accounts: 3 },
-  { name: 'Claude', status: 'healthy', accounts: 2 },
-  { name: 'OpenAI', status: 'warning', accounts: 1 },
-  { name: 'Grok', status: 'healthy', accounts: 2 },
-  { name: 'Qwen', status: 'error', accounts: 0 },
-  { name: 'Kiro', status: 'healthy', accounts: 1 }
-])
-
-const availableModels = ref([
-  'gemini-2.5-flash',
-  'gemini-2.5-pro',
-  'claude-3-5-sonnet',
-  'claude-3-opus',
-  'gpt-4o',
-  'gpt-4o-mini',
-  'grok-beta',
-  'qwen-max'
-])
+const providerStatus = ref([])
+const availableModels = ref([])
 
 const activeChartTab = ref('cpu')
 const chartTabs = [
@@ -300,6 +291,21 @@ const componentKey = ref({
 })
 
 let refreshInterval = null
+
+const getToken = () => {
+  return localStorage.getItem('authToken')
+}
+
+const createAxiosInstance = () => {
+  const token = getToken()
+  return axios.create({
+    baseURL: window.location.origin,
+    headers: {
+      'Authorization': token ? `Bearer ${token}` : '',
+      'Content-Type': 'application/json'
+    }
+  })
+}
 
 const getCpuColor = (value) => {
   if (value >= 80) return 'text-red-500'
@@ -337,34 +343,124 @@ const getGpuBarColor = (value) => {
   return 'bg-orange-500'
 }
 
-const refreshSystemInfo = async () => {
-  componentKey.value.systemInfo++
-  componentKey.value.uptime++
-  
-  systemInfo.value = {
-    ...systemInfo.value,
-    uptime: generateUptime(),
-    cpu: Math.floor(Math.random() * 40) + 20,
-    memory: Math.floor(Math.random() * 30) + 40,
-    gpu: Math.floor(Math.random() * 50) + 10,
-    serverTime: new Date().toLocaleString('zh-CN')
+const formatUptime = (seconds) => {
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  return `${days}天 ${hours}小时 ${minutes}分钟`
+}
+
+const fetchSystemInfo = async () => {
+  try {
+    const api = createAxiosInstance()
+    const response = await api.get('/api/system')
+    const data = response.data
+    
+    systemInfo.value = {
+      ...systemInfo.value,
+      uptime: formatUptime(data.uptime),
+      version: data.appVersion || '--',
+      nodeVersion: data.nodeVersion || '--',
+      serverTime: new Date(data.serverTime).toLocaleString('zh-CN'),
+      platform: data.platform === 'linux' ? 'Linux x64' : (data.platform === 'win32' ? 'Windows' : data.platform) || '--',
+      mode: process.env.NODE_ENV === 'production' ? 'production' : 'development'
+    }
+    
+    componentKey.value.systemInfo++
+    componentKey.value.uptime++
+  } catch (error) {
+    console.error('Failed to fetch system info:', error)
+    if (error.response?.status === 401) {
+      window.location.href = '/login.html'
+    }
   }
 }
 
-const refreshProviderStatus = () => {
-  componentKey.value.providerStatus++
-  
-  providerStatus.value = providerStatus.value.map(p => ({
-    ...p,
-    status: Math.random() > 0.1 ? 'healthy' : Math.random() > 0.5 ? 'warning' : 'error'
-  }))
+const fetchSystemMonitor = async () => {
+  try {
+    const api = createAxiosInstance()
+    const response = await api.get('/api/system/monitor')
+    const data = response.data
+    
+    systemInfo.value = {
+      ...systemInfo.value,
+      cpu: Math.round(data.cpu?.usage || 0),
+      memory: Math.round(parseFloat(data.memory?.usagePercent || 0)),
+      gpu: 0
+    }
+    
+    componentKey.value.cpu++
+    componentKey.value.memory++
+    componentKey.value.gpu++
+  } catch (error) {
+    console.error('Failed to fetch system monitor:', error)
+    if (error.response?.status === 401) {
+      window.location.href = '/login.html'
+    }
+  }
 }
 
-const generateUptime = () => {
-  const days = Math.floor(Math.random() * 30)
-  const hours = Math.floor(Math.random() * 24)
-  const minutes = Math.floor(Math.random() * 60)
-  return `${days}天 ${hours}小时 ${minutes}分钟`
+const fetchProviderStatus = async () => {
+  try {
+    const api = createAxiosInstance()
+    const response = await api.get('/api/providers')
+    const data = response.data
+    
+    const providers = []
+    for (const [type, items] of Object.entries(data.providers || {})) {
+      if (Array.isArray(items) && items.length > 0) {
+        const healthyCount = items.filter(p => p.isHealthy !== false).length
+        const status = healthyCount === items.length ? 'healthy' : 
+                       healthyCount > 0 ? 'warning' : 'error'
+        
+        providers.push({
+          name: type.replace(/-/g, ' '),
+          status,
+          accounts: items.length
+        })
+      }
+    }
+    
+    providerStatus.value = providers
+    componentKey.value.providerStatus++
+  } catch (error) {
+    console.error('Failed to fetch provider status:', error)
+    if (error.response?.status === 401) {
+      window.location.href = '/login.html'
+    }
+  }
+}
+
+const fetchModels = async () => {
+  try {
+    const api = createAxiosInstance()
+    const response = await api.get('/api/provider-models')
+    const data = response.data
+    
+    const models = new Set()
+    for (const typeModels of Object.values(data)) {
+      if (Array.isArray(typeModels)) {
+        typeModels.forEach(model => models.add(model))
+      }
+    }
+    
+    availableModels.value = Array.from(models).sort()
+  } catch (error) {
+    console.error('Failed to fetch models:', error)
+    if (error.response?.status === 401) {
+      window.location.href = '/login.html'
+    }
+  }
+}
+
+const refreshSystemInfo = async () => {
+  await fetchSystemInfo()
+  await fetchSystemMonitor()
+}
+
+const refreshProviderStatus = async () => {
+  await fetchProviderStatus()
+  await fetchModels()
 }
 
 const copyModelName = (model) => {
@@ -372,27 +468,14 @@ const copyModelName = (model) => {
   alert(`已复制: ${model}`)
 }
 
-onMounted(() => {
-  systemInfo.value = {
-    uptime: '2天 15小时 30分钟',
-    cpu: 45,
-    memory: 62,
-    gpu: 38,
-    version: '1.2.0',
-    nodeVersion: '20.10.0',
-    serverTime: new Date().toLocaleString('zh-CN'),
-    platform: 'Linux x64',
-    mode: 'development'
-  }
+onMounted(async () => {
+  await fetchSystemInfo()
+  await fetchSystemMonitor()
+  await fetchProviderStatus()
+  await fetchModels()
 
-  refreshInterval = setInterval(() => {
-    componentKey.value.cpu++
-    componentKey.value.memory++
-    componentKey.value.gpu++
-    
-    systemInfo.value.cpu = Math.floor(Math.random() * 40) + 20
-    systemInfo.value.memory = Math.floor(Math.random() * 30) + 40
-    systemInfo.value.gpu = Math.floor(Math.random() * 50) + 10
+  refreshInterval = setInterval(async () => {
+    await fetchSystemMonitor()
     systemInfo.value.serverTime = new Date().toLocaleString('zh-CN')
   }, 5000)
 })

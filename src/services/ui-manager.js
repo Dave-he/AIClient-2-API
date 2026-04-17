@@ -23,7 +23,20 @@ export { broadcastEvent, initializeUIManagement, handleUploadOAuthCredentials, u
  * @param {http.ServerResponse} res - The HTTP response object
  */
 export async function serveStaticFiles(pathParam, res) {
-    const filePath = path.join(process.cwd(), 'static', pathParam === '/' || pathParam === '/index.html' ? 'index.html' : pathParam.replace('/static/', ''));
+    let filePath;
+    
+    if (pathParam === '/' || pathParam === '/index.html') {
+        filePath = path.join(process.cwd(), 'dist', 'index.html');
+        if (!existsSync(filePath)) {
+            filePath = path.join(process.cwd(), 'static', 'index.html');
+        }
+    } else {
+        const strippedPath = pathParam.replace('/static/', '');
+        filePath = path.join(process.cwd(), 'dist', strippedPath);
+        if (!existsSync(filePath)) {
+            filePath = path.join(process.cwd(), 'static', strippedPath);
+        }
+    }
 
     if (existsSync(filePath)) {
         const ext = path.extname(filePath);
@@ -33,7 +46,8 @@ export async function serveStaticFiles(pathParam, res) {
             '.js': 'application/javascript',
             '.png': 'image/png',
             '.jpg': 'image/jpeg',
-            '.ico': 'image/x-icon'
+            '.ico': 'image/x-icon',
+            '.svg': 'image/svg+xml'
         }[ext] || 'text/plain';
 
         res.writeHead(200, { 'Content-Type': contentType });
