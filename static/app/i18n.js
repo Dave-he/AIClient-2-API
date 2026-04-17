@@ -109,6 +109,7 @@ const translations = {
         'dashboard.routing.nodeName.iflow': 'iFlow OAuth',
         'dashboard.routing.nodeName.codex': 'OpenAI Codex OAuth',
         'dashboard.routing.nodeName.grok': 'Grok Reverse',
+        'dashboard.tokenTrend': 'Token使用趋势',
         // OAuth
         'oauth.modal.title': 'OAuth 授权',
         'oauth.modal.provider': '提供商:',
@@ -1061,6 +1062,7 @@ const translations = {
         'dashboard.routing.nodeName.iflow': 'iFlow OAuth',
         'dashboard.routing.nodeName.codex': 'OpenAI Codex OAuth',
         'dashboard.routing.nodeName.grok': 'Grok Reverse',
+        'dashboard.tokenTrend': 'Token Usage Trend',
         'dashboard.contact.title': 'Contact & Support',
         'dashboard.contact.wechat': 'Scan to Join Group',
         'dashboard.contact.wechatDesc': 'Add WeChat for more technical support and communication',
