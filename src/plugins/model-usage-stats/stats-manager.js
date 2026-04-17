@@ -44,7 +44,8 @@ function createDefaultStore() {
         summary: createEmptyUsage(),
         providers: {},
         daily: {}, // 每日统计
-        hourly: {} // 每小时统计
+        hourly: {}, // 每小时统计（YYYY-MM-DDTHH）
+        minuteData: {} // 每分钟统计（YYYY-MM-DDTHH:MM）
     };
 }
 
@@ -67,7 +68,8 @@ function normalizeStore(store) {
         summary: normalizeUsageBlock(store?.summary),
         providers: {},
         daily: {}, // 每日统计
-        hourly: {} // 每小时统计
+        hourly: {}, // 每小时统计（YYYY-MM-DDTHH）
+        minuteData: {} // 每分钟统计（YYYY-MM-DDTHH:MM）
     };
 
     for (const [provider, providerStore] of Object.entries(store?.providers || {})) {
@@ -90,6 +92,12 @@ function normalizeStore(store) {
     if (store?.hourly) {
         for (const [hourKey, hourlyStore] of Object.entries(store.hourly)) {
             normalizedStore.hourly[hourKey] = normalizeUsageBlock(hourlyStore);
+        }
+    }
+
+    if (store?.minuteData) {
+        for (const [minuteKey, minuteStore] of Object.entries(store.minuteData)) {
+            normalizedStore.minuteData[minuteKey] = normalizeUsageBlock(minuteStore);
         }
     }
 
@@ -436,19 +444,19 @@ export async function finalizeRequest({ requestId, model, provider, fromProvider
     }
     applyUsage(statsStore.daily[dateKey], usage, timestamp);
 
-    // 记录每小时统计（保留分钟级别数据）
+    // 记录每小时统计（YYYY-MM-DDTHH）
     const hourKey = timestamp.slice(0, 13); // YYYY-MM-DDTHH
     if (!statsStore.hourly[hourKey]) {
         statsStore.hourly[hourKey] = createEmptyUsage();
     }
     applyUsage(statsStore.hourly[hourKey], usage, timestamp);
 
-    // 记录每分钟统计（用于最近一小时视图）
+    // 记录每分钟统计（用于最近一小时视图）（YYYY-MM-DDTHH:MM）
     const minuteKey = timestamp.slice(0, 16); // YYYY-MM-DDTHH:MM
-    if (!statsStore.hourly[minuteKey]) {
-        statsStore.hourly[minuteKey] = createEmptyUsage();
+    if (!statsStore.minuteData[minuteKey]) {
+        statsStore.minuteData[minuteKey] = createEmptyUsage();
     }
-    applyUsage(statsStore.hourly[minuteKey], usage, timestamp);
+    applyUsage(statsStore.minuteData[minuteKey], usage, timestamp);
 
     logger.info(`${getTracePrefix(requestId)} >>> Request Finalized: Provider: ${normalizedProvider} | Model: ${normalizedModel} | Prompt: ${usage.promptTokens} | Completion: ${usage.completionTokens} | Total: ${usage.totalTokens} | Cached: ${usage.cachedTokens} | Stream: ${Boolean(state.isStream)}`);
     markDirty();

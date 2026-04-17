@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router';
 
 const routes = [
   {
@@ -61,6 +61,26 @@ const routes = [
         path: 'gpu-monitor',
         name: 'GPUMonitor',
         component: () => import('@/views/GPUMonitor.vue')
+      },
+      {
+        path: 'test-api',
+        name: 'TestAPI',
+        component: () => import('@/views/TestAPI.vue')
+      },
+      {
+        path: 'model-usage-stats',
+        name: 'ModelUsageStats',
+        component: () => import('@/views/ModelUsageStats.vue')
+      },
+      {
+        path: 'potluck',
+        name: 'Potluck',
+        component: () => import('@/views/Potluck.vue')
+      },
+      {
+        path: 'potluck-user',
+        name: 'PotluckUser',
+        component: () => import('@/views/PotluckUser.vue')
       }
     ]
   },
@@ -68,6 +88,11 @@ const routes = [
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login.vue')
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/NotFound.vue')
   }
 ]
 
@@ -77,15 +102,15 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const isAuthenticated = localStorage.getItem('authToken')
+  const isAuthenticated = localStorage.getItem('authToken');
   
   if (to.meta.requiresAuth && !isAuthenticated) {
-    next('/login')
+    next('/login');
   } else if (to.path === '/login' && isAuthenticated) {
-    next('/')
+    next('/');
   } else {
-    next()
+    next();
   }
-})
+});
 
-export default router
+export default router;

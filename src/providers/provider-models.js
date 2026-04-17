@@ -139,13 +139,34 @@ export const PROVIDER_MODELS = {
         'grok-imagine-1.0-edit',
         'grok-imagine-1.0-fast',
         'grok-imagine-1.0-fast-edit',
+    ],
+    'local-model': [
+        'gemma-2-9b-it',
+        'gemma-2-27b-it',
+        'gemma-2-vision',
+        'gemma-3-2b',
+        'gemma-3-7b',
+        'gemma-3-7b-it',
+        'gemma-3-27b',
+        'gemma-3-27b-it',
+        'gemma-3-90b-it',
+        'gemma-4-31b',
+        'gemma-4-31b-it',
+        'llama-3.1-8b',
+        'llama-3.1-70b',
+        'llama-3.3-8b',
+        'llama-3.3-70b',
+        'qwen-2-7b',
+        'qwen-2-57b',
+        'qwen-2-72b',
     ]
 };
 
 export const MANAGED_MODEL_LIST_PROVIDERS = [
     'openai-custom',
     'openaiResponses-custom',
-    'claude-custom'
+    'claude-custom',
+    'local-model'
 ];
 
 export function getManagedModelListProviderType(providerType) {
@@ -233,8 +254,12 @@ export function extractModelIdsFromNativeList(modelList, providerType) {
 }
 
 export function getConfiguredSupportedModels(providerType, providerConfig = {}) {
+    if (providerConfig?.supportedModels && Array.isArray(providerConfig.supportedModels) && providerConfig.supportedModels.length > 0) {
+        return normalizeModelIds(providerConfig.supportedModels);
+    }
+    
     if (!usesManagedModelList(providerType)) {
-        return [];
+        return getProviderModels(providerType);
     }
 
     return normalizeModelIds(providerConfig?.supportedModels);

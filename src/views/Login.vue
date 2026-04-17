@@ -69,40 +69,40 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import axios from 'axios'
+import { ref } from 'vue';
+import { api, setToken } from '@/utils/api.js';
 
-const username = ref('admin')
-const password = ref('')
-const showPassword = ref(false)
-const isLoading = ref(false)
-const error = ref('')
+const username = ref('admin');
+const password = ref('');
+const showPassword = ref(false);
+const isLoading = ref(false);
+const error = ref('');
 
 const handleLogin = async () => {
   if (!username.value || !password.value) {
-    error.value = '请输入用户名和密码'
-    return
+    error.value = '请输入用户名和密码';
+    return;
   }
   
-  isLoading.value = true
-  error.value = ''
+  isLoading.value = true;
+  error.value = '';
   
   try {
-    const response = await axios.post('/api/login', {
+    const response = await api.post('/api/login', {
       username: username.value,
       password: password.value
-    })
+    });
     
     if (response.data.success) {
-      localStorage.setItem('authToken', response.data.token)
-      window.location.href = '/'
+      setToken(response.data.token);
+      window.location.href = '/vue/';
     } else {
-      error.value = response.data.message || '登录失败'
+      error.value = response.data.message || '登录失败';
     }
   } catch (err) {
-    error.value = err.response?.data?.message || '登录失败，请稍后重试'
+    error.value = err.response?.data?.message || '登录失败，请稍后重试';
   } finally {
-    isLoading.value = false
+    isLoading.value = false;
   }
-}
+};
 </script>

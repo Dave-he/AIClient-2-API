@@ -1,6 +1,6 @@
 import logger from './logger.js';
 import { getRequestBody } from './network-utils.js';
-import { convertData } from '../convert/convert.js';
+import { convertData, detectRequestProtocol } from '../convert/convert.js';
 import { ProviderStrategyFactory } from './provider-strategies.js';
 import { getPluginManager } from '../core/plugin-manager.js';
 import { MODEL_PROVIDER, MODEL_PROTOCOL_PREFIX } from './constants.js';
@@ -20,9 +20,17 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
         'openai_responses': MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES,
         'claude_message': MODEL_PROTOCOL_PREFIX.CLAUDE,
         'gemini_content': MODEL_PROTOCOL_PREFIX.GEMINI,
+        'auto_detect': null, // 自动检测模式
     };
 
-    const fromProvider = clientProviderMap[endpointType];
+    let fromProvider = clientProviderMap[endpointType];
+    
+    // 如果是自动检测模式，根据请求体自动识别协议类型
+    if (endpointType === 'auto_detect') {
+        fromProvider = detectRequestProtocol(originalRequestBody);
+        logger.info(`[Auto Protocol Detection] Detected protocol: ${fromProvider}`);
+    }
+    
     let toProvider = CONFIG.actualProviderType || CONFIG.MODEL_PROVIDER;
     let actualUuid = pooluuid;
     

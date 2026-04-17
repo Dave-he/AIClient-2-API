@@ -2,92 +2,126 @@ import logger from './logger.js';
 import { MODEL_PROTOCOL_PREFIX } from './constants.js';
 import { getProtocolPrefix } from './request-handlers.js';
 
-export function handleError(res, error, provider = null, fromProvider = null, req = null) {
-    const statusCode = error.response?.status || error.statusCode || error.status || error.code || 500;
-    
-    if (!fromProvider && req && req.url) {
-        if (req.url.includes('/v1/messages')) fromProvider = MODEL_PROTOCOL_PREFIX.CLAUDE;
-        else if (req.url.includes('/v1/chat/completions')) fromProvider = MODEL_PROTOCOL_PREFIX.OPENAI;
-        else if (req.url.includes('/v1beta/models')) fromProvider = MODEL_PROTOCOL_PREFIX.GEMINI;
+export const ERROR_CODES = {
+    AUTH_ERROR: 'AUTH_ERROR',
+    PERMISSION_DENIED: 'PERMISSION_DENIED',
+    RATE_LIMITED: 'RATE_LIMITED',
+    MODEL_NOT_FOUND: 'MODEL_NOT_FOUND',
+    INVALID_REQUEST: 'INVALID_REQUEST',
+    SERVER_ERROR: 'SERVER_ERROR',
+    NETWORK_ERROR: 'NETWORK_ERROR',
+    TIMEOUT_ERROR: 'TIMEOUT_ERROR',
+    VALIDATION_ERROR: 'VALIDATION_ERROR',
+    PROVIDER_UNAVAILABLE: 'PROVIDER_UNAVAILABLE',
+    CONFIG_ERROR: 'CONFIG_ERROR'
+};
+
+export const ERROR_MESSAGES = {
+    [ERROR_CODES.AUTH_ERROR]: 'Authentication failed. Please check your credentials.',
+    [ERROR_CODES.PERMISSION_DENIED]: 'Access denied. Insufficient permissions.',
+    [ERROR_CODES.RATE_LIMITED]: 'Too many requests. Rate limit exceeded.',
+    [ERROR_CODES.MODEL_NOT_FOUND]: 'Model not found or not available.',
+    [ERROR_CODES.INVALID_REQUEST]: 'Invalid request parameters.',
+    [ERROR_CODES.SERVER_ERROR]: 'Server error occurred.',
+    [ERROR_CODES.NETWORK_ERROR]: 'Network error occurred.',
+    [ERROR_CODES.TIMEOUT_ERROR]: 'Request timed out.',
+    [ERROR_CODES.VALIDATION_ERROR]: 'Validation failed.',
+    [ERROR_CODES.PROVIDER_UNAVAILABLE]: 'Provider unavailable.',
+    [ERROR_CODES.CONFIG_ERROR]: 'Configuration error.'
+};
+
+export class APIError extends Error {
+    constructor(code, message, details = {}, statusCode = 500) {
+        super(message || ERROR_MESSAGES[code]);
+        this.name = 'APIError';
+        this.code = code;
+        this.details = details;
+        this.statusCode = statusCode;
+        this.timestamp = new Date().toISOString();
+        this.errorId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
 
-    if (fromProvider) {
-        const errorResponse = createErrorResponse(error, fromProvider);
-        if (!res.headersSent) {
-            res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-        }
-        res.end(JSON.stringify(errorResponse));
-        return;
-    }
-
-    const hasOriginalMessage = error.message && error.message.trim() !== '';
-    let errorMessage = error.message;
-    let suggestions = [];
-
-    const providerSuggestions = _getProviderSpecificSuggestions(statusCode, provider);
-    
-    switch (statusCode) {
-        case 401:
-            errorMessage = 'Authentication failed. Please check your credentials.';
-            suggestions = providerSuggestions.auth;
-            break;
-        case 403:
-            errorMessage = 'Access forbidden. Insufficient permissions.';
-            suggestions = providerSuggestions.permission;
-            break;
-        case 429:
-            errorMessage = 'Too many requests. Rate limit exceeded.';
-            suggestions = providerSuggestions.rateLimit;
-            break;
-        case 500:
-        case 502:
-        case 503:
-        case 504:
-            errorMessage = 'Server error occurred. This is usually temporary.';
-            suggestions = providerSuggestions.serverError;
-            break;
-        default:
-            if (statusCode >= 400 && statusCode < 500) {
-                errorMessage = `Client error (${statusCode}): ${error.message}`;
-                suggestions = providerSuggestions.clientError;
-            } else if (statusCode >= 500) {
-                errorMessage = `Server error (${statusCode}): ${error.message}`;
-                suggestions = providerSuggestions.serverError;
+    toJSON() {
+        return {
+            error: {
+                code: this.code,
+                message: this.message,
+                details: this.details,
+                timestamp: this.timestamp,
+                errorId: this.errorId,
+                statusCode: this.statusCode
             }
+        };
     }
+}
 
-    errorMessage = hasOriginalMessage ? error.message.trim() : errorMessage;
-    logger.error(`\n[Server] Request failed (${statusCode}): ${errorMessage}`);
-    if (suggestions.length > 0) {
-        logger.error('[Server] Suggestions:');
-        suggestions.forEach((suggestion, index) => {
-            logger.error(`  ${index + 1}. ${suggestion}`);
-        });
+export class AuthError extends APIError {
+    constructor(message, details = {}) {
+        super(ERROR_CODES.AUTH_ERROR, message, details, 401);
+        this.name = 'AuthError';
     }
-    logger.error('[Server] Full error details:', error.stack);
+}
 
-    if (res.writableEnded || res.destroyed) {
-        logger.warn('[Server] Response already ended or destroyed, skipping error response');
-        return;
+export class PermissionError extends APIError {
+    constructor(message, details = {}) {
+        super(ERROR_CODES.PERMISSION_DENIED, message, details, 403);
+        this.name = 'PermissionError';
     }
+}
 
-    if (!res.headersSent) {
-        res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+export class RateLimitError extends APIError {
+    constructor(message, details = {}) {
+        super(ERROR_CODES.RATE_LIMITED, message, details, 429);
+        this.name = 'RateLimitError';
     }
+}
 
-    const errorPayload = {
-        error: {
-            message: errorMessage,
-            code: statusCode,
-            suggestions: suggestions,
-            details: error.response?.data
-        }
-    };
-    
-    try {
-        res.end(JSON.stringify(errorPayload));
-    } catch (writeError) {
-        logger.error('[Server] Failed to write error response:', writeError.message);
+export class ModelNotFoundError extends APIError {
+    constructor(message, details = {}) {
+        super(ERROR_CODES.MODEL_NOT_FOUND, message, details, 404);
+        this.name = 'ModelNotFoundError';
+    }
+}
+
+export class ValidationError extends APIError {
+    constructor(message, details = {}) {
+        super(ERROR_CODES.VALIDATION_ERROR, message, details, 400);
+        this.name = 'ValidationError';
+    }
+}
+
+export class NetworkError extends APIError {
+    constructor(message, details = {}) {
+        super(ERROR_CODES.NETWORK_ERROR, message, details, 503);
+        this.name = 'NetworkError';
+    }
+}
+
+export class TimeoutError extends APIError {
+    constructor(message, details = {}) {
+        super(ERROR_CODES.TIMEOUT_ERROR, message, details, 504);
+        this.name = 'TimeoutError';
+    }
+}
+
+export class ServerError extends APIError {
+    constructor(message, details = {}) {
+        super(ERROR_CODES.SERVER_ERROR, message, details, 500);
+        this.name = 'ServerError';
+    }
+}
+
+export class ConfigError extends APIError {
+    constructor(message, details = {}) {
+        super(ERROR_CODES.CONFIG_ERROR, message, details, 500);
+        this.name = 'ConfigError';
+    }
+}
+
+export class ProviderUnavailableError extends APIError {
+    constructor(message, details = {}) {
+        super(ERROR_CODES.PROVIDER_UNAVAILABLE, message, details, 503);
+        this.name = 'ProviderUnavailableError';
     }
 }
 
@@ -216,52 +250,208 @@ function _getProviderSpecificSuggestions(statusCode, provider) {
     }
 }
 
+export function handleError(res, error, provider = null, fromProvider = null, req = null) {
+    let statusCode;
+    let errorCode;
+    let errorMessage;
+    let suggestions = [];
+    
+    if (error instanceof APIError) {
+        statusCode = error.statusCode;
+        errorCode = error.code;
+        errorMessage = error.message;
+    } else {
+        statusCode = error.response?.status || error.statusCode || error.status || error.code || 500;
+        errorCode = _mapStatusCodeToErrorCode(statusCode);
+        errorMessage = error.message;
+    }
+
+    if (!fromProvider && req && req.url) {
+        if (req.url.includes('/v1/messages')) fromProvider = MODEL_PROTOCOL_PREFIX.CLAUDE;
+        else if (req.url.includes('/v1/chat/completions')) fromProvider = MODEL_PROTOCOL_PREFIX.OPENAI;
+        else if (req.url.includes('/v1beta/models')) fromProvider = MODEL_PROTOCOL_PREFIX.GEMINI;
+    }
+
+    if (fromProvider) {
+        const errorResponse = createErrorResponse(error, fromProvider);
+        if (!res.headersSent) {
+            res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+        }
+        res.end(JSON.stringify(errorResponse));
+        _logError(error, statusCode, errorCode, req);
+        return;
+    }
+
+    const hasOriginalMessage = errorMessage && errorMessage.trim() !== '';
+    
+    const providerSuggestions = _getProviderSpecificSuggestions(statusCode, provider);
+    
+    switch (statusCode) {
+        case 401:
+            errorMessage = hasOriginalMessage ? errorMessage : ERROR_MESSAGES[ERROR_CODES.AUTH_ERROR];
+            suggestions = providerSuggestions.auth;
+            break;
+        case 403:
+            errorMessage = hasOriginalMessage ? errorMessage : ERROR_MESSAGES[ERROR_CODES.PERMISSION_DENIED];
+            suggestions = providerSuggestions.permission;
+            break;
+        case 429:
+            errorMessage = hasOriginalMessage ? errorMessage : ERROR_MESSAGES[ERROR_CODES.RATE_LIMITED];
+            suggestions = providerSuggestions.rateLimit;
+            break;
+        case 500:
+        case 502:
+        case 503:
+        case 504:
+            errorMessage = hasOriginalMessage ? errorMessage : ERROR_MESSAGES[ERROR_CODES.SERVER_ERROR];
+            suggestions = providerSuggestions.serverError;
+            break;
+        default:
+            if (statusCode >= 400 && statusCode < 500) {
+                errorMessage = hasOriginalMessage ? errorMessage : `Client error (${statusCode}): ${error.message}`;
+                suggestions = providerSuggestions.clientError;
+            } else if (statusCode >= 500) {
+                errorMessage = hasOriginalMessage ? errorMessage : `Server error (${statusCode}): ${error.message}`;
+                suggestions = providerSuggestions.serverError;
+            }
+    }
+
+    _logError(error, statusCode, errorCode, req, suggestions);
+
+    if (res.writableEnded || res.destroyed) {
+        logger.warn('[Server] Response already ended or destroyed, skipping error response');
+        return;
+    }
+
+    if (!res.headersSent) {
+        res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+    }
+
+    const errorPayload = {
+        error: {
+            code: errorCode,
+            message: errorMessage,
+            statusCode: statusCode,
+            suggestions: suggestions.length > 0 ? suggestions : undefined,
+            details: error.response?.data || error.details || undefined,
+            timestamp: new Date().toISOString()
+        }
+    };
+    
+    try {
+        res.end(JSON.stringify(errorPayload));
+    } catch (writeError) {
+        logger.error('[Server] Failed to write error response:', writeError.message);
+    }
+}
+
+function _mapStatusCodeToErrorCode(statusCode) {
+    switch (statusCode) {
+        case 401: return ERROR_CODES.AUTH_ERROR;
+        case 403: return ERROR_CODES.PERMISSION_DENIED;
+        case 429: return ERROR_CODES.RATE_LIMITED;
+        case 404: return ERROR_CODES.MODEL_NOT_FOUND;
+        case 400: return ERROR_CODES.VALIDATION_ERROR;
+        case 503: return ERROR_CODES.PROVIDER_UNAVAILABLE;
+        case 504: return ERROR_CODES.TIMEOUT_ERROR;
+        default: return ERROR_CODES.SERVER_ERROR;
+    }
+}
+
+function _logError(error, statusCode, errorCode, req, suggestions = []) {
+    const logContext = {
+        statusCode,
+        errorCode,
+        requestId: error.errorId || undefined,
+        path: req?.url,
+        method: req?.method,
+        timestamp: new Date().toISOString()
+    };
+    
+    logger.error(`[Server] Request failed (${statusCode}): ${error.message}`, logContext);
+    
+    if (suggestions.length > 0) {
+        logger.error('[Server] Suggestions:');
+        suggestions.forEach((suggestion, index) => {
+            logger.error(`  ${index + 1}. ${suggestion}`);
+        });
+    }
+    
+    if (error.stack) {
+        logger.error('[Server] Error stack:', error.stack);
+    }
+    
+    if (error.details) {
+        logger.error('[Server] Error details:', error.details);
+    }
+}
+
 export function createErrorResponse(error, providerType) {
     const protocol = getProtocolPrefix(providerType);
-    const status = error.response?.status;
+    const status = error.response?.status || error.statusCode || error.status || 500;
     const message = error.message || 'Unknown error';
+    const code = error.code || _mapStatusCodeToErrorCode(status);
     
     if (protocol === MODEL_PROTOCOL_PREFIX.OPENAI) {
         return {
             error: {
                 message: message,
-                type: 'server_error',
+                type: code.toLowerCase().replace('_', '.'),
                 param: null,
-                code: status || null
+                code: status
             }
         };
     } else if (protocol === MODEL_PROTOCOL_PREFIX.CLAUDE) {
         return {
             type: 'error',
             error: {
-                type: 'server_error',
+                type: code.toLowerCase().replace('_', '.'),
                 message: message
             }
         };
     } else if (protocol === MODEL_PROTOCOL_PREFIX.GEMINI) {
         return {
             error: {
-                code: status || 500,
+                code: status,
                 message: message,
-                status: 'INTERNAL'
+                status: code
             }
         };
     }
     
-    return { error: message };
+    return { 
+        error: {
+            code: code,
+            message: message,
+            statusCode: status
+        }
+    };
 }
 
 export function createStreamErrorResponse(error, providerType) {
     const protocol = getProtocolPrefix(providerType);
     const message = error.message || 'Unknown error';
+    const escapedMessage = message.replace(/"/g, '\\"');
     
     if (protocol === MODEL_PROTOCOL_PREFIX.OPENAI) {
-        return `data: {"error":{"message":"${message}","type":"server_error"}}\n\n`;
+        return `data: {"error":{"message":"${escapedMessage}","type":"server_error"}}\n\n`;
     } else if (protocol === MODEL_PROTOCOL_PREFIX.CLAUDE) {
-        return `event: error\ndata: {"type":"error","error":{"type":"server_error","message":"${message}"}}\n\n`;
+        return `event: error\ndata: {"type":"error","error":{"type":"server_error","message":"${escapedMessage}"}}\n\n`;
     } else if (protocol === MODEL_PROTOCOL_PREFIX.GEMINI) {
-        return `data: {"error":{"message":"${message}"}}\n\n`;
+        return `data: {"error":{"message":"${escapedMessage}"}}\n\n`;
     }
     
-    return `data: {"error":"${message}"}\n\n`;
+    return `data: {"error":"${escapedMessage}"}\n\n`;
+}
+
+export function wrapError(error, context = {}) {
+    if (error instanceof APIError) {
+        error.details = { ...error.details, ...context };
+        return error;
+    }
+    
+    const statusCode = error.response?.status || error.statusCode || error.status || error.code || 500;
+    const errorCode = _mapStatusCodeToErrorCode(statusCode);
+    
+    return new APIError(errorCode, error.message, { ...context, originalError: error.message }, statusCode);
 }

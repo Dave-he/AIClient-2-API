@@ -124,7 +124,7 @@
             <button class="btn btn-secondary btn-sm" @click="resetAllTokenStats">
               <i class="fas fa-eraser"></i> 重置全部 Token
             </button>
-            <button class="btn btn-secondary btn-sm" @click="showApplyLimitModal">
+            <button class="btn btn-secondary btn-sm" @click="openApplyLimitModal">
               <i class="fas fa-cog"></i> 批量应用限额
             </button>
           </div>
@@ -628,7 +628,7 @@ const updateName = async () => {
   }
 }
 
-const showApplyLimitModal = () => {
+const openApplyLimitModal = () => {
   applyLimitValue.value = 500
   showApplyLimitModal.value = true
 }

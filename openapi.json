@@ -1,0 +1,1445 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AIClient-2-API",
+    "description": "AIClient-2-API is a powerful API proxy middleware that converts multiple AI provider APIs (Gemini, Claude, Grok, Codex, Kiro, etc.) into a standard OpenAI-compatible interface.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "AIClient-2-API Team",
+      "email": "support@aiclient-api.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/v1/chat/completions": {
+      "post": {
+        "summary": "Create chat completion",
+        "description": "Creates a completion for the chat message.",
+        "operationId": "createChatCompletion",
+        "requestBody": {
+          "description": "Chat completion request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful chat completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/completions": {
+      "post": {
+        "summary": "Create completion",
+        "description": "Creates a completion for the given prompt.",
+        "operationId": "createCompletion",
+        "requestBody": {
+          "description": "Completion request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompletionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "summary": "List models",
+        "description": "Lists the currently available models.",
+        "operationId": "listModels",
+        "responses": {
+          "200": {
+            "description": "Successful list models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/models/{model}": {
+      "get": {
+        "summary": "Retrieve model",
+        "description": "Retrieves a model instance.",
+        "operationId": "getModel",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "description": "The model ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful get model",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Model"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/usage": {
+      "get": {
+        "summary": "Get usage",
+        "description": "Get usage statistics for the API key.",
+        "operationId": "getUsage",
+        "responses": {
+          "200": {
+            "description": "Successful get usage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Check the health status of the service.",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/login": {
+      "post": {
+        "summary": "Login",
+        "description": "Authenticate and get a session token.",
+        "operationId": "login",
+        "requestBody": {
+          "description": "Login credentials",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful login",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "summary": "Get configuration",
+        "description": "Get current server configuration.",
+        "operationId": "getConfig",
+        "responses": {
+          "200": {
+            "description": "Successful get config",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Update configuration",
+        "description": "Update server configuration.",
+        "operationId": "updateConfig",
+        "requestBody": {
+          "description": "Configuration updates",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful update config",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigUpdateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/providers": {
+      "get": {
+        "summary": "Get providers",
+        "description": "Get all configured providers.",
+        "operationId": "getProviders",
+        "responses": {
+          "200": {
+            "description": "Successful get providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Add provider",
+        "description": "Add a new provider configuration.",
+        "operationId": "addProvider",
+        "requestBody": {
+          "description": "Provider configuration",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful add provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/hot-reload/status": {
+      "get": {
+        "summary": "Get hot reload status",
+        "description": "Get the status of the configuration hot reload system.",
+        "operationId": "getHotReloadStatus",
+        "responses": {
+          "200": {
+            "description": "Successful get hot reload status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HotReloadStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/hot-reload/update": {
+      "post": {
+        "summary": "Hot reload update",
+        "description": "Update configuration with hot reload.",
+        "operationId": "hotReloadUpdate",
+        "requestBody": {
+          "description": "Configuration updates",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HotReloadUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful hot reload update",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HotReloadUpdateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/hot-reload/reload-all": {
+      "post": {
+        "summary": "Reload all configuration",
+        "description": "Reload all configuration files.",
+        "operationId": "reloadAllConfig",
+        "responses": {
+          "200": {
+            "description": "Successful reload all",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReloadAllResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/hot-reload/audit-log": {
+      "get": {
+        "summary": "Get audit log",
+        "description": "Get the audit log of configuration changes.",
+        "operationId": "getAuditLog",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of entries to return",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Filter by action type",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful get audit log",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/provider_health": {
+      "get": {
+        "summary": "Get provider health",
+        "description": "Get health status of all providers.",
+        "operationId": "getProviderHealth",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "description": "Filter by provider type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "customName",
+            "in": "query",
+            "description": "Filter by custom name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "unhealthRatioThreshold",
+            "in": "query",
+            "description": "Unhealthy ratio threshold",
+            "schema": {
+              "type": "number",
+              "default": 0.5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful get provider health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderHealthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatCompletionRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "ID of the model to use"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "description": "A list of messages comprising the conversation"
+          },
+          "temperature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2,
+            "default": 1,
+            "description": "What sampling temperature to use"
+          },
+          "max_tokens": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The maximum number of tokens to generate"
+          },
+          "stream": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to stream the response"
+          },
+          "stop": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Up to 4 sequences where the API will stop generating further tokens"
+          },
+          "top_p": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 1,
+            "description": "Nucleus sampling parameter"
+          },
+          "frequency_penalty": {
+            "type": "number",
+            "minimum": -2,
+            "maximum": 2,
+            "default": 0,
+            "description": "Frequency penalty"
+          },
+          "presence_penalty": {
+            "type": "number",
+            "minimum": -2,
+            "maximum": 2,
+            "default": 0,
+            "description": "Presence penalty"
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ]
+      },
+      "ChatMessage": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "system",
+              "user",
+              "assistant",
+              "tool"
+            ],
+            "description": "The role of the message"
+          },
+          "content": {
+            "type": "string",
+            "description": "The content of the message"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the author"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ]
+      },
+      "ChatCompletionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "A unique identifier for the completion"
+          },
+          "object": {
+            "type": "string",
+            "default": "chat.completion"
+          },
+          "created": {
+            "type": "integer",
+            "description": "Unix timestamp of creation"
+          },
+          "model": {
+            "type": "string",
+            "description": "The model used"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatCompletionChoice"
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        }
+      },
+      "ChatCompletionChoice": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ChatMessage"
+          },
+          "finish_reason": {
+            "type": "string",
+            "enum": [
+              "stop",
+              "length",
+              "tool_calls",
+              "content_filter",
+              "null"
+            ]
+          }
+        }
+      },
+      "CompletionRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "ID of the model to use"
+          },
+          "prompt": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "The prompt(s) to generate completions for"
+          },
+          "suffix": {
+            "type": "string",
+            "description": "The suffix that comes after a completion of inserted text"
+          },
+          "max_tokens": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 16,
+            "description": "The maximum number of tokens to generate"
+          },
+          "temperature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2,
+            "default": 1,
+            "description": "What sampling temperature to use"
+          },
+          "top_p": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 1,
+            "description": "Nucleus sampling parameter"
+          },
+          "n": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "How many completions to generate"
+          },
+          "stream": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to stream the response"
+          },
+          "logprobs": {
+            "type": "integer",
+            "description": "Include the log probabilities on the logprobs most likely tokens"
+          },
+          "echo": {
+            "type": "boolean",
+            "default": false,
+            "description": "Echo back the prompt"
+          },
+          "stop": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Up to 4 sequences where the API will stop generating further tokens"
+          },
+          "frequency_penalty": {
+            "type": "number",
+            "minimum": -2,
+            "maximum": 2,
+            "default": 0,
+            "description": "Frequency penalty"
+          },
+          "presence_penalty": {
+            "type": "number",
+            "minimum": -2,
+            "maximum": 2,
+            "default": 0,
+            "description": "Presence penalty"
+          },
+          "best_of": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Generates best_of completions server-side"
+          }
+        },
+        "required": [
+          "model",
+          "prompt"
+        ]
+      },
+      "CompletionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "A unique identifier for the completion"
+          },
+          "object": {
+            "type": "string",
+            "default": "text_completion"
+          },
+          "created": {
+            "type": "integer",
+            "description": "Unix timestamp of creation"
+          },
+          "model": {
+            "type": "string",
+            "description": "The model used"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompletionChoice"
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        }
+      },
+      "CompletionChoice": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "logprobs": {
+            "type": "object"
+          },
+          "finish_reason": {
+            "type": "string"
+          }
+        }
+      },
+      "ModelListResponse": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "default": "list"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Model"
+            }
+          }
+        }
+      },
+      "Model": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The model ID"
+          },
+          "object": {
+            "type": "string",
+            "default": "model"
+          },
+          "created": {
+            "type": "integer",
+            "description": "Unix timestamp of creation"
+          },
+          "owned_by": {
+            "type": "string",
+            "description": "The organization that owns the model"
+          }
+        }
+      },
+      "Usage": {
+        "type": "object",
+        "properties": {
+          "prompt_tokens": {
+            "type": "integer",
+            "description": "Number of tokens in the prompt"
+          },
+          "completion_tokens": {
+            "type": "integer",
+            "description": "Number of tokens in the completion"
+          },
+          "total_tokens": {
+            "type": "integer",
+            "description": "Total number of tokens"
+          }
+        }
+      },
+      "UsageResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "totalUsage": {
+                "type": "integer"
+              },
+              "providers": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/ProviderUsage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ProviderUsage": {
+        "type": "object",
+        "properties": {
+          "totalTokens": {
+            "type": "integer"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "completionTokens": {
+            "type": "integer"
+          },
+          "requestCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "unhealthy"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "provider": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "Admin password"
+          }
+        },
+        "required": [
+          "password"
+        ]
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ConfigResponse": {
+        "type": "object",
+        "properties": {
+          "HOST": {
+            "type": "string"
+          },
+          "SERVER_PORT": {
+            "type": "integer"
+          },
+          "MODEL_PROVIDER": {
+            "type": "string"
+          },
+          "SYSTEM_PROMPT_MODE": {
+            "type": "string"
+          },
+          "REQUEST_MAX_RETRIES": {
+            "type": "integer"
+          },
+          "CRON_NEAR_MINUTES": {
+            "type": "integer"
+          },
+          "MAX_ERROR_COUNT": {
+            "type": "integer"
+          },
+          "providerFallbackChain": {
+            "type": "object"
+          },
+          "modelFallbackMapping": {
+            "type": "object"
+          },
+          "SCHEDULED_HEALTH_CHECK": {
+            "$ref": "#/components/schemas/ScheduledHealthCheck"
+          },
+          "LOG_LEVEL": {
+            "type": "string"
+          },
+          "systemPrompt": {
+            "type": "string"
+          }
+        }
+      },
+      "ScheduledHealthCheck": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "interval": {
+            "type": "integer"
+          },
+          "startupRun": {
+            "type": "boolean"
+          },
+          "providerTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ConfigUpdateRequest": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "ConfigUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ProviderListResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ProviderConfig"
+              }
+            }
+          }
+        }
+      },
+      "ProviderConfig": {
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string"
+          },
+          "customName": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "unhealthy",
+              "unknown"
+            ]
+          },
+          "usageCount": {
+            "type": "integer"
+          },
+          "errorCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "ProviderResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "HotReloadStatusResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "isReloading": {
+                "type": "boolean"
+              },
+              "lastReloadTime": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "pendingChanges": {
+                "type": "integer"
+              },
+              "auditLogCount": {
+                "type": "integer"
+              },
+              "hotReloadableConfigs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "HotReloadUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "updates": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "persist": {
+                "type": "boolean",
+                "default": true
+              },
+              "forceReload": {
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        },
+        "required": [
+          "updates"
+        ]
+      },
+      "HotReloadUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "oldValue": {},
+                "newValue": {}
+              }
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ReloadAllResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "integer",
+            "description": "Duration in milliseconds"
+          }
+        }
+      },
+      "AuditLogResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "details": {
+                  "type": "object"
+                },
+                "timestamp": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ProviderHealthResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "summaryHealthy": {
+            "type": "boolean"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "uuid": {
+                    "type": "string"
+                  },
+                  "customName": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "lastHealthCheck": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "errorCount": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "errorId": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Unauthorized access",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded",
+        "headers": {
+          "X-RateLimit-Limit": {
+            "description": "Maximum number of requests allowed",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "X-RateLimit-Remaining": {
+            "description": "Number of remaining requests",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "X-RateLimit-Retry-After": {
+            "description": "Seconds to wait before retrying",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "Service unavailable",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "API key authentication (Bearer token or API key)"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Bearer token authentication for admin API"
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
+import http from 'http';
 
 // Import UI modules
 import * as auth from '../ui-modules/auth.js';
@@ -468,5 +469,92 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         }
     }
 
+    // Python GPU status proxy endpoint
+    if (method === 'GET' && pathParam === '/api/python-gpu/status') {
+        return await handlePythonGpuStatus(req, res, currentConfig);
+    }
+
+    // Config hot reload API endpoints
+    if (method === 'GET' && pathParam === '/api/hot-reload/status') {
+        return await configApi.handleHotReloadStatus(req, res);
+    }
+
+    if (method === 'POST' && pathParam === '/api/hot-reload/update') {
+        return await configApi.handleHotReloadUpdate(req, res);
+    }
+
+    if (method === 'POST' && pathParam === '/api/hot-reload/reload-all') {
+        return await configApi.handleHotReloadReloadAll(req, res);
+    }
+
+    if (method === 'GET' && pathParam === '/api/hot-reload/audit-log') {
+        return await configApi.handleHotReloadAuditLog(req, res);
+    }
+
+    if (method === 'POST' && pathParam === '/api/hot-reload/invalidate-adapter') {
+        return await configApi.handleHotReloadInvalidateAdapter(req, res);
+    }
+
     return false;
+}
+
+async function handlePythonGpuStatus(req, res, currentConfig) {
+    const controllerBaseUrl = currentConfig.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
+    
+    try {
+        const pythonUrl = new URL('/manage/gpu', controllerBaseUrl);
+        
+        const response = await new Promise((resolve, reject) => {
+            const options = {
+                hostname: pythonUrl.hostname,
+                port: pythonUrl.port,
+                path: pythonUrl.pathname,
+                method: 'GET',
+                timeout: 5000
+            };
+            
+            const proxyReq = http.request(options, (proxyRes) => {
+                let data = '';
+                proxyRes.on('data', (chunk) => {
+                    data += chunk;
+                });
+                proxyRes.on('end', () => {
+                    try {
+                        const jsonData = JSON.parse(data);
+                        resolve({
+                            success: proxyRes.statusCode === 200,
+                            ...jsonData
+                        });
+                    } catch {
+                        resolve({
+                            success: proxyRes.statusCode === 200,
+                            rawData: data
+                        });
+                    }
+                });
+            });
+            
+            proxyReq.on('error', (e) => {
+                reject(e);
+            });
+            
+            proxyReq.on('timeout', () => {
+                proxyReq.destroy();
+                reject(new Error('Timeout'));
+            });
+            
+            proxyReq.end();
+        });
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(response));
+        return true;
+    } catch (error) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: false,
+            error: error.message
+        }));
+        return true;
+    }
 }

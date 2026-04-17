@@ -32,7 +32,11 @@ const navItems = [
   { path: '/usage', label: '用量查询', icon: 'fa-chart-bar', section: 'usage' },
   { path: '/plugins', label: '插件管理', icon: 'fa-puzzle-piece', section: 'plugins' },
   { path: '/logs', label: '实时日志', icon: 'fa-file-alt', section: 'logs' },
-  { path: '/gpu-monitor', label: 'GPU监控', icon: 'fa-video-card', section: 'gpu-monitor' }
+  { path: '/gpu-monitor', label: 'GPU监控', icon: 'fa-video-card', section: 'gpu-monitor' },
+  { path: '/test-api', label: 'API测试', icon: 'fa-flask', section: 'test-api' },
+  { path: '/model-usage-stats', label: '模型用量统计', icon: 'fa-bar-chart', section: 'model-usage-stats' },
+  { path: '/potluck', label: 'API大锅饭', icon: 'fa-users', section: 'potluck' },
+  { path: '/potluck-user', label: '用户管理', icon: 'fa-user', section: 'potluck-user' }
 ]
 
 const isActive = (path) => {

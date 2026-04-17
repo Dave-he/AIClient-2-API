@@ -9,6 +9,7 @@ import { initApiService } from '../services/service-manager.js';
 import { getRequestBody } from '../utils/common.js';
 import { broadcastEvent } from '../ui-modules/event-broadcast.js';
 import { HEALTH_CHECK, PASSWORD, NETWORK, RETRY } from '../utils/constants.js';
+import { getConfigHotReloader, HOT_RELOADABLE_CONFIGS } from '../utils/config-hot-reload.js';
 
 /**
  * 重载配置文件
@@ -468,4 +469,171 @@ export async function handleUpdateAdminPassword(req, res) {
         }));
         return true;
     }
+}
+
+export async function handleHotReloadStatus(req, res) {
+    try {
+        const hotReloader = getConfigHotReloader();
+        const status = hotReloader.getStatus();
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: true,
+            data: status
+        }));
+        return true;
+    } catch (error) {
+        logger.error('[UI API] Failed to get hot reload status:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            error: {
+                message: 'Failed to get hot reload status: ' + error.message
+            }
+        }));
+        return true;
+    }
+}
+
+export async function handleHotReloadUpdate(req, res) {
+    try {
+        const body = await getRequestBody(req);
+        const { updates, options = {} } = body;
+        
+        const hotReloader = getConfigHotReloader();
+        const result = await hotReloader.updateConfig(updates, options);
+        
+        if (result.success) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: true,
+                message: 'Configuration updated successfully',
+                changes: result.changes
+            }));
+        } else {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                message: 'Failed to update configuration',
+                errors: result.errors,
+                changes: result.changes
+            }));
+        }
+        return true;
+    } catch (error) {
+        logger.error('[UI API] Failed to hot reload config:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            error: {
+                message: 'Failed to hot reload config: ' + error.message
+            }
+        }));
+        return true;
+    }
+}
+
+export async function handleHotReloadReloadAll(req, res) {
+    try {
+        const hotReloader = getConfigHotReloader();
+        const result = await hotReloader.reloadAll();
+        
+        if (result.success) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: true,
+                message: result.message,
+                duration: result.duration
+            }));
+        } else {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                message: result.message
+            }));
+        }
+        return true;
+    } catch (error) {
+        logger.error('[UI API] Failed to reload all config:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            error: {
+                message: 'Failed to reload all config: ' + error.message
+            }
+        }));
+        return true;
+    }
+}
+
+export async function handleHotReloadAuditLog(req, res) {
+    try {
+        const hotReloader = getConfigHotReloader();
+        const query = req.url?.split('?')[1] || '';
+        const params = new URLSearchParams(query);
+        const limit = parseInt(params.get('limit') || '50');
+        const action = params.get('action');
+        
+        const log = hotReloader.getAuditLog({ limit, action });
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: true,
+            data: log
+        }));
+        return true;
+    } catch (error) {
+        logger.error('[UI API] Failed to get hot reload audit log:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            error: {
+                message: 'Failed to get hot reload audit log: ' + error.message
+            }
+        }));
+        return true;
+    }
+}
+
+export async function handleHotReloadInvalidateAdapter(req, res) {
+    try {
+        const body = await getRequestBody(req);
+        const { providerType, uuid } = body;
+        
+        if (!providerType) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                message: 'providerType is required'
+            }));
+            return true;
+        }
+        
+        const hotReloader = getConfigHotReloader();
+        const result = await hotReloader.invalidateProviderAdapter(providerType, uuid);
+        
+        if (result.success) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: true,
+                message: 'Adapter invalidated successfully'
+            }));
+        } else {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                message: result.message
+            }));
+        }
+        return true;
+    } catch (error) {
+        logger.error('[UI API] Failed to invalidate adapter:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            error: {
+                message: 'Failed to invalidate adapter: ' + error.message
+            }
+        }));
+        return true;
+    }
+}
+
+export function getHotReloadableConfigs() {
+    return HOT_RELOADABLE_CONFIGS;
 }

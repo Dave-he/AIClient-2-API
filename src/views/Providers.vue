@@ -191,101 +191,36 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
-import axios from 'axios'
+import { ref, reactive, onMounted } from 'vue'
+import { useProviders } from '@/composables/useProviders.js'
+import ProviderNode from '@/components/ProviderNode.vue'
 
-const searchQuery = ref('')
 const showModal = ref(false)
 const isEditing = ref(false)
-const stats = reactive({
-  activeConnections: 0,
-  activeProviders: 0,
-  healthyProviders: 0
-})
 
-const providerTypes = [
-  { value: 'gemini-cli-oauth', label: 'Gemini CLI OAuth', icon: 'fa-robot' },
-  { value: 'gemini-antigravity', label: 'Gemini Antigravity', icon: 'fa-rocket' },
-  { value: 'openai-custom', label: 'OpenAI Custom', icon: 'fa-brain' },
-  { value: 'claude-custom', label: 'Claude Custom', icon: 'fa-comment-dots' },
-  { value: 'claude-kiro-oauth', label: 'Claude Kiro OAuth', icon: 'fa-key' },
-  { value: 'openai-qwen-oauth', label: 'Qwen OAuth', icon: 'fa-cloud' },
-  { value: 'openaiResponses-custom', label: 'OpenAI Responses', icon: 'fa-reply' },
-  { value: 'openai-codex-oauth', label: 'OpenAI Codex OAuth', icon: 'fa-code' },
-  { value: 'grok-custom', label: 'Grok Reverse', icon: 'fa-search' }
-]
-
-const providers = ref([
-  {
-    type: 'openai-custom',
-    nodes: [
-      {
-        uuid: 'local-python-controller',
-        name: '本地Python控制器',
-        healthy: true,
-        apiKey: 'sk-xxxxxxxxxxxx',
-        lastUpdate: Date.now()
-      }
-    ]
-  },
-  {
-    type: 'gemini-cli-oauth',
-    nodes: [
-      {
-        uuid: 'gemini-node-1',
-        name: 'Gemini OAuth节点1',
-        healthy: true,
-        email: 'user@example.com',
-        accessToken: 'ya29.a0A...',
-        lastUpdate: Date.now()
-      }
-    ]
-  },
-  {
-    type: 'claude-custom',
-    nodes: [
-      {
-        uuid: 'claude-node-1',
-        name: 'Claude API节点',
-        healthy: false,
-        apiKey: 'sk-ant-xxxxxxxx',
-        lastUpdate: Date.now() - 3600000
-      }
-    ]
-  }
-])
+const {
+  providers,
+  searchQuery,
+  stats,
+  providerTypes,
+  filteredProviders,
+  getProviderIcon,
+  getProviderTypeName,
+  fetchProviders,
+  addProvider,
+  updateProvider,
+  deleteProvider,
+  performHealthCheck
+} = useProviders()
 
 const formData = reactive({
-  providerType: '',
+  providerType: 'gemini-cli-oauth',
   name: '',
   uuid: '',
   apiKey: '',
   email: '',
   accessToken: ''
 })
-
-const filteredProviders = computed(() => {
-  if (!searchQuery.value) return providers.value
-  const query = searchQuery.value.toLowerCase()
-  return providers.value.map(provider => ({
-    ...provider,
-    nodes: provider.nodes.filter(node => 
-      node.name.toLowerCase().includes(query) ||
-      node.uuid.toLowerCase().includes(query) ||
-      (node.email && node.email.toLowerCase().includes(query))
-    )
-  })).filter(provider => provider.nodes.length > 0)
-})
-
-const getProviderIcon = (type) => {
-  const provider = providerTypes.find(p => p.value === type)
-  return provider ? provider.icon : 'fa-server'
-}
-
-const getProviderTypeName = (type) => {
-  const provider = providerTypes.find(p => p.value === type)
-  return provider ? provider.label : type
-}
 
 const maskApiKey = (key) => {
   if (!key) return ''
@@ -340,66 +275,46 @@ const closeModal = () => {
   showModal.value = false
 }
 
-const saveNode = () => {
+const saveNode = async () => {
   if (!formData.name) {
-    alert('请输入节点名称')
+    window.$toast?.error('请输入节点名称')
     return
   }
   
-  if (isEditing.value) {
-    const provider = providers.value.find(p => p.type === formData.providerType)
-    if (provider) {
-      const node = provider.nodes.find(n => n.uuid === formData.uuid)
-      if (node) {
-        node.name = formData.name
-        node.apiKey = formData.apiKey || node.apiKey
-        node.email = formData.email || node.email
-        node.accessToken = formData.accessToken || node.accessToken
-        node.lastUpdate = Date.now()
-      }
-    }
-  } else {
-    const provider = providers.value.find(p => p.type === formData.providerType)
-    if (provider) {
-      provider.nodes.push({
-        uuid: formData.uuid || `node-${Date.now()}`,
-        name: formData.name,
-        healthy: true,
-        apiKey: formData.apiKey,
-        email: formData.email,
-        accessToken: formData.accessToken,
-        lastUpdate: Date.now()
-      })
-    } else {
-      providers.value.push({
-        type: formData.providerType,
-        nodes: [{
-          uuid: formData.uuid || `node-${Date.now()}`,
-          name: formData.name,
-          healthy: true,
-          apiKey: formData.apiKey,
-          email: formData.email,
-          accessToken: formData.accessToken,
-          lastUpdate: Date.now()
-        }]
-      })
-    }
+  const data = {
+    providerType: formData.providerType,
+    name: formData.name,
+    uuid: formData.uuid,
+    apiKey: formData.apiKey,
+    email: formData.email,
+    accessToken: formData.accessToken
   }
   
-  updateStats()
-  closeModal()
+  try {
+    if (isEditing.value) {
+      await updateProvider(formData.providerType, formData.uuid, data)
+    } else {
+      await addProvider(data)
+    }
+    closeModal()
+  } catch (error) {
+    console.error('Failed to save node:', error)
+  }
 }
 
-const deleteNode = (providerType, uuid) => {
-  if (confirm('确定要删除这个节点吗？')) {
-    const provider = providers.value.find(p => p.type === providerType)
-    if (provider) {
-      provider.nodes = provider.nodes.filter(n => n.uuid !== uuid)
-      if (provider.nodes.length === 0) {
-        providers.value = providers.value.filter(p => p.type !== providerType)
-      }
-      updateStats()
-    }
+const deleteNode = async (providerType, uuid) => {
+  try {
+    await deleteProvider(providerType, uuid)
+  } catch (error) {
+    console.error('Failed to delete node:', error)
+  }
+}
+
+const checkHealth = async (providerType, uuid) => {
+  try {
+    await performHealthCheck(providerType, uuid)
+  } catch (error) {
+    console.error('Health check failed:', error)
   }
 }
 
@@ -414,15 +329,8 @@ const addNode = (providerType) => {
   showModal.value = true
 }
 
-const updateStats = () => {
-  stats.activeConnections = providers.value.reduce((sum, p) => sum + p.nodes.length, 0)
-  stats.activeProviders = providers.value.length
-  stats.healthyProviders = providers.value.reduce((sum, p) => 
-    sum + p.nodes.filter(n => n.healthy).length, 0)
-}
-
 onMounted(() => {
-  updateStats()
+  fetchProviders()
 })
 </script>
 

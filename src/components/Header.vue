@@ -32,82 +32,66 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
+import { ref, onMounted, onUnmounted } from 'vue';
+import { api, removeToken } from '@/utils/api.js';
 
-const isOnline = ref(true)
-const currentTheme = ref('light')
-const restarting = ref(false)
-
-const getToken = () => {
-  return localStorage.getItem('authToken')
-}
-
-const createAxiosInstance = () => {
-  const token = getToken()
-  return axios.create({
-    baseURL: window.location.origin,
-    headers: {
-      'Authorization': token ? `Bearer ${token}` : '',
-      'Content-Type': 'application/json'
-    }
-  })
-}
+const isOnline = ref(true);
+const currentTheme = ref('light');
+const restarting = ref(false);
 
 const checkServerStatus = async () => {
   try {
-    const api = createAxiosInstance()
-    const response = await api.get('/api/system')
-    isOnline.value = response.status === 200
+    const response = await api.get('/api/system');
+    isOnline.value = response.status === 200;
   } catch (error) {
-    isOnline.value = false
+    isOnline.value = false;
   }
-}
+};
 
 const toggleTheme = () => {
-  const newTheme = currentTheme.value === 'light' ? 'dark' : 'light'
-  currentTheme.value = newTheme
-  localStorage.setItem('theme', newTheme)
-  document.documentElement.setAttribute('data-theme', newTheme)
-}
+  const newTheme = currentTheme.value === 'light' ? 'dark' : 'light';
+  currentTheme.value = newTheme;
+  localStorage.setItem('theme', newTheme);
+  document.documentElement.setAttribute('data-theme', newTheme);
+};
 
 const handleLogout = async () => {
   if (confirm('确定要登出吗？')) {
-    localStorage.removeItem('authToken')
-    window.location.href = '/login'
+    removeToken();
+    window.location.href = '/vue/login';
   }
-}
+};
 
 const handleRestart = async () => {
   if (confirm('确定要重启服务吗？')) {
-    restarting.value = true
+    restarting.value = true;
     try {
-      const api = createAxiosInstance()
-      await api.post('/api/system/restart')
+      await api.post('/api/system/restart');
+      window.$toast?.success('服务重启请求已发送');
     } catch (error) {
-      console.error('Failed to restart:', error)
+      window.$toast?.error('重启失败: ' + error.message);
     } finally {
-      restarting.value = false
+      restarting.value = false;
     }
   }
-}
+};
 
-let statusInterval = null
+let statusInterval = null;
 
 onMounted(() => {
-  const savedTheme = localStorage.getItem('theme') || 'light'
-  currentTheme.value = savedTheme
-  document.documentElement.setAttribute('data-theme', savedTheme)
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  currentTheme.value = savedTheme;
+  document.documentElement.setAttribute('data-theme', savedTheme);
   
-  checkServerStatus()
-  statusInterval = setInterval(checkServerStatus, 10000)
-})
+  checkServerStatus();
+  statusInterval = setInterval(checkServerStatus, 10000);
+});
 
 onUnmounted(() => {
   if (statusInterval) {
-    clearInterval(statusInterval)
+    clearInterval(statusInterval);
   }
-})
+});
 </script>
 
 <style scoped>

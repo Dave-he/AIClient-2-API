@@ -4,6 +4,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Union, Tuple
+from functools import lru_cache
 import asyncio
 import httpx
 import json
@@ -281,6 +282,19 @@ def count_image_content(request_data: Dict) -> Tuple[bool, int]:
                                 total_size += int((len(base64_data) * 3) / 4)
     return has_image, total_size
 
+def is_multimodal_model(model_name: str) -> bool:
+    multimodal_keywords = ['vision', 'image', 'mm', 'multimodal', 'vlm', 'gemma-4']
+    model_lower = model_name.lower()
+    return any(keyword in model_lower for keyword in multimodal_keywords)
+
+@lru_cache(maxsize=128)
+def get_model_capabilities(model_name: str) -> Dict[str, bool]:
+    return {
+        'multimodal': is_multimodal_model(model_name),
+        'tool_calling': True,
+        'streaming': True
+    }
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest):
     start_time = datetime.now()
@@ -300,6 +314,13 @@ async def chat_completions(request: ChatCompletionRequest):
         if not scheduler.is_model_available(model_name):
             logger.warning(f"Model {model_name} not found")
             raise ModelNotFoundException(model_name)
+        
+        if has_image and not is_multimodal_model(model_name):
+            logger.warning(f"Model {model_name} does not support image inputs")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model {model_name} does not support image inputs. Please use a multimodal model like gemma-2-vision."
+            )
         
         if not scheduler.acquire_request(model_name):
             active = scheduler.get_active_requests(model_name)
@@ -541,7 +562,8 @@ async def get_gpu_status():
     logger.info("Getting GPU status")
     status = gpu_monitor.get_gpu_status()
     if not status:
-        return {"status": "unavailable", "message": "No GPU detected"}
+        return {"status": "unavailable", "message": "No GPU detected", "serverTime": datetime.now().isoformat()}
+    status["serverTime"] = datetime.now().isoformat()
     return status
 
 @app.get("/manage/gpu/history")

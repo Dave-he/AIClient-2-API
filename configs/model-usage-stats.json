@@ -1,12 +1,12 @@
 {
-  "updatedAt": "2026-04-17T17:52:43.746Z",
+  "updatedAt": "2026-04-17T18:36:54.053Z",
   "summary": {
-    "requestCount": 114,
-    "promptTokens": 36267,
-    "completionTokens": 52909,
-    "totalTokens": 89176,
+    "requestCount": 139,
+    "promptTokens": 36746,
+    "completionTokens": 53201,
+    "totalTokens": 89895,
     "cachedTokens": 0,
-    "lastUsedAt": "2026-04-17T17:52:43.745Z"
+    "lastUsedAt": "2026-04-17T18:36:54.053Z"
   },
   "providers": {
     "openai-custom": {
@@ -79,21 +79,21 @@
     },
     "local-model": {
       "summary": {
-        "requestCount": 3,
-        "promptTokens": 56,
-        "completionTokens": 24,
-        "totalTokens": 80,
+        "requestCount": 28,
+        "promptTokens": 535,
+        "completionTokens": 316,
+        "totalTokens": 799,
         "cachedTokens": 0,
-        "lastUsedAt": "2026-04-17T17:52:43.745Z"
+        "lastUsedAt": "2026-04-17T18:36:54.053Z"
       },
       "models": {
         "gemma-4-31b": {
-          "requestCount": 3,
-          "promptTokens": 56,
-          "completionTokens": 24,
-          "totalTokens": 80,
+          "requestCount": 28,
+          "promptTokens": 535,
+          "completionTokens": 316,
+          "totalTokens": 799,
           "cachedTokens": 0,
-          "lastUsedAt": "2026-04-17T17:52:43.745Z"
+          "lastUsedAt": "2026-04-17T18:36:54.053Z"
         }
       }
     }
@@ -108,12 +108,12 @@
       "lastUsedAt": "2026-04-16T17:12:05.282Z"
     },
     "2026-04-17": {
-      "requestCount": 97,
-      "promptTokens": 36179,
-      "completionTokens": 52850,
-      "totalTokens": 89029,
+      "requestCount": 122,
+      "promptTokens": 36658,
+      "completionTokens": 53142,
+      "totalTokens": 89748,
       "cachedTokens": 0,
-      "lastUsedAt": "2026-04-17T17:52:43.745Z"
+      "lastUsedAt": "2026-04-17T18:36:54.053Z"
     }
   },
   "hourly": {
@@ -134,12 +134,12 @@
       "lastUsedAt": "2026-04-17T16:51:54.523Z"
     },
     "2026-04-17T17": {
-      "requestCount": 3,
-      "promptTokens": 56,
-      "completionTokens": 24,
-      "totalTokens": 80,
+      "requestCount": 8,
+      "promptTokens": 89,
+      "completionTokens": 68,
+      "totalTokens": 157,
       "cachedTokens": 0,
-      "lastUsedAt": "2026-04-17T17:52:43.745Z"
+      "lastUsedAt": "2026-04-17T17:58:04.768Z"
     },
     "2026-04-17T17:51": {
       "requestCount": 1,
@@ -156,6 +156,144 @@
       "totalTokens": 42,
       "cachedTokens": 0,
       "lastUsedAt": "2026-04-17T17:52:43.745Z"
+    },
+    "2026-04-17T17:53": {
+      "requestCount": 3,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T17:53:56.885Z"
+    },
+    "2026-04-17T17:56": {
+      "requestCount": 1,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T17:56:45.995Z"
+    },
+    "2026-04-17T17:58": {
+      "requestCount": 1,
+      "promptTokens": 33,
+      "completionTokens": 44,
+      "totalTokens": 77,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T17:58:04.768Z"
+    },
+    "2026-04-17T18": {
+      "requestCount": 20,
+      "promptTokens": 446,
+      "completionTokens": 248,
+      "totalTokens": 642,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:36:54.053Z"
+    },
+    "2026-04-17T18:05": {
+      "requestCount": 2,
+      "promptTokens": 33,
+      "completionTokens": 12,
+      "totalTokens": 45,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:05:44.259Z"
+    },
+    "2026-04-17T18:06": {
+      "requestCount": 1,
+      "promptTokens": 34,
+      "completionTokens": 20,
+      "totalTokens": 54,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:06:01.221Z"
+    }
+  },
+  "minuteData": {
+    "2026-04-17T18:09": {
+      "requestCount": 1,
+      "promptTokens": 34,
+      "completionTokens": 20,
+      "totalTokens": 54,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:09:49.759Z"
+    },
+    "2026-04-17T18:10": {
+      "requestCount": 3,
+      "promptTokens": 33,
+      "completionTokens": 12,
+      "totalTokens": 45,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:10:24.147Z"
+    },
+    "2026-04-17T18:12": {
+      "requestCount": 1,
+      "promptTokens": 32,
+      "completionTokens": 22,
+      "totalTokens": 54,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:12:01.359Z"
+    },
+    "2026-04-17T18:18": {
+      "requestCount": 1,
+      "promptTokens": 28,
+      "completionTokens": 14,
+      "totalTokens": 42,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:18:46.841Z"
+    },
+    "2026-04-17T18:19": {
+      "requestCount": 2,
+      "promptTokens": 34,
+      "completionTokens": 55,
+      "totalTokens": 89,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:19:32.265Z"
+    },
+    "2026-04-17T18:20": {
+      "requestCount": 2,
+      "promptTokens": 100,
+      "completionTokens": 0,
+      "totalTokens": 48,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:20:28.604Z"
+    },
+    "2026-04-17T18:25": {
+      "requestCount": 2,
+      "promptTokens": 62,
+      "completionTokens": 65,
+      "totalTokens": 127,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:25:18.684Z"
+    },
+    "2026-04-17T18:30": {
+      "requestCount": 2,
+      "promptTokens": 56,
+      "completionTokens": 28,
+      "totalTokens": 84,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:30:56.724Z"
+    },
+    "2026-04-17T18:31": {
+      "requestCount": 1,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:31:17.526Z"
+    },
+    "2026-04-17T18:32": {
+      "requestCount": 1,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:32:35.652Z"
+    },
+    "2026-04-17T18:36": {
+      "requestCount": 1,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:36:54.053Z"
     }
   }
 }

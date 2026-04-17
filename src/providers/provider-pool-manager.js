@@ -11,6 +11,11 @@ import {
 } from './provider-models.js';
 import { broadcastEvent } from '../ui-modules/event-broadcast.js';
 import { ENDPOINT_TYPE } from '../utils/common.js';
+import { 
+    getAlertManager, 
+    sendProviderUnhealthyAlert, 
+    sendProviderRecoveredAlert 
+} from '../utils/alert-manager.js';
 
 function getCustomModelAliasesForProvider(config, providerType) {
     const customModels = Array.isArray(config?.customModels) ? config.customModels : [];
@@ -665,34 +670,14 @@ export class ProviderPoolManager {
      * @private
      */
     async _triggerHealthAlert(providerType, providerConfig, status, errorMessage = null) {
-        const webhookUrl = this.globalConfig?.HEALTH_ALERT_WEBHOOK_URL;
-        if (!webhookUrl) {
-            return; // 未配置 Webhook，跳过
-        }
-        
-        const customName = providerConfig.customName || providerConfig.uuid;
-        const payload = {
-            timestamp: new Date().toISOString(),
-            providerType,
-            uuid: providerConfig.uuid,
-            customName,
-            status,
-            errorMessage,
-            stats: {
-                usageCount: providerConfig.usageCount || 0,
-                errorCount: providerConfig.errorCount || 0
-            }
-        };
-        
         try {
-            const axios = (await import('axios')).default;
-            await axios.post(webhookUrl, payload, {
-                timeout: 5000,
-                headers: { 'Content-Type': 'application/json' }
-            });
-            this._log('info', `Health alert sent to webhook for ${customName}: ${status}`);
+            if (status === 'unhealthy') {
+                await sendProviderUnhealthyAlert(providerType, providerConfig, errorMessage);
+            } else if (status === 'recovered') {
+                await sendProviderRecoveredAlert(providerType, providerConfig);
+            }
         } catch (error) {
-            this._log('error', `Failed to send health alert to webhook: ${error.message}`);
+            this._log('error', `Failed to send health alert: ${error.message}`);
         }
     }
 
@@ -741,6 +726,10 @@ export class ProviderPoolManager {
             }
             
             const pool = this.providerPools[providerType];
+            
+            if (!Array.isArray(pool)) {
+                continue;
+            }
             
             pool.forEach((providerConfig) => {
                 try {

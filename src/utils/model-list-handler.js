@@ -12,6 +12,8 @@ export const ENDPOINT_TYPE = {
     CLAUDE_MESSAGE: 'claude_message',
     OPENAI_MODEL_LIST: 'openai_model_list',
     GEMINI_MODEL_LIST: 'gemini_model_list',
+    AUTO_DETECT: 'auto_detect', // 自动检测模式
+    AUTO_MODEL_LIST: 'auto_model_list', // 自动检测模型列表模式
 };
 
 function getConfiguredSupportedModelsFromPool(providerPoolManager, providerType) {

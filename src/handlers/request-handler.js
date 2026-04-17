@@ -13,6 +13,7 @@ import { getPluginManager } from '../core/plugin-manager.js';
 import { randomUUID } from 'crypto';
 import { handleGrokAssetsProxy } from '../utils/grok-assets-proxy.js';
 import { getMaxRequestSize, containsImageContent } from '../utils/network-utils.js';
+import { getRateLimiter } from '../utils/rate-limiter.js';
 
 const IMAGE_ENDPOINTS = ['/v1/chat/completions', '/v1/images/validate', '/v1/images/upload'];
 
@@ -380,6 +381,25 @@ export function createRequestHandler(config, providerPoolManager) {
                 }
 
                 try {
+                    const rateLimiter = getRateLimiter();
+                    const rateLimitResult = rateLimiter.checkLimit(req);
+
+                    res.setHeader('X-RateLimit-Limit', rateLimitResult.limit);
+                    res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining);
+                    res.setHeader('X-RateLimit-Retry-After', rateLimitResult.retryAfter);
+
+                    if (!rateLimitResult.allowed) {
+                        handleError(res, { 
+                            status: 429, 
+                            message: rateLimitResult.message,
+                            code: 'RATE_LIMIT_EXCEEDED',
+                            details: {
+                                retryAfter: rateLimitResult.retryAfter
+                            }
+                        }, currentConfig.MODEL_PROVIDER, null, req);
+                        return;
+                    }
+
                     // Handle API requests
                     const apiHandled = await handleAPIRequests(method, path, req, res, currentConfig, undefined, providerPoolManager, PROMPT_LOG_FILENAME);
                     if (apiHandled) return;

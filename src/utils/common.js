@@ -15,7 +15,22 @@ export { handleModelListRequest } from './model-list-handler.js';
 
 export { handleContentGenerationRequest, _manageSystemPrompt, extractPromptText } from './content-handler.js';
 
-export { handleError } from './error-handler.js';
+export { 
+    handleError, 
+    ERROR_CODES, 
+    APIError, 
+    AuthError, 
+    PermissionError, 
+    RateLimitError, 
+    ModelNotFoundError, 
+    ValidationError, 
+    NetworkError, 
+    TimeoutError, 
+    ServerError, 
+    ConfigError, 
+    ProviderUnavailableError,
+    wrapError
+} from './error-handler.js';
 
 export { getProtocolPrefix } from './request-handlers.js';
 

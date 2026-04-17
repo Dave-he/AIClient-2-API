@@ -360,7 +360,12 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         TLS_SIDECAR_PROXY_URL: null,
         CONTROLLER_BASE_URL: 'http://192.168.7.103:5000',
         MAX_REQUEST_SIZE_MB: 10,
-        IMAGE_TIMEOUT_SECONDS: 60
+        IMAGE_TIMEOUT_SECONDS: 60,
+        HEALTH_ALERT_WEBHOOK_URL: null,
+        ALERT_DINGTALK_WEBHOOK: null,
+        ALERT_WECOM_WEBHOOK: null,
+        ALERT_MAX_HISTORY: 100,
+        ALERT_DEFAULT_SILENCE_MINUTES: 60
     };
 
     let currentConfig = { ...defaultConfig };

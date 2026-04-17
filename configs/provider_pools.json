@@ -9,8 +9,8 @@
       "uuid": "local-python-controller",
       "isHealthy": true,
       "isDisabled": false,
-      "lastUsed": "2026-04-17T17:52:43.744Z",
-      "usageCount": 3,
+      "lastUsed": "2026-04-17T18:36:54.240Z",
+      "usageCount": 13,
       "errorCount": 0,
       "lastErrorTime": null,
       "lastErrorMessage": null,
@@ -18,14 +18,42 @@
       "refreshCount": 0,
       "lastHealthCheckTime": null,
       "lastHealthCheckModel": null,
-      "_lastSelectionSeq": 0,
+      "_lastSelectionSeq": 47,
       "supportedModels": [
         "gemma-4-31b",
+        "gemma-4-31b-it",
         "llama-3-8b",
         "mistral-7b",
         "gemma-2-vision"
       ],
-      "lastRefreshTime": 1776448363744
+      "lastRefreshTime": 1776451014052
     }
-  ]
+  ],
+  "claude-custom": [
+    {
+      "uuid": "claude-default",
+      "customName": "Claude Custom",
+      "config": {
+        "OPENAI_API_KEY": "sk-placeholder",
+        "OPENAI_API_BASE_URL": "https://api.anthropic.com/v1"
+      },
+      "enabled": true,
+      "healthCheckEnabled": true,
+      "concurrencyLimit": 5,
+      "queueLimit": 50,
+      "isHealthy": true,
+      "isDisabled": false,
+      "lastUsed": null,
+      "usageCount": 0,
+      "errorCount": 0,
+      "lastErrorTime": null,
+      "lastErrorMessage": null,
+      "needsRefresh": false,
+      "refreshCount": 0,
+      "lastHealthCheckTime": null,
+      "lastHealthCheckModel": null
+    }
+  ],
+  "providerFallbackChain": {},
+  "modelFallbackMapping": {}
 }

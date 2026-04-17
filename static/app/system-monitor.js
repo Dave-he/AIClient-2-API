@@ -30,6 +30,7 @@ export class SystemMonitor {
         this.tokenChart = null;
         this.currentTokenTimeRange = 'hour';
         this.tokenChartData = {};
+        this.tokenDataPollingInterval = null;
         
         this.initializeDefaultData();
         console.log('[SystemMonitor] Constructor finished, initial data:', {
@@ -185,12 +186,29 @@ export class SystemMonitor {
         this.pollingInterval = setInterval(() => {
             this.refreshAllStatus();
         }, 2000);
+        
+        this.startTokenDataPolling();
     }
 
     stopPolling() {
         if (this.pollingInterval) {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
+        }
+        this.stopTokenDataPolling();
+    }
+
+    startTokenDataPolling() {
+        this.stopTokenDataPolling();
+        this.tokenDataPollingInterval = setInterval(() => {
+            this.loadTokenUsageData();
+        }, 60000);
+    }
+
+    stopTokenDataPolling() {
+        if (this.tokenDataPollingInterval) {
+            clearInterval(this.tokenDataPollingInterval);
+            this.tokenDataPollingInterval = null;
         }
     }
 
@@ -1199,8 +1217,8 @@ export class SystemMonitor {
             
             if (range === 'hour') {
                 const minuteKey = time.toISOString().slice(0, 16);
-                if (data.hourly && data.hourly[minuteKey]) {
-                    const d = data.hourly[minuteKey];
+                if (data.minuteData && data.minuteData[minuteKey]) {
+                    const d = data.minuteData[minuteKey];
                     prompt = d.promptTokens || 0;
                     completion = d.completionTokens || 0;
                     total = d.totalTokens || 0;
