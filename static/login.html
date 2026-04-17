@@ -329,12 +329,30 @@
             }, 300);
         }
 
-        function checkLoginStatus() {
+        async function checkLoginStatus() {
             const token = localStorage.getItem('authToken');
             
             if (token) {
-                // Token存在，跳转到主页
-                window.location.href = '/';
+                // Token存在，验证其有效性
+                try {
+                    const response = await fetch('/api/health', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        // Token有效，跳转到主页
+                        window.location.href = '/';
+                    } else {
+                        // Token无效，清除并重试登录
+                        localStorage.removeItem('authToken');
+                        localStorage.removeItem('authTokenExpiry');
+                    }
+                } catch (error) {
+                    // 请求失败，可能是网络问题，保留token并提示用户
+                    console.warn('登录状态检查失败:', error);
+                }
             }
         }
 
