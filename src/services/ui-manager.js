@@ -21,8 +21,9 @@ export { broadcastEvent, initializeUIManagement, handleUploadOAuthCredentials, u
  * Serve static files for the UI
  * @param {string} pathParam - The request path
  * @param {http.ServerResponse} res - The HTTP response object
+ * @param {Object} [currentConfig] - The current configuration object (optional)
  */
-export async function serveStaticFiles(pathParam, res) {
+export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
     let filePath;
     
     if (pathParam === '/' || pathParam === '/index.html') {
@@ -50,8 +51,18 @@ export async function serveStaticFiles(pathParam, res) {
             '.svg': 'image/svg+xml'
         }[ext] || 'text/plain';
 
+        let content = readFileSync(filePath);
+        
+        if (ext === '.html') {
+            const controllerBaseUrl = currentConfig.CONTROLLER_BASE_URL || 'http://localhost:5000';
+            content = content.toString().replace(
+                /window\.CONTROLLER_BASE_URL = window\.CONTROLLER_BASE_URL \|\|[\s\S]*?'http:\/\/localhost:5000';/,
+                `window.CONTROLLER_BASE_URL = '${controllerBaseUrl}';`
+            );
+        }
+
         res.writeHead(200, { 'Content-Type': contentType });
-        res.end(readFileSync(filePath));
+        res.end(content);
         return true;
     }
     return false;

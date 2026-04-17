@@ -1,6 +1,6 @@
 const CONTROLLER_BASE_URL = typeof window !== 'undefined' && window.CONTROLLER_BASE_URL
     ? window.CONTROLLER_BASE_URL
-    : 'http://localhost:5000';
+    : 'http://192.168.7.103:5000';
 
 let systemMonitorInstance = null;
 

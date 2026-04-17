@@ -1,6 +1,7 @@
 import logger from '../utils/logger.js';
+import { CONFIG } from '../core/config-manager.js';
 
-const CONTROLLER_BASE_URL = 'http://localhost:5000';
+const CONTROLLER_BASE_URL = CONFIG.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
 
 export class GPUMonitorModule {
     constructor() {
@@ -45,8 +46,9 @@ export class GPUMonitorModule {
     }
 
     setupWebSocket() {
+        const controllerHost = new URL(CONTROLLER_BASE_URL).host;
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//localhost:5000/ws/monitor`;
+        const wsUrl = `${protocol}//${controllerHost}/ws/monitor`;
         
         try {
             this.webSocket = new WebSocket(wsUrl);

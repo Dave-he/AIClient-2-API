@@ -96,7 +96,7 @@ export function createRequestHandler(config, providerPoolManager) {
                     return;
                 }
                 if (path.startsWith('/static/') || path === '/' || path === '/favicon.ico' || path === '/index.html' || path.startsWith('/app/') || path.startsWith('/components/') || path === '/login.html' || isPluginStatic) {
-                    const served = await serveStaticFiles(path, res);
+                    const served = await serveStaticFiles(path, res, currentConfig);
                     if (served) return;
                 }
 
