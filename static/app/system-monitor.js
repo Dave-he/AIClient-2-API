@@ -20,6 +20,13 @@ export class SystemMonitor {
         this.maxDataPoints = 60;
         this.isInitialized = false;
         
+        this.pythonGpuChart = null;
+        this.currentPythonChartType = 'utilization';
+        this.pythonGpuUtilizationHistory = [];
+        this.pythonGpuMemoryHistory = [];
+        this.pythonGpuTempHistory = [];
+        this.pythonGpuConnected = false;
+        
         this.initializeDefaultData();
         console.log('[SystemMonitor] Constructor finished, initial data:', {
             cpu: this.cpuHistoryData.length,
@@ -92,9 +99,25 @@ export class SystemMonitor {
             });
         });
 
+        const pythonChartTabs = document.querySelectorAll('.chart-type-tab');
+        pythonChartTabs.forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                pythonChartTabs.forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+                this.currentPythonChartType = e.target.dataset.pythonChartType;
+                this.updatePythonGpuLegend();
+                this.updatePythonGpuChart();
+            });
+        });
+
         const refreshBtn = document.getElementById('refreshGpuStatusBtn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => this.refreshGpuStatus());
+        }
+
+        const refreshPythonGpuBtn = document.getElementById('refreshPythonGpuBtn');
+        if (refreshPythonGpuBtn) {
+            refreshPythonGpuBtn.addEventListener('click', () => this.refreshPythonGpuStatus());
         }
 
         const refreshProviderBtn = document.getElementById('refreshProviderStatusBtn');
@@ -108,11 +131,13 @@ export class SystemMonitor {
             if (event.detail.section === 'dashboard') {
                 this.refreshAllStatus();
                 this.ensureChartInitialized();
+                this.ensurePythonGpuChartInitialized();
             }
         });
 
         window.addEventListener('resize', () => {
             this.ensureChartInitialized();
+            this.ensurePythonGpuChartInitialized();
         });
     }
 
@@ -155,12 +180,258 @@ export class SystemMonitor {
     async refreshAllStatus() {
         await Promise.all([
             this.updateSystemStatsFromServer(),
-            this.refreshGpuStatus()
+            this.refreshGpuStatus(),
+            this.refreshPythonGpuStatus()
         ]);
         
-        // 确保图表已初始化后再更新
         this.ensureChartInitialized();
         this.updateChart();
+        this.ensurePythonGpuChartInitialized();
+        this.updatePythonGpuChart();
+    }
+
+    async refreshPythonGpuStatus() {
+        const container = document.getElementById('pythonGpuConnectionStatus');
+        if (!container) return;
+
+        try {
+            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/gpu`, {
+                method: 'GET',
+                timeout: 5000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            this.pythonGpuConnected = data.status === 'available';
+            this.renderPythonGpuConnectionStatus(this.pythonGpuConnected);
+            this.renderPythonGpuStatus(data);
+            
+            if (this.pythonGpuConnected) {
+                const utilization = data.utilization || 0;
+                const memoryUtil = data.memory_utilization || 0;
+                const temperature = data.temperature || 0;
+                
+                this.addToHistory(this.pythonGpuUtilizationHistory, utilization);
+                this.addToHistory(this.pythonGpuMemoryHistory, memoryUtil);
+                this.addToHistory(this.pythonGpuTempHistory, temperature);
+            }
+        } catch (error) {
+            this.pythonGpuConnected = false;
+            this.renderPythonGpuConnectionStatus(false);
+            console.log('[SystemMonitor] Python GPU connection failed:', error.message);
+        }
+    }
+
+    renderPythonGpuConnectionStatus(connected) {
+        const container = document.getElementById('pythonGpuConnectionStatus');
+        if (!container) return;
+
+        if (connected) {
+            container.innerHTML = `<span class="status-badge online"><i class="fas fa-circle"></i> <span>已连接</span></span>`;
+        } else {
+            container.innerHTML = `<span class="status-badge offline"><i class="fas fa-circle"></i> <span>未连接</span></span>`;
+        }
+    }
+
+    renderPythonGpuStatus(data) {
+        if (!data || data.status === 'unavailable') {
+            document.getElementById('pythonGpuUtilization').textContent = '--';
+            document.getElementById('pythonGpuMemory').textContent = '--';
+            document.getElementById('pythonGpuTemp').textContent = '--';
+            document.getElementById('pythonGpuPower').textContent = '--';
+            document.getElementById('pythonGpuName').textContent = data?.message || '未检测到GPU';
+            document.getElementById('pythonGpuTotalMemory').textContent = '--';
+            document.getElementById('pythonGpuUsedMemory').textContent = '--';
+            document.getElementById('pythonGpuAvailableMemory').textContent = '--';
+            return;
+        }
+
+        const totalMemoryGB = data.total_memory / (1024 ** 3);
+        const usedMemoryGB = data.used_memory / (1024 ** 3);
+        const availableMemoryGB = data.available_memory / (1024 ** 3);
+
+        document.getElementById('pythonGpuUtilization').textContent = `${data.utilization || 0}%`;
+        document.getElementById('pythonGpuMemory').textContent = `${data.memory_utilization || 0}%`;
+        document.getElementById('pythonGpuTemp').textContent = `${data.temperature || 0}°C`;
+        document.getElementById('pythonGpuPower').textContent = `${data.power_draw || 0}W`;
+        document.getElementById('pythonGpuName').textContent = data.name || 'Unknown';
+        document.getElementById('pythonGpuTotalMemory').textContent = `${totalMemoryGB.toFixed(1)} GB`;
+        document.getElementById('pythonGpuUsedMemory').textContent = `${usedMemoryGB.toFixed(1)} GB`;
+        document.getElementById('pythonGpuAvailableMemory').textContent = `${availableMemoryGB.toFixed(1)} GB`;
+    }
+
+    updatePythonGpuLegend() {
+        const legendContainer = document.getElementById('pythonGpuChartLegend');
+        if (!legendContainer) return;
+
+        const legendItems = legendContainer.querySelectorAll('.legend-item');
+        
+        legendItems.forEach((item, index) => {
+            const types = ['utilization', 'memory', 'temperature'];
+            const type = types[index];
+            
+            if (this.currentPythonChartType === 'all') {
+                item.style.display = 'flex';
+            } else if (this.currentPythonChartType === type) {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    ensurePythonGpuChartInitialized() {
+        const canvas = document.getElementById('pythonGpuChart');
+        if (!canvas) return;
+
+        const rect = canvas.getBoundingClientRect();
+        
+        if (rect.width <= 0 || rect.height <= 0) {
+            const container = canvas.parentElement;
+            if (container) {
+                const containerRect = container.getBoundingClientRect();
+                if (containerRect.width > 0 && containerRect.height > 0) {
+                    this.pythonGpuChart = null;
+                    this.initPythonGpuChart();
+                }
+            }
+            return;
+        }
+
+        if (!this.pythonGpuChart) {
+            this.initPythonGpuChart();
+        } else if (this.pythonGpuChart.width !== rect.width || this.pythonGpuChart.height !== rect.height) {
+            this.pythonGpuChart = null;
+            this.initPythonGpuChart();
+        }
+        
+        this.updatePythonGpuLegend();
+        this.updatePythonGpuChart();
+    }
+
+    initPythonGpuChart() {
+        const canvas = document.getElementById('pythonGpuChart');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        
+        let rect = canvas.getBoundingClientRect();
+        
+        if (rect.width === 0 || rect.height === 0) {
+            const container = canvas.parentElement;
+            if (container) {
+                const containerRect = container.getBoundingClientRect();
+                rect = {
+                    width: Math.max(containerRect.width - 32, 300),
+                    height: 160
+                };
+            } else {
+                rect = { width: 400, height: 160 };
+            }
+        }
+
+        if (rect.width <= 0 || rect.height <= 0) {
+            rect = { width: 400, height: 160 };
+        }
+
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        this.pythonGpuChart = {
+            ctx,
+            width: rect.width,
+            height: rect.height,
+            padding: { top: 15, right: 15, bottom: 28, left: 40 }
+        };
+    }
+
+    updatePythonGpuChart() {
+        if (!this.pythonGpuChart) {
+            this.ensurePythonGpuChartInitialized();
+        }
+
+        if (!this.pythonGpuChart) return;
+
+        const { ctx, width, height, padding } = this.pythonGpuChart;
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+
+        ctx.clearRect(0, 0, width, height);
+
+        let datasets = [];
+        let dataLength = 0;
+
+        if (this.currentPythonChartType === 'utilization' || this.currentPythonChartType === 'all') {
+            if (this.pythonGpuUtilizationHistory.length > 0) {
+                datasets.push({
+                    data: [...this.pythonGpuUtilizationHistory],
+                    color: '#8b5cf6',
+                    label: 'GPU使用率',
+                    gradient: ['#8b5cf6', '#a78bfa']
+                });
+                dataLength = Math.max(dataLength, this.pythonGpuUtilizationHistory.length);
+            }
+        }
+
+        if (this.currentPythonChartType === 'memory' || this.currentPythonChartType === 'all') {
+            if (this.pythonGpuMemoryHistory.length > 0) {
+                datasets.push({
+                    data: [...this.pythonGpuMemoryHistory],
+                    color: '#3b82f6',
+                    label: '显存使用率',
+                    gradient: ['#3b82f6', '#60a5fa']
+                });
+                dataLength = Math.max(dataLength, this.pythonGpuMemoryHistory.length);
+            }
+        }
+
+        if (this.currentPythonChartType === 'temperature' || this.currentPythonChartType === 'all') {
+            if (this.pythonGpuTempHistory.length > 0) {
+                datasets.push({
+                    data: [...this.pythonGpuTempHistory],
+                    color: '#ef4444',
+                    label: 'GPU温度',
+                    gradient: ['#ef4444', '#f87171'],
+                    isTemperature: true
+                });
+                dataLength = Math.max(dataLength, this.pythonGpuTempHistory.length);
+            }
+        }
+
+        if (dataLength === 0) {
+            this.renderPythonGpuEmptyChart();
+            return;
+        }
+
+        let allValues = [];
+        datasets.forEach(ds => allValues.push(...ds.data.filter(v => v > 0)));
+        const minValue = allValues.length > 0 ? Math.min(...allValues) * 0.9 : 0;
+        const maxValue = allValues.length > 0 ? Math.max(...allValues) * 1.1 : 100;
+
+        this.drawGrid(ctx, chartWidth, chartHeight, padding, minValue, maxValue);
+        this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, true);
+        datasets.forEach(ds => {
+            this.drawArea(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+            this.drawLine(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+        });
+        datasets.forEach(ds => {
+            this.drawPoint(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+        });
+    }
+
+    renderPythonGpuEmptyChart() {
+        if (!this.pythonGpuChart) return;
+        const { ctx, width, height } = this.pythonGpuChart;
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('暂无数据', width / 2, height / 2);
     }
 
     async updateSystemStatsFromServer() {
@@ -240,9 +511,12 @@ export class SystemMonitor {
         const cpuUsage = this.getCpuUsagePercent();
         const memoryInfo = this.getMemoryInfo();
 
-        document.getElementById('cpuValue')?.textContent = cpuUsage;
-        document.getElementById('memoryValue')?.textContent = memoryInfo.usagePercent;
-        document.getElementById('memoryTotal')?.textContent = memoryInfo.total;
+        const cpuEl = document.getElementById('cpuValue');
+        const memEl = document.getElementById('memoryValue');
+        const memTotalEl = document.getElementById('memoryTotal');
+        if (cpuEl) cpuEl.textContent = cpuUsage;
+        if (memEl) memEl.textContent = memoryInfo.usagePercent;
+        if (memTotalEl) memTotalEl.textContent = memoryInfo.total;
 
         this.addToHistory(this.cpuHistoryData, parseFloat(cpuUsage));
         this.addToHistory(this.memoryHistoryData, parseFloat(memoryInfo.usagePercent));
@@ -370,7 +644,8 @@ export class SystemMonitor {
                 this.addToHistory(this.gpuHistoryData, utilization);
                 this.addToHistory(this.gpuTempHistoryData, temperature);
                 
-                document.getElementById('gpuValue')?.textContent = `${utilization}%`;
+                const gpuValEl1 = document.getElementById('gpuValue');
+                if (gpuValEl1) gpuValEl1.textContent = `${utilization}%`;
             }
         } catch (error) {
             container.innerHTML = `
@@ -379,7 +654,8 @@ export class SystemMonitor {
                     <span>无法获取GPU状态</span>
                 </div>
             `;
-            document.getElementById('gpuValue')?.textContent = '--';
+            const gpuValElErr = document.getElementById('gpuValue');
+            if (gpuValElErr) gpuValElErr.textContent = '--';
         }
     }
 
@@ -415,7 +691,8 @@ export class SystemMonitor {
                     <span>${data?.message || '未检测到GPU'}</span>
                 </div>
             `;
-            document.getElementById('gpuValue')?.textContent = '--';
+            const gpuValElUnavail = document.getElementById('gpuValue');
+            if (gpuValElUnavail) gpuValElUnavail.textContent = '--';
             return;
         }
 
@@ -427,7 +704,8 @@ export class SystemMonitor {
         const utilization = data.utilization || 0;
         const temperature = data.temperature || 0;
 
-        document.getElementById('gpuValue')?.textContent = `${utilization}%`;
+        const gpuValElMain = document.getElementById('gpuValue');
+        if (gpuValElMain) gpuValElMain.textContent = `${utilization}%`;
 
         container.innerHTML = `
             <div class="gpu-card">
