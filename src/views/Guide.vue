@@ -24,18 +24,7 @@
         <div class="prose max-w-none">
           <h3 class="text-lg font-semibold text-slate-700 mb-4">API 调用示例</h3>
           <div class="bg-slate-50 rounded-lg p-4">
-            <pre class="text-sm text-slate-700 font-mono overflow-x-auto"><code>curl -X POST http://localhost:3000/api/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{
-    "model": "gemini-2.5-flash",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Hello, world!"
-      }
-    ]
-  }'</code></pre>
+            <pre class="text-sm text-slate-700 font-mono overflow-x-auto"><code>{{ curlCommand }}</code></pre>
           </div>
         </div>
         
@@ -74,6 +63,19 @@
 </template>
 
 <script setup>
+const BASE_URL = window.location.origin
+const curlCommand = `curl -X POST ${BASE_URL}/api/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -d '{
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello, world!"
+      }
+    ]
+  }'`
 </script>
 
 <style scoped>

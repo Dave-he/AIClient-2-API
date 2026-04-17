@@ -213,7 +213,7 @@
         <div class="quick-start">
             <h3>🚀 快速开始</h3>
             <p>使用以下命令测试 API 连接：</p>
-            <code>curl http://localhost:3000/health?key=123456</code>
+            <code id="curl-example">curl http://localhost:30000/health?key=123456</code>
         </div>
 
         <div class="test-card">
@@ -279,6 +279,16 @@
 
     <script>
         const BASE_URL = window.location.origin;
+
+        function updateCurlExample() {
+            const curlExample = document.getElementById('curl-example');
+            if (curlExample) {
+                const cleanBaseURL = BASE_URL.replace(/\/$/, '');
+                curlExample.textContent = `curl ${cleanBaseURL}/health?key=123456`;
+            }
+        }
+
+        updateCurlExample();
 
         async function checkHealth() {
             const resultDiv = document.getElementById('health-result');

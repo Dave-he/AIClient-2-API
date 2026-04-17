@@ -55,6 +55,11 @@ const routes = [
         path: 'logs',
         name: 'Logs',
         component: () => import('@/views/Logs.vue')
+      },
+      {
+        path: 'gpu-monitor',
+        name: 'GPUMonitor',
+        component: () => import('@/views/GPUMonitor.vue')
       }
     ]
   },

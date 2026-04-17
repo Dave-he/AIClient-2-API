@@ -135,7 +135,8 @@ const menuGroups = [
     items: [
       { path: '/', label: '仪表盘', icon: 'fa-tachometer-alt' },
       { path: '/usage', label: '用量查询', icon: 'fa-chart-bar' },
-      { path: '/logs', label: '实时日志', icon: 'fa-file-alt' }
+      { path: '/logs', label: '实时日志', icon: 'fa-file-alt' },
+      { path: '/gpu-monitor', label: 'GPU监控', icon: 'fa-video-card' }
     ]
   },
   {
@@ -168,7 +169,8 @@ const currentPageTitle = computed(() => {
     '/upload-config': '凭据文件管理',
     '/usage': '用量查询',
     '/plugins': '插件管理',
-    '/logs': '实时日志'
+    '/logs': '实时日志',
+    '/gpu-monitor': 'GPU监控面板'
   }
   return pathMap[route.path] || 'AIClient2API'
 })

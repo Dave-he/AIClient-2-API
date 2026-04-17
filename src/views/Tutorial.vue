@@ -48,9 +48,7 @@
           <div class="p-4">
             <p class="text-slate-600 mb-3">使用以下命令测试 API：</p>
             <div class="bg-slate-50 rounded-lg p-3">
-              <pre class="text-sm text-slate-700 font-mono"><code>curl -X POST http://localhost:3000/api/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"Hello"}]}'</code></pre>
+              <pre class="text-sm text-slate-700 font-mono"><code>{{ curlCommand }}</code></pre>
             </div>
           </div>
         </div>
@@ -77,6 +75,10 @@
 </template>
 
 <script setup>
+const BASE_URL = window.location.origin
+const curlCommand = `curl -X POST ${BASE_URL}/api/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"Hello"}]}'`
 </script>
 
 <style scoped>

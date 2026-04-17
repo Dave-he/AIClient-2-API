@@ -1,257 +1,326 @@
 <template>
   <div class="dashboard">
-    <div class="stats-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      <div 
-        class="stat-card bg-white rounded-xl p-4 shadow-sm border border-slate-100 hover:shadow-md transition-shadow"
-        :key="'uptime-' + componentKey.uptime"
-      >
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-slate-500 mb-1">运行时间</p>
-            <h3 class="text-2xl font-bold text-slate-800">{{ systemInfo.uptime || '--' }}</h3>
+    <div class="stats-container">
+      <div class="stats-row">
+        <div class="stat-item">
+          <div class="stat-icon-wrapper">
+            <i class="fas fa-clock"></i>
           </div>
-          <div class="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-            <i class="fas fa-clock text-emerald-600 text-xl"></i>
+          <div class="stat-content">
+            <span class="stat-value" :key="'uptime-' + componentKey.uptime">{{ systemInfo.uptime || '--' }}</span>
+            <span class="stat-label">运行时间</span>
           </div>
         </div>
-      </div>
-      
-      <div 
-        class="stat-card bg-white rounded-xl p-4 shadow-sm border border-slate-100 hover:shadow-md transition-shadow"
-        :key="'cpu-' + componentKey.cpu"
-      >
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-slate-500 mb-1">CPU 使用</p>
-            <h3 class="text-2xl font-bold" :class="getCpuColor(systemInfo.cpu)">
-              {{ systemInfo.cpu }}%
-            </h3>
+        <div class="stat-item">
+          <div class="stat-icon-wrapper cpu">
+            <i class="fas fa-microchip"></i>
           </div>
-          <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-            <i class="fas fa-microchip text-blue-600 text-xl"></i>
+          <div class="stat-content">
+            <span class="stat-value" :key="'cpu-' + componentKey.cpu">{{ systemInfo.cpu }}%</span>
+            <span class="stat-label">CPU</span>
           </div>
         </div>
-        <div class="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div 
-            class="h-full rounded-full transition-all duration-500"
-            :class="getCpuBarColor(systemInfo.cpu)"
-            :style="{ width: systemInfo.cpu + '%' }"
-          ></div>
-        </div>
-      </div>
-      
-      <div 
-        class="stat-card bg-white rounded-xl p-4 shadow-sm border border-slate-100 hover:shadow-md transition-shadow"
-        :key="'memory-' + componentKey.memory"
-      >
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-slate-500 mb-1">内存使用</p>
-            <h3 class="text-2xl font-bold" :class="getMemoryColor(systemInfo.memory)">
-              {{ systemInfo.memory }}%
-            </h3>
+        <div class="stat-item">
+          <div class="stat-icon-wrapper memory">
+            <i class="fas fa-memory"></i>
           </div>
-          <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-            <i class="fas fa-memory text-purple-600 text-xl"></i>
+          <div class="stat-content">
+            <span class="stat-value" :key="'memory-' + componentKey.memory">{{ systemInfo.memory }}%</span>
+            <span class="stat-label">内存</span>
           </div>
         </div>
-        <div class="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div 
-            class="h-full rounded-full transition-all duration-500"
-            :class="getMemoryBarColor(systemInfo.memory)"
-            :style="{ width: systemInfo.memory + '%' }"
-          ></div>
-        </div>
-      </div>
-      
-      <div 
-        class="stat-card bg-white rounded-xl p-4 shadow-sm border border-slate-100 hover:shadow-md transition-shadow"
-        :key="'gpu-' + componentKey.gpu"
-      >
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-slate-500 mb-1">GPU 使用</p>
-            <h3 class="text-2xl font-bold" :class="getGpuColor(systemInfo.gpu)">
-              {{ systemInfo.gpu }}%
-            </h3>
+        <div class="stat-item">
+          <div class="stat-icon-wrapper gpu">
+            <i class="fas fa-video-card"></i>
           </div>
-          <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-            <i class="fas fa-video-card text-orange-600 text-xl"></i>
+          <div class="stat-content">
+            <span class="stat-value" :key="'gpu-' + componentKey.gpu">{{ systemInfo.gpu }}%</span>
+            <span class="stat-label">GPU</span>
           </div>
-        </div>
-        <div class="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div 
-            class="h-full rounded-full transition-all duration-500"
-            :class="getGpuBarColor(systemInfo.gpu)"
-            :style="{ width: systemInfo.gpu + '%' }"
-          ></div>
         </div>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold text-slate-800">系统资源监控</h3>
-          <div class="flex gap-2">
-            <button 
-              v-for="tab in chartTabs" 
-              :key="tab.id"
-              class="px-3 py-1.5 text-sm rounded-lg transition-colors"
-              :class="[
-                activeChartTab === tab.id 
-                  ? 'bg-emerald-500 text-white' 
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              ]"
-              @click="activeChartTab = tab.id"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
-        </div>
-        <div class="h-64 flex items-center justify-center bg-slate-50 rounded-lg">
-          <div class="text-center">
-            <div class="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <i class="fas fa-chart-line text-emerald-500 text-2xl"></i>
+    <div class="dashboard-layout">
+      <div class="dashboard-left">
+        <div class="panel system-monitor">
+          <div class="panel-header">
+            <h3><i class="fas fa-chart-line"></i> 系统资源监控</h3>
+            <div class="chart-tabs">
+              <button 
+                v-for="tab in chartTabs" 
+                :key="tab.id"
+                class="chart-tab"
+                :class="{ active: activeChartTab === tab.id }"
+                @click="activeChartTab = tab.id"
+              >
+                {{ tab.label }}
+              </button>
             </div>
-            <p class="text-slate-500">资源使用图表</p>
-            <p class="text-sm text-slate-400">CPU、内存、GPU 实时监控</p>
+          </div>
+          <div class="chart-area">
+            <div class="chart-placeholder">
+              <canvas id="systemChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <div class="legend-item">
+              <span class="legend-color cpu"></span>
+              <span>CPU使用率</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color memory"></span>
+              <span>内存使用率</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color gpu"></span>
+              <span>GPU使用率</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color gpu-temp"></span>
+              <span>GPU温度</span>
+            </div>
+          </div>
+
+          <div class="gpu-section">
+            <div class="gpu-header">
+              <h4><i class="fas fa-microchip"></i> GPU状态</h4>
+              <button 
+                class="btn btn-sm btn-outline"
+                @click="refreshGpuStatus"
+              >
+                <i class="fas fa-sync-alt"></i>
+              </button>
+            </div>
+            <div class="gpu-content" :key="'gpu-content-' + componentKey.gpu">
+              <div v-if="gpuStatus.loading" class="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>加载中...</span>
+              </div>
+              <div v-else-if="gpuStatus.error" class="error">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>{{ gpuStatus.error }}</span>
+              </div>
+              <div v-else-if="gpuStatus.devices && gpuStatus.devices.length > 0" class="gpu-devices">
+                <div 
+                  v-for="(device, index) in gpuStatus.devices" 
+                  :key="index"
+                  class="gpu-device"
+                >
+                  <div class="gpu-device-header">
+                    <span class="gpu-name">{{ device.name }}</span>
+                    <span 
+                      class="gpu-status"
+                      :class="{ healthy: device.status === 'healthy' }"
+                    >
+                      {{ device.status === 'healthy' ? '正常' : '异常' }}
+                    </span>
+                  </div>
+                  <div class="gpu-device-info">
+                    <div class="info-row">
+                      <span class="info-label">显存使用</span>
+                      <div class="info-bar-container">
+                        <div 
+                          class="info-bar" 
+                          :style="{ width: device.memoryUsage + '%' }"
+                        ></div>
+                      </div>
+                      <span class="info-value">{{ device.memoryUsed }} / {{ device.memoryTotal }}</span>
+                    </div>
+                    <div class="info-row">
+                      <span class="info-label">GPU使用率</span>
+                      <div class="info-bar-container">
+                        <div 
+                          class="info-bar gpu-usage" 
+                          :style="{ width: device.utilization + '%' }"
+                        ></div>
+                      </div>
+                      <span class="info-value">{{ device.utilization }}%</span>
+                    </div>
+                    <div class="info-row">
+                      <span class="info-label">温度</span>
+                      <span class="info-value temp" :class="{ warning: device.temperature > 80 }">
+                        {{ device.temperature }}°C
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="empty">
+                <i class="fas fa-video-card"></i>
+                <span>未检测到GPU设备</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="space-y-6">
-        <div 
-          class="bg-white rounded-xl shadow-sm border border-slate-100 p-6"
-          :key="'system-info-' + componentKey.systemInfo"
-        >
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-slate-800">系统信息</h3>
+      <div class="dashboard-right">
+        <div class="panel system-info">
+          <div class="panel-header">
+            <h3>系统信息</h3>
+            <div class="update-controls">
+              <button 
+                class="btn btn-sm btn-outline"
+                @click="checkUpdate"
+              >
+                <i class="fas fa-sync-alt"></i> 检查更新
+              </button>
+              <button 
+                v-if="hasUpdate"
+                class="btn btn-sm btn-primary"
+                @click="performUpdate"
+              >
+                <i class="fas fa-download"></i> 立即更新
+              </button>
+            </div>
+          </div>
+          <div class="info-list">
+            <div class="info-row">
+              <div class="info-item">
+                <span class="info-label"><i class="fas fa-tag"></i> 版本号</span>
+                <div class="version-wrapper">
+                  <span class="info-value">{{ systemInfo.version || '--' }}</span>
+                  <span 
+                    v-if="hasUpdate" 
+                    class="update-badge"
+                  >
+                    <i class="fas fa-arrow-up"></i> {{ latestVersion }}
+                  </span>
+                </div>
+              </div>
+              <div class="info-item">
+                <span class="info-label"><i class="fas fa-code"></i> Node.js</span>
+                <span class="info-value">{{ systemInfo.nodeVersion || '--' }}</span>
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-item">
+                <span class="info-label"><i class="fas fa-clock"></i> 服务器时间</span>
+                <span class="info-value">{{ systemInfo.serverTime || '--' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label"><i class="fas fa-desktop"></i> 操作系统</span>
+                <span class="info-value">{{ systemInfo.platform || '--' }}</span>
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-item">
+                <span class="info-label"><i class="fas fa-cogs"></i> 运行模式</span>
+                <span class="info-value" :class="systemInfo.mode === 'production' ? 'text-emerald-600' : 'text-blue-600'">
+                  {{ systemInfo.mode || '--' }}
+                </span>
+              </div>
+              <div class="info-item">
+                <span class="info-label"><i class="fas fa-microchip"></i> 进程 PID</span>
+                <span class="info-value">{{ systemInfo.pid || '--' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel provider-status">
+          <div class="panel-header">
+            <h3><i class="fas fa-network-wired"></i> 提供商节点状态</h3>
             <button 
-              class="px-3 py-1.5 text-sm bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1"
-              @click="refreshSystemInfo"
+              class="btn btn-sm btn-outline"
+              @click="refreshProviderStatus"
             >
-              <i class="fas fa-refresh"></i> 刷新
+              <i class="fas fa-sync-alt"></i> 刷新
             </button>
           </div>
-          <div class="space-y-3">
-            <div class="flex justify-between items-center py-2 border-b border-slate-100">
-              <span class="text-slate-500">版本号</span>
-              <span class="font-medium text-slate-800">{{ systemInfo.version || '--' }}</span>
+          <div class="provider-grid" :key="'provider-grid-' + componentKey.providerStatus">
+            <div v-if="providerStatus.length === 0" class="loading">
+              <i class="fas fa-spinner fa-spin"></i>
+              <span>加载中...</span>
             </div>
-            <div class="flex justify-between items-center py-2 border-b border-slate-100">
-              <span class="text-slate-500">Node.js</span>
-              <span class="font-medium text-slate-800">{{ systemInfo.nodeVersion || '--' }}</span>
+            <div 
+              v-for="provider in providerStatus" 
+              :key="provider.name"
+              class="provider-card"
+              :class="provider.status"
+            >
+              <div class="provider-header">
+                <span 
+                  class="status-dot"
+                  :class="provider.status"
+                ></span>
+                <span class="provider-name">{{ provider.name }}</span>
+              </div>
+              <div class="provider-info">
+                <span class="provider-accounts">{{ provider.accounts }} 账户</span>
+                <span class="provider-requests">{{ provider.requests }} 请求</span>
+              </div>
             </div>
-            <div class="flex justify-between items-center py-2 border-b border-slate-100">
-              <span class="text-slate-500">服务器时间</span>
-              <span class="font-medium text-slate-800">{{ systemInfo.serverTime || '--' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <details class="expandable-section">
+      <summary class="section-summary">
+        <div class="summary-header">
+          <i class="fas fa-tools"></i>
+          <span>高级信息 (路径路由与模型列表)</span>
+          <span class="expand-hint">展开更多</span>
+        </div>
+        <i class="fas fa-chevron-down caret"></i>
+      </summary>
+
+      <div class="routing-panel">
+        <h3><i class="fas fa-route"></i> 路径路由调用示例</h3>
+        <p class="routing-desc">通过不同路径路由访问不同的AI模型提供商，支持灵活的模型切换</p>
+        
+        <div class="routing-grid">
+          <div 
+            v-for="route in routingExamples" 
+            :key="route.path"
+            class="routing-item"
+            @click="copyToClipboard(route.fullPath)"
+          >
+            <i class="fas fa-link"></i>
+            <span class="route-path">{{ route.fullPath }}</span>
+            <span class="route-description">{{ route.description }}</span>
+          </div>
+        </div>
+
+        <div class="routing-tips">
+          <h4><i class="fas fa-lightbulb"></i> 使用提示</h4>
+          <ul>
+            <li><strong>即时切换:</strong> 通过修改URL路径即可切换不同的AI模型提供商</li>
+            <li><strong>客户端配置:</strong> 在Cherry-Studio、NextChat、Cline等客户端中设置API端点为对应路径</li>
+            <li><strong>跨协议调用:</strong> 支持OpenAI协议调用Claude模型，或Claude协议调用OpenAI模型</li>
+          </ul>
+        </div>
+
+        <div class="models-area">
+          <h4 class="models-title"><i class="fas fa-cube"></i> 可用模型列表</h4>
+          <div class="models-desc">
+            <div class="highlight-note">
+              <i class="fas fa-info-circle"></i>
+              <span>点击模型名称可直接复制到剪贴板</span>
             </div>
-            <div class="flex justify-between items-center py-2 border-b border-slate-100">
-              <span class="text-slate-500">操作系统</span>
-              <span class="font-medium text-slate-800">{{ systemInfo.platform || '--' }}</span>
+          </div>
+          
+          <div class="models-container">
+            <div v-if="availableModels.length === 0" class="loading">
+              <i class="fas fa-spinner fa-spin"></i>
+              <span>加载中...</span>
             </div>
-            <div class="flex justify-between items-center py-2">
-              <span class="text-slate-500">运行模式</span>
-              <span class="font-medium" :class="systemInfo.mode === 'production' ? 'text-emerald-600' : 'text-blue-600'">
-                {{ systemInfo.mode || '--' }}
+            <div v-else class="models-list">
+              <span 
+                v-for="model in availableModels" 
+                :key="model"
+                class="model-tag"
+                @click="copyToClipboard(model)"
+              >
+                {{ model }}
               </span>
             </div>
           </div>
         </div>
-
-        <div 
-          class="bg-white rounded-xl shadow-sm border border-slate-100 p-6"
-          :key="'provider-status-' + componentKey.providerStatus"
-        >
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-slate-800">提供商节点状态</h3>
-            <button 
-              class="px-3 py-1.5 text-sm bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1"
-              @click="refreshProviderStatus"
-            >
-              <i class="fas fa-refresh"></i> 刷新
-            </button>
-          </div>
-          <div v-if="providerStatus.length > 0" class="grid grid-cols-2 gap-3">
-            <div 
-              v-for="provider in providerStatus" 
-              :key="provider.name"
-              class="p-3 rounded-lg border transition-all"
-              :class="[
-                provider.status === 'healthy' ? 'bg-emerald-50 border-emerald-200' :
-                provider.status === 'warning' ? 'bg-amber-50 border-amber-200' :
-                'bg-red-50 border-red-200'
-              ]"
-            >
-              <div class="flex items-center gap-2 mb-1">
-                <span 
-                  class="w-2 h-2 rounded-full"
-                  :class="[
-                    provider.status === 'healthy' ? 'bg-emerald-500' :
-                    provider.status === 'warning' ? 'bg-amber-500' :
-                    'bg-red-500'
-                  ]"
-                ></span>
-                <span class="text-sm font-medium text-slate-800">{{ provider.name }}</span>
-              </div>
-              <p class="text-xs text-slate-500">{{ provider.accounts }} 账户</p>
-            </div>
-          </div>
-          <div v-else class="text-center py-8 text-slate-400">
-            <i class="fas fa-inbox text-4xl mb-2 opacity-50"></i>
-            <p>暂无提供商数据</p>
-          </div>
-        </div>
       </div>
-    </div>
-
-    <div class="mt-6 bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-      <details class="w-full">
-        <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50 transition-colors">
-          <div class="flex items-center gap-3">
-            <i class="fas fa-tools text-emerald-500"></i>
-            <span class="font-medium text-slate-800">高级信息</span>
-            <span class="text-sm text-slate-400">(路径路由与模型列表)</span>
-          </div>
-          <i class="fas fa-chevron-down text-slate-400 transition-transform"></i>
-        </summary>
-        <div class="p-4 border-t border-slate-100">
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <h4 class="text-sm font-semibold text-slate-700 mb-3">路径路由调用示例</h4>
-              <div class="space-y-2">
-                <div class="p-3 bg-slate-50 rounded-lg text-sm text-slate-600 font-mono">
-                  /api/v1/chat/completions
-                </div>
-                <div class="p-3 bg-slate-50 rounded-lg text-sm text-slate-600 font-mono">
-                  /gemini-cli-oauth/v1/chat/completions
-                </div>
-                <div class="p-3 bg-slate-50 rounded-lg text-sm text-slate-600 font-mono">
-                  /claude-custom/v1/chat/completions
-                </div>
-              </div>
-            </div>
-            <div>
-              <h4 class="text-sm font-semibold text-slate-700 mb-3">可用模型列表</h4>
-              <div v-if="availableModels.length > 0" class="flex flex-wrap gap-2">
-                <span 
-                  v-for="model in availableModels" 
-                  :key="model"
-                  class="px-2 py-1 bg-slate-100 text-slate-700 text-xs rounded-full hover:bg-emerald-100 hover:text-emerald-700 cursor-pointer transition-colors"
-                  @click="copyModelName(model)"
-                >
-                  {{ model }}
-                </span>
-              </div>
-              <div v-else class="text-center py-4 text-slate-400">
-                <p>暂无可用模型</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </details>
-    </div>
+    </details>
   </div>
 </template>
 
@@ -268,7 +337,14 @@ const systemInfo = ref({
   nodeVersion: '--',
   serverTime: '--',
   platform: '--',
-  mode: 'development'
+  mode: 'development',
+  pid: '--'
+})
+
+const gpuStatus = ref({
+  loading: true,
+  error: '',
+  devices: []
 })
 
 const providerStatus = ref([])
@@ -290,6 +366,16 @@ const componentKey = ref({
   providerStatus: 0
 })
 
+const hasUpdate = ref(false)
+const latestVersion = ref('')
+
+const routingExamples = ref([
+  { path: '/api/v1/chat/completions', description: '默认提供商', fullPath: '/api/v1/chat/completions' },
+  { path: '/gemini-cli-oauth/v1/chat/completions', description: 'Gemini CLI OAuth', fullPath: '/gemini-cli-oauth/v1/chat/completions' },
+  { path: '/claude-custom/v1/chat/completions', description: 'Claude Custom', fullPath: '/claude-custom/v1/chat/completions' },
+  { path: '/openai-custom/v1/chat/completions', description: 'OpenAI Custom', fullPath: '/openai-custom/v1/chat/completions' }
+])
+
 let refreshInterval = null
 
 const getToken = () => {
@@ -305,42 +391,6 @@ const createAxiosInstance = () => {
       'Content-Type': 'application/json'
     }
   })
-}
-
-const getCpuColor = (value) => {
-  if (value >= 80) return 'text-red-500'
-  if (value >= 60) return 'text-amber-500'
-  return 'text-slate-800'
-}
-
-const getCpuBarColor = (value) => {
-  if (value >= 80) return 'bg-red-500'
-  if (value >= 60) return 'bg-amber-500'
-  return 'bg-emerald-500'
-}
-
-const getMemoryColor = (value) => {
-  if (value >= 85) return 'text-red-500'
-  if (value >= 70) return 'text-amber-500'
-  return 'text-slate-800'
-}
-
-const getMemoryBarColor = (value) => {
-  if (value >= 85) return 'bg-red-500'
-  if (value >= 70) return 'bg-amber-500'
-  return 'bg-purple-500'
-}
-
-const getGpuColor = (value) => {
-  if (value >= 90) return 'text-red-500'
-  if (value >= 75) return 'text-amber-500'
-  return 'text-slate-800'
-}
-
-const getGpuBarColor = (value) => {
-  if (value >= 90) return 'bg-red-500'
-  if (value >= 75) return 'bg-amber-500'
-  return 'bg-orange-500'
 }
 
 const formatUptime = (seconds) => {
@@ -363,16 +413,14 @@ const fetchSystemInfo = async () => {
       nodeVersion: data.nodeVersion || '--',
       serverTime: new Date(data.serverTime).toLocaleString('zh-CN'),
       platform: data.platform === 'linux' ? 'Linux x64' : (data.platform === 'win32' ? 'Windows' : data.platform) || '--',
-      mode: process.env.NODE_ENV === 'production' ? 'production' : 'development'
+      mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      pid: data.pid || '--'
     }
     
     componentKey.value.systemInfo++
     componentKey.value.uptime++
   } catch (error) {
     console.error('Failed to fetch system info:', error)
-    if (error.response?.status === 401) {
-      window.location.href = '/login.html'
-    }
   }
 }
 
@@ -386,7 +434,7 @@ const fetchSystemMonitor = async () => {
       ...systemInfo.value,
       cpu: Math.round(data.cpu?.usage || 0),
       memory: Math.round(parseFloat(data.memory?.usagePercent || 0)),
-      gpu: 0
+      gpu: Math.round(data.gpu?.usage || 0)
     }
     
     componentKey.value.cpu++
@@ -394,9 +442,24 @@ const fetchSystemMonitor = async () => {
     componentKey.value.gpu++
   } catch (error) {
     console.error('Failed to fetch system monitor:', error)
-    if (error.response?.status === 401) {
-      window.location.href = '/login.html'
-    }
+  }
+}
+
+const fetchGpuStatus = async () => {
+  try {
+    gpuStatus.value.loading = true
+    gpuStatus.value.error = ''
+    
+    const api = createAxiosInstance()
+    const response = await api.get('/api/gpu/status')
+    const data = response.data
+    
+    gpuStatus.value.devices = data.devices || []
+  } catch (error) {
+    gpuStatus.value.error = '无法获取GPU状态'
+    console.error('Failed to fetch GPU status:', error)
+  } finally {
+    gpuStatus.value.loading = false
   }
 }
 
@@ -416,7 +479,8 @@ const fetchProviderStatus = async () => {
         providers.push({
           name: type.replace(/-/g, ' '),
           status,
-          accounts: items.length
+          accounts: items.length,
+          requests: items.reduce((sum, p) => sum + (p.requestCount || 0), 0)
         })
       }
     }
@@ -425,9 +489,6 @@ const fetchProviderStatus = async () => {
     componentKey.value.providerStatus++
   } catch (error) {
     console.error('Failed to fetch provider status:', error)
-    if (error.response?.status === 401) {
-      window.location.href = '/login.html'
-    }
   }
 }
 
@@ -447,15 +508,11 @@ const fetchModels = async () => {
     availableModels.value = Array.from(models).sort()
   } catch (error) {
     console.error('Failed to fetch models:', error)
-    if (error.response?.status === 401) {
-      window.location.href = '/login.html'
-    }
   }
 }
 
-const refreshSystemInfo = async () => {
-  await fetchSystemInfo()
-  await fetchSystemMonitor()
+const refreshGpuStatus = async () => {
+  await fetchGpuStatus()
 }
 
 const refreshProviderStatus = async () => {
@@ -463,14 +520,42 @@ const refreshProviderStatus = async () => {
   await fetchModels()
 }
 
-const copyModelName = (model) => {
-  navigator.clipboard.writeText(model)
-  alert(`已复制: ${model}`)
+const checkUpdate = async () => {
+  try {
+    const api = createAxiosInstance()
+    const response = await api.get('/api/system/check-update')
+    if (response.data.hasUpdate) {
+      hasUpdate.value = true
+      latestVersion.value = response.data.latestVersion
+    }
+  } catch (error) {
+    console.error('Failed to check update:', error)
+  }
+}
+
+const performUpdate = async () => {
+  try {
+    const api = createAxiosInstance()
+    await api.post('/api/system/update')
+    alert('更新已开始，请等待服务重启')
+  } catch (error) {
+    console.error('Failed to perform update:', error)
+  }
+}
+
+const copyToClipboard = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    alert(`已复制: ${text}`)
+  } catch (error) {
+    console.error('Failed to copy:', error)
+  }
 }
 
 onMounted(async () => {
   await fetchSystemInfo()
   await fetchSystemMonitor()
+  await fetchGpuStatus()
   await fetchProviderStatus()
   await fetchModels()
 
@@ -497,27 +582,671 @@ onUnmounted(() => {
   to { opacity: 1; }
 }
 
-.stat-card {
-  animation: slideUp 0.3s ease backwards;
+.stats-container {
+  margin-bottom: 24px;
 }
 
-.stat-card:nth-child(1) { animation-delay: 0.1s; }
-.stat-card:nth-child(2) { animation-delay: 0.15s; }
-.stat-card:nth-child(3) { animation-delay: 0.2s; }
-.stat-card:nth-child(4) { animation-delay: 0.25s; }
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+}
+
+.stat-icon-wrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.stat-icon-wrapper.cpu {
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.stat-icon-wrapper.memory {
+  background: #f5f3ff;
+  color: #8b5cf6;
+}
+
+.stat-icon-wrapper.gpu {
+  background: #fff7ed;
+  color: #f97316;
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.panel {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.panel-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+}
+
+.btn-outline {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.btn-outline:hover {
+  background: #e2e8f0;
+}
+
+.btn-primary {
+  background: #059669;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #047857;
+}
+
+.chart-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.chart-tab {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #f1f5f9;
+  color: #64748b;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chart-tab.active {
+  background: #059669;
+  color: white;
+}
+
+.chart-area {
+  padding: 16px;
+  height: 200px;
+}
+
+.chart-placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 16px;
+  padding: 0 16px 16px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.legend-color.cpu { background: #3b82f6; }
+.legend-color.memory { background: #8b5cf6; }
+.legend-color.gpu { background: #f97316; }
+.legend-color.gpu-temp { background: #ef4444; }
+
+.gpu-section {
+  border-top: 1px solid #e2e8f0;
+}
+
+.gpu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.gpu-header h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gpu-content {
+  padding: 16px;
+}
+
+.loading, .empty, .error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #94a3b8;
+  padding: 20px;
+}
+
+.loading i, .empty i, .error i {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.error {
+  color: #dc2626;
+  background: #fef2f2;
+  border-radius: 8px;
+}
+
+.gpu-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gpu-device {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.gpu-device-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.gpu-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.gpu-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.gpu-status.healthy {
+  background: #dcfce7;
+  color: #059669;
+}
+
+.gpu-device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.info-label {
+  font-size: 12px;
+  color: #64748b;
+  width: 60px;
+}
+
+.info-bar-container {
+  flex: 1;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.info-bar {
+  height: 100%;
+  background: #059669;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.info-bar.gpu-usage {
+  background: #3b82f6;
+}
+
+.info-value {
+  font-size: 12px;
+  color: #334155;
+  width: 80px;
+  text-align: right;
+}
+
+.info-value.temp {
+  color: #f97316;
+}
+
+.info-value.temp.warning {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.info-list {
+  padding: 16px;
+}
+
+.info-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.version-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.update-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: #dcfce7;
+  color: #059669;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.update-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 16px;
+}
+
+.provider-card {
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.provider-card.healthy {
+  border: 1px solid #dcfce7;
+}
+
+.provider-card.warning {
+  border: 1px solid #fef3c7;
+}
+
+.provider-card.error {
+  border: 1px solid #fee2e2;
+}
+
+.provider-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc2626;
+}
+
+.status-dot.healthy {
+  background: #059669;
+}
+
+.status-dot.warning {
+  background: #f59e0b;
+}
+
+.provider-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.provider-info {
+  display: flex;
+  gap: 12px;
+}
+
+.provider-accounts, .provider-requests {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.expandable-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.section-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  cursor: pointer;
+  background: #f8fafc;
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.summary-header i {
+  color: #059669;
+}
+
+.summary-header span:first-of-type {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.expand-hint {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.caret {
+  color: #94a3b8;
+  transition: transform 0.2s;
+}
+
+.expandable-section[open] .caret {
+  transform: rotate(180deg);
+}
+
+.routing-panel {
+  padding: 20px;
+}
+
+.routing-panel h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.routing-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 16px;
+}
+
+.routing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.routing-item {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.routing-item:hover {
+  background: #ecfdf5;
+  border-color: #059669;
+}
+
+.routing-item i {
+  color: #059669;
+  margin-bottom: 6px;
+}
+
+.route-path {
+  display: block;
+  font-family: monospace;
+  font-size: 12px;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.route-description {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.routing-tips {
+  background: #fffbeb;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+}
+
+.routing-tips h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400e;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.routing-tips ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.routing-tips li {
+  font-size: 12px;
+  color: #78350f;
+  margin-bottom: 4px;
+}
+
+.routing-tips li:last-child {
+  margin-bottom: 0;
+}
+
+.models-area {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 20px;
+}
+
+.models-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.models-desc {
+  margin-bottom: 12px;
+}
+
+.highlight-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+
+.highlight-note i {
+  color: #059669;
+}
+
+.models-container {
+  min-height: 80px;
+}
+
+.models-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.model-tag {
+  padding: 4px 10px;
+  background: #f1f5f9;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.model-tag:hover {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
-details summary::-webkit-details-marker {
-  display: none;
+@media (max-width: 640px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .routing-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .provider-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
