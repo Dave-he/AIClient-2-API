@@ -1,139 +1,97 @@
 <template>
-  <div class="logs-page">
-    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-      <div class="flex items-center justify-between mb-6">
-        <h2 class="text-xl font-bold text-slate-800">实时日志</h2>
-        <div class="flex items-center gap-3">
-          <select 
-            v-model="filterLevel"
-            class="px-3 py-2 border border-slate-300 rounded-lg text-sm"
-          >
-            <option value="all">全部级别</option>
-            <option value="info">INFO</option>
-            <option value="warn">WARN</option>
-            <option value="error">ERROR</option>
-          </select>
-          <button 
-            class="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-2"
-            @click="clearLogs"
-          >
-            <i class="fas fa-trash"></i> 清空
-          </button>
-        </div>
+  <section id="logs" class="section" aria-labelledby="logs-title">
+    <h2 id="logs-title">实时日志</h2>
+    <div class="logs-controls">
+      <div class="log-level-filter">
+        <select v-model="logLevelFilter" class="form-control">
+          <option value="all">全部级别</option>
+          <option value="INFO">INFO</option>
+          <option value="WARN">WARN</option>
+          <option value="ERROR">ERROR</option>
+          <option value="DEBUG">DEBUG</option>
+        </select>
       </div>
-      
-      <div class="h-96 overflow-auto bg-slate-900 rounded-xl p-4 font-mono text-sm">
-        <div 
-          v-for="(log, index) in filteredLogs" 
-          :key="index"
-          class="mb-1 flex"
-        >
-          <span class="text-slate-500 w-32 shrink-0">{{ log.time }}</span>
-          <span 
-            class="px-1.5 py-0.5 rounded text-xs font-medium mx-2 shrink-0"
-            :class="[
-              log.level === 'INFO' ? 'bg-blue-500 text-white' :
-              log.level === 'WARN' ? 'bg-yellow-500 text-white' :
-              'bg-red-500 text-white'
-            ]"
-          >
-            {{ log.level }}
-          </span>
-          <span :class="[
-            log.level === 'ERROR' ? 'text-red-400' :
-            log.level === 'WARN' ? 'text-yellow-400' :
-            'text-slate-300'
-          ]">
-            {{ log.message }}
-          </span>
-        </div>
-        <div v-if="logs.length === 0" class="text-slate-500 text-center py-8">
-          暂无日志
-        </div>
+      <button class="btn btn-danger" @click="clearLogs">
+        <i class="fas fa-trash"></i> 清空日志
+      </button>
+      <button class="btn btn-secondary" @click="downloadLogs">
+        <i class="fas fa-download"></i> 下载日志
+      </button>
+      <button 
+        class="btn" 
+        :class="autoScroll ? 'btn-primary' : 'btn-outline'"
+        @click="toggleAutoScroll"
+      >
+        <i class="fas fa-arrow-down"></i> 自动滚动: {{ autoScroll ? '开' : '关' }}
+      </button>
+    </div>
+    <div 
+      class="logs-container" 
+      ref="logsContainer"
+      role="log" 
+      aria-live="polite" 
+      aria-atomic="false"
+    >
+      <div 
+        v-for="(log, index) in filteredLogs" 
+        :key="index"
+        class="log-entry"
+        :class="log.level.toLowerCase()"
+      >
+        <span class="log-time">{{ log.time }}</span>
+        <span class="log-level" :class="log.level.toLowerCase()">{{ log.level }}</span>
+        <span class="log-message">{{ log.message }}</span>
       </div>
-      
-      <div class="mt-4 flex items-center justify-between">
-        <div class="flex items-center gap-4 text-sm text-slate-500">
-          <span>日志数量: {{ logs.length }}</span>
-          <span>INFO: {{ infoCount }}</span>
-          <span>WARN: {{ warnCount }}</span>
-          <span>ERROR: {{ errorCount }}</span>
-        </div>
-        <button 
-          class="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-2"
-          @click="toggleAutoScroll"
-        >
-          <i :class="['fas', autoScroll ? 'fa-check' : 'fa-times']"></i>
-          {{ autoScroll ? '自动滚动' : '停止滚动' }}
-        </button>
+      <div v-if="logs.length === 0" class="empty-logs">
+        <i class="fas fa-file-alt"></i>
+        <span>暂无日志</span>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 
 const logs = ref([])
-const filterLevel = ref('all')
+const logLevelFilter = ref('all')
 const autoScroll = ref(true)
-
-let logInterval = null
-
-const logMessages = [
-  { level: 'INFO', message: 'API server started on port 3000' },
-  { level: 'INFO', message: 'Loaded 5 provider configurations' },
-  { level: 'INFO', message: 'Plugin default-auth loaded successfully' },
-  { level: 'INFO', message: 'Plugin ai-monitor loaded successfully' },
-  { level: 'WARN', message: 'Provider OpenAI-Backup has 0 healthy accounts' },
-  { level: 'INFO', message: 'Health check completed for all providers' },
-  { level: 'INFO', message: 'API request received: /api/v1/chat/completions' },
-  { level: 'INFO', message: 'Request completed successfully in 125ms' },
-  { level: 'ERROR', message: 'Failed to refresh token for provider Gemini-Primary' },
-  { level: 'INFO', message: 'Token refreshed successfully after retry' },
-  { level: 'INFO', message: 'New provider added: Claude-Enterprise' },
-  { level: 'WARN', message: 'High memory usage detected: 78%' },
-  { level: 'INFO', message: 'Config file saved successfully' },
-  { level: 'INFO', message: 'Plugin model-usage-stats loaded successfully' },
-  { level: 'INFO', message: 'API request received: /api/v1/models' },
-  { level: 'INFO', message: 'Model list retrieved successfully' },
-  { level: 'ERROR', message: 'Provider Qwen-Cloud connection timeout' },
-  { level: 'INFO', message: 'Provider fallback to secondary node' },
-  { level: 'INFO', message: 'System health check passed' },
-  { level: 'INFO', message: 'Server time synchronized' }
-]
+const logsContainer = ref(null)
+let eventSource = null
+let pollInterval = null
 
 const filteredLogs = computed(() => {
-  if (filterLevel.value === 'all') return logs.value
-  return logs.value.filter(log => log.level === filterLevel.value.toUpperCase())
+  if (logLevelFilter.value === 'all') return logs.value
+  return logs.value.filter(log => log.level === logLevelFilter.value)
 })
 
-const infoCount = computed(() => logs.value.filter(l => l.level === 'INFO').length)
-const warnCount = computed(() => logs.value.filter(l => l.level === 'WARN').length)
-const errorCount = computed(() => logs.value.filter(l => l.level === 'ERROR').length)
-
-const addLog = () => {
-  const randomLog = logMessages[Math.floor(Math.random() * logMessages.length)]
-  const now = new Date()
-  const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
-  
-  logs.value.push({
-    time: timeStr,
-    level: randomLog.level,
-    message: randomLog.message
+const formatTime = (date) => {
+  return date.toLocaleTimeString('zh-CN', { 
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
   })
-  
-  if (logs.value.length > 100) {
-    logs.value.shift()
-  }
-  
-  if (autoScroll.value) {
-    setTimeout(() => {
-      const container = document.querySelector('.h-96')
-      if (container) {
-        container.scrollTop = container.scrollHeight
-      }
-    }, 100)
+}
+
+const addLog = (data) => {
+  try {
+    const logEntry = typeof data === 'string' ? JSON.parse(data) : data
+    logs.value.push({
+      time: logEntry.time || formatTime(new Date()),
+      level: logEntry.level || 'INFO',
+      message: logEntry.message || data
+    })
+    
+    if (logs.value.length > 1000) {
+      logs.value = logs.value.slice(-1000)
+    }
+    
+    if (autoScroll.value && logsContainer.value) {
+      logsContainer.value.scrollTop = logsContainer.value.scrollHeight
+    }
+  } catch (e) {
+    console.error('Failed to parse log:', e)
   }
 }
 
@@ -141,37 +99,255 @@ const clearLogs = () => {
   logs.value = []
 }
 
+const downloadLogs = () => {
+  const content = logs.value.map(log => 
+    `${log.time} [${log.level}] ${log.message}`
+  ).join('\n')
+  
+  const blob = new Blob([content], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `logs_${new Date().toISOString().slice(0, 10)}.txt`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 const toggleAutoScroll = () => {
   autoScroll.value = !autoScroll.value
 }
 
+const fetchLogs = async () => {
+  try {
+    const response = await fetch('/api/logs')
+    if (response.ok) {
+      const data = await response.json()
+      logs.value = data.map(log => ({
+        time: log.time,
+        level: log.level,
+        message: log.message
+      }))
+    }
+  } catch (error) {
+    console.error('Failed to fetch logs:', error)
+  }
+}
+
 onMounted(() => {
-  logs.value = [
-    { time: '10:00:00', level: 'INFO', message: 'AIClient2API service started' },
-    { time: '10:00:01', level: 'INFO', message: 'Loading configuration...' },
-    { time: '10:00:02', level: 'INFO', message: 'Configuration loaded successfully' },
-    { time: '10:00:03', level: 'INFO', message: 'Initializing providers...' },
-    { time: '10:00:04', level: 'INFO', message: 'All providers initialized' },
-    { time: '10:00:05', level: 'INFO', message: 'Server ready on http://localhost:3000' }
-  ]
+  fetchLogs()
   
-  logInterval = setInterval(addLog, 3000)
+  try {
+    eventSource = new EventSource('/api/logs/stream')
+    eventSource.onmessage = (event) => {
+      addLog(event.data)
+    }
+    eventSource.onerror = () => {
+      eventSource.close()
+      pollInterval = setInterval(fetchLogs, 2000)
+    }
+  } catch (error) {
+    pollInterval = setInterval(fetchLogs, 2000)
+  }
+  
+  watch(autoScroll, (newVal) => {
+    if (newVal && logsContainer.value) {
+      logsContainer.value.scrollTop = logsContainer.value.scrollHeight
+    }
+  })
 })
 
 onUnmounted(() => {
-  if (logInterval) {
-    clearInterval(logInterval)
+  if (eventSource) {
+    eventSource.close()
+  }
+  if (pollInterval) {
+    clearInterval(pollInterval)
   }
 })
 </script>
 
 <style scoped>
-.logs-page {
+.section {
   animation: fadeIn 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 8rem);
 }
 
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+h2 {
+  margin-bottom: 1rem;
+}
+
+.logs-controls {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.log-level-filter {
+  flex-shrink: 0;
+}
+
+.form-control {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-primary {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-tertiary);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-outline:hover {
+  background: var(--bg-tertiary);
+}
+
+.btn-danger {
+  background: var(--danger-color);
+  color: white;
+  border-color: var(--danger-color);
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+.logs-container {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  overflow-y: auto;
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.log-entry {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.log-entry:last-child {
+  border-bottom: none;
+}
+
+.log-time {
+  color: var(--log-time);
+  flex-shrink: 0;
+  min-width: 70px;
+}
+
+.log-level {
+  flex-shrink: 0;
+  min-width: 50px;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.log-level.info {
+  background: var(--log-info);
+  color: #0f766e;
+}
+
+.log-level.warn {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.log-level.error {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.log-level.debug {
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.log-message {
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.empty-logs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+}
+
+.empty-logs i {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+@media (max-width: 768px) {
+  .logs-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .log-entry {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .log-time, .log-level {
+    min-width: auto;
+  }
 }
 </style>

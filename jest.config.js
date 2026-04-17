@@ -17,7 +17,8 @@ export default {
     '\\.(css|less|scss)$': 'jest-transform-stub'
   },
   testMatch: [
-    '**/tests/**/*.test.js'
+    '**/tests/e2e/**/*.test.js',
+    '**/tests/**/*.unit.test.js'
   ],
   collectCoverageFrom: [
     'src/**/*.js',

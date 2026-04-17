@@ -188,12 +188,14 @@ export async function handleHealthCheck(req, res) {
     return true;
 }
 
+import { CONFIG } from '../core/config-manager.js';
+
 /**
  * 获取服务模式信息
  */
 export async function handleGetServiceMode(req, res) {
     const IS_WORKER_PROCESS = process.env.IS_WORKER_PROCESS === 'true';
-    const masterPort = process.env.MASTER_PORT || 3100;
+    const masterPort = CONFIG.MASTER_PORT || process.env.MASTER_PORT || 3100;
     
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({

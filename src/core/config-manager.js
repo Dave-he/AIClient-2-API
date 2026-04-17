@@ -17,6 +17,12 @@ const VALIDATION_RULES = {
         required: true,
         errorMsg: 'SERVER_PORT must be between 1 and 65535'
     },
+    MASTER_PORT: {
+        type: 'int',
+        min: 1,
+        max: 65535,
+        errorMsg: 'MASTER_PORT must be between 1 and 65535'
+    },
     LOGIN_EXPIRY: {
         type: 'int',
         min: 60,
@@ -312,6 +318,7 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         REQUIRED_API_KEY: "123456",
         SERVER_PORT: 3000,
         HOST: '0.0.0.0',
+        MASTER_PORT: 3100,
         MODEL_PROVIDER: MODEL_PROVIDER.GEMINI_CLI,
         SYSTEM_PROMPT_FILE_PATH: INPUT_SYSTEM_PROMPT_FILE,
         SYSTEM_PROMPT_MODE: 'append',
@@ -391,8 +398,8 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         { flag: '--login-max-attempts',   configKey: 'LOGIN_MAX_ATTEMPTS',     type: 'int' },
         { flag: '--login-lockout-duration', configKey: 'LOGIN_LOCKOUT_DURATION', type: 'int' },
         { flag: '--login-min-interval',   configKey: 'LOGIN_MIN_INTERVAL',     type: 'int' },
-        { flag: '--scheduled-health-check-enabled', configKey: 'SCHEDULE_HEALTH_CHECK_ENABLED', type: 'bool' },
-        { flag: '--scheduled-health-check-interval', configKey: 'SCHEDULE_HEALTH_CHECK_INTERVAL', type: 'int' },
+        { flag: '--scheduled-health-check-enabled', configKey: 'SCHEDULED_HEALTH_CHECK.enabled', type: 'bool' },
+        { flag: '--scheduled-health-check-interval', configKey: 'SCHEDULED_HEALTH_CHECK.interval', type: 'int' },
     ];
 
     // Parse command-line arguments using definitions
@@ -425,14 +432,6 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
                 }
                 break;
         }
-    }
-
-    // 合并定时健康检查的 CLI 配置
-    if (currentConfig.SCHEDULE_HEALTH_CHECK_ENABLED !== undefined) {
-        currentConfig.SCHEDULED_HEALTH_CHECK.enabled = currentConfig.SCHEDULE_HEALTH_CHECK_ENABLED;
-    }
-    if (currentConfig.SCHEDULE_HEALTH_CHECK_INTERVAL !== undefined) {
-        currentConfig.SCHEDULED_HEALTH_CHECK.interval = currentConfig.SCHEDULE_HEALTH_CHECK_INTERVAL;
     }
 
     normalizeConfiguredProviders(currentConfig);

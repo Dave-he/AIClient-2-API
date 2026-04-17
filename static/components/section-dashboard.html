@@ -98,7 +98,36 @@
                 </div>
             </div>
 
-            <!-- Python服务端GPU监控面板 -->
+            <!-- Token使用趋势面板 -->
+            <div class="panel token-trend-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-line-chart"></i> <span data-i18n="dashboard.tokenTrend">Token使用趋势</span></h3>
+                    <div class="time-range-tabs">
+                        <button class="time-range-tab active" data-time-range="hour">最近一小时</button>
+                        <button class="time-range-tab" data-time-range="day">最近一天</button>
+                        <button class="time-range-tab" data-time-range="week">最近一周</button>
+                    </div>
+                </div>
+                <div class="chart-area token-chart-area">
+                    <canvas id="tokenTrendChart"></canvas>
+                </div>
+                <div class="chart-legend" id="tokenChartLegend">
+                    <div class="legend-item">
+                        <span class="legend-color prompt"></span>
+                        <span>输入Token</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color completion"></span>
+                        <span>输出Token</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color total"></span>
+                        <span>总Token</span>
+                    </div>
+                </div>
+            </div>
+
+        <!-- Python服务端GPU监控面板 -->
             <div class="panel python-gpu-monitor">
                 <div class="panel-header">
                     <h3><i class="fas fa-server"></i> <span data-i18n="dashboard.pythonGpuMonitor">Python服务端GPU监控</span></h3>

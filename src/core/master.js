@@ -18,6 +18,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { isRetryableNetworkError } from '../utils/common.js';
 import os from 'os';
+import { initializeConfig, CONFIG } from '../core/config-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,21 +35,7 @@ let workerStatus = {
     isRestarting: false
 };
 
-// 配置
-const config = {
-    workerScript: path.join(__dirname, '../services/api-server.js'),
-    maxRestartAttempts: 10,
-    restartDelay: 1000, // 重启延迟（毫秒）
-    masterPort: parseInt(process.env.MASTER_PORT) || 3100, // 主进程管理端口
-    args: process.argv.slice(2), // 传递给子进程的参数
-    resourceMonitor: {
-        enabled: process.env.RESOURCE_MONITOR_ENABLED !== 'false',
-        interval: parseInt(process.env.RESOURCE_MONITOR_INTERVAL) || 5000, // 监控间隔（毫秒）
-        cpuThreshold: parseFloat(process.env.CPU_THRESHOLD) || 80, // CPU使用率阈值（百分比）
-        memoryThreshold: parseFloat(process.env.MEMORY_THRESHOLD) || 80, // 内存使用率阈值（百分比）
-        maxConsecutiveAlerts: parseInt(process.env.MAX_CONSECUTIVE_ALERTS) || 3 // 最大连续告警次数
-    }
-};
+let config = {};
 
 // 资源监控状态
 const resourceMonitorStatus = {
@@ -575,14 +562,39 @@ function setupSignalHandlers() {
 }
 
 /**
+ * 初始化配置
+ */
+async function initConfig() {
+    await initializeConfig(process.argv.slice(2));
+    
+    config = {
+        workerScript: path.join(__dirname, '../services/api-server.js'),
+        maxRestartAttempts: 10,
+        restartDelay: 1000,
+        masterPort: CONFIG.MASTER_PORT || parseInt(process.env.MASTER_PORT) || 3100,
+        args: process.argv.slice(2),
+        resourceMonitor: {
+            enabled: process.env.RESOURCE_MONITOR_ENABLED !== 'false',
+            interval: parseInt(process.env.RESOURCE_MONITOR_INTERVAL) || 5000,
+            cpuThreshold: parseFloat(process.env.CPU_THRESHOLD) || 80,
+            memoryThreshold: parseFloat(process.env.MEMORY_THRESHOLD) || 80,
+            maxConsecutiveAlerts: parseInt(process.env.MAX_CONSECUTIVE_ALERTS) || 3
+        }
+    };
+}
+
+/**
  * 主函数
  */
 async function main() {
+    await initConfig();
+    
     logger.info('='.repeat(50));
     logger.info('[Master] AIClient2API Master Process');
     logger.info('[Master] PID:', process.pid);
     logger.info('[Master] Node version:', process.version);
     logger.info('[Master] Working directory:', process.cwd());
+    logger.info('[Master] Management port:', config.masterPort);
     logger.info('='.repeat(50));
 
     // 设置信号处理

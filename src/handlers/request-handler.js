@@ -71,6 +71,7 @@ function parseRequestBody(req, config) {
  * @returns {Function} - The request handler function
  */
 export function createRequestHandler(config, providerPoolManager) {
+    const pluginManager = getPluginManager();
     return async function requestHandler(req, res) {
         // Generate unique request ID and set it in logger context
         const clientIp = getClientIp(req);
@@ -104,23 +105,11 @@ export function createRequestHandler(config, providerPoolManager) {
                     return;
                 }
 
-                // Serve static files for UI (除了登录页面需要认证)
-                // 检查是否是插件静态文件
-                const pluginManager = getPluginManager();
-                const isPluginStatic = pluginManager.isPluginStaticPath(path);
-                const pluginStaticOwner = isPluginStatic ? pluginManager.getPluginByStaticPath(path) : null;
-                if (pluginStaticOwner && !pluginStaticOwner._enabled) {
-                    res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
-                    res.end(JSON.stringify({
-                        success: false,
-                        error: {
-                            message: `插件未启用：${pluginStaticOwner.name}`,
-                            code: 'PLUGIN_DISABLED'
-                        }
-                    }));
-                    return;
-                }
-                if (path.startsWith('/static/') || path === '/' || path === '/favicon.ico' || path === '/index.html' || path.startsWith('/app/') || path.startsWith('/components/') || path === '/login.html' || isPluginStatic || path.startsWith('/assets/') || path === '/vite.svg' || path.startsWith('/@vite/')) {
+                // Serve static files from static/ directory (old UI)
+                // 只提供static目录下的旧界面静态文件
+                if (path === '/' || path === '/index.html' || path === '/login.html' || 
+                    path.startsWith('/static/') || path.startsWith('/app/') || 
+                    path.startsWith('/components/') || path === '/favicon.ico') {
                     const served = await serveStaticFiles(path, res, currentConfig);
                     if (served) return;
                 }
@@ -393,11 +382,21 @@ export function createRequestHandler(config, providerPoolManager) {
                 } catch (error) {
                     handleError(res, error, currentConfig.MODEL_PROVIDER, null, req);
                 }
-            } finally {
-                // Clear request context after request is complete
-                logger.clearRequestContext(requestId);
-            }
-        });
-    };
+            } catch (error) {
+                    logger.error(`[Server] Unhandled error in request handler: ${error.message}`, error);
+                    try {
+                        if (!res.headersSent) {
+                            res.writeHead(500, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                        }
+                    } catch (e) {
+                        logger.error(`[Server] Failed to send error response: ${e.message}`);
+                    }
+                } finally {
+                    // Clear request context after request is complete
+                    logger.clearRequestContext(requestId);
+                }
+            });
+        };
 
-}
+    }

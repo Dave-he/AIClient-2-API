@@ -2,6 +2,7 @@
   "REQUIRED_API_KEY": "sk-2e3513944ecac08f466a2e01872ba91d",
   "SERVER_PORT": 30000,
   "HOST": "0.0.0.0",
+  "MASTER_PORT": 3100,
   "MODEL_PROVIDER": "openai-custom",
   "DEFAULT_MODEL_PROVIDERS": [
     "openai-custom",

@@ -1,894 +1,589 @@
 <template>
-  <div class="gpu-monitor-container">
-    <div class="gpu-status-panel">
-      <div class="panel-header">
-        <h3><i class="fas fa-microchip"></i> GPU状态</h3>
-        <button 
-          class="btn btn-outline btn-sm"
-          @click="refreshGpuStatus"
-        >
-          <i class="fas fa-sync-alt"></i> 刷新
-        </button>
+  <section id="gpu-monitor" class="section" aria-labelledby="gpu-monitor-title">
+    <h2 id="gpu-monitor-title">GPU监控</h2>
+    
+    <div class="gpu-summary">
+      <div class="summary-card">
+        <div class="summary-icon">
+          <i class="fas fa-microchip"></i>
+        </div>
+        <div class="summary-info">
+          <h3>{{ gpuCount }}</h3>
+          <p>GPU设备</p>
+        </div>
       </div>
-      
-      <div class="gpu-status-content" :key="'gpu-status-' + refreshKey">
-        <div v-if="gpuStatus.loading" class="status-loading">
-          <i class="fas fa-spinner fa-spin"></i>
-          <span>加载中...</span>
+      <div class="summary-card">
+        <div class="summary-icon">
+          <i class="fas fa-percentage"></i>
         </div>
-        <div v-else-if="gpuStatus.error" class="status-error">
-          <i class="fas fa-exclamation-triangle"></i>
-          <span>{{ gpuStatus.error }}</span>
+        <div class="summary-info">
+          <h3>{{ avgUtilization }}%</h3>
+          <p>平均利用率</p>
         </div>
-        <div v-else-if="gpuStatus.devices && gpuStatus.devices.length > 0" class="devices-grid">
-          <div 
-            v-for="(device, index) in gpuStatus.devices" 
-            :key="index"
-            class="device-card"
-          >
-            <div class="device-header">
-              <span class="device-name">{{ device.name }}</span>
-              <span 
-                class="device-status"
-                :class="device.status"
-              >
-                {{ device.status === 'healthy' ? '正常' : '异常' }}
+      </div>
+      <div class="summary-card">
+        <div class="summary-icon">
+          <i class="fas fa-memory"></i>
+        </div>
+        <div class="summary-info">
+          <h3>{{ totalMemoryUsed }} / {{ totalMemory }}</h3>
+          <p>显存使用</p>
+        </div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-icon">
+          <i class="fas fa-thermometer-half"></i>
+        </div>
+        <div class="summary-info">
+          <h3>{{ avgTemperature }}°C</h3>
+          <p>平均温度</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="gpu-cards-container">
+      <div 
+        v-for="(gpu, index) in gpus" 
+        :key="index"
+        class="gpu-card"
+      >
+        <div class="gpu-header">
+          <div class="gpu-name">
+            <i class="fas fa-video-card"></i>
+            <span>{{ gpu.name }}</span>
+          </div>
+          <span class="gpu-status" :class="gpu.status">{{ gpu.status === 'running' ? '运行中' : '空闲' }}</span>
+        </div>
+        
+        <div class="gpu-metrics">
+          <div class="metric">
+            <div class="metric-header">
+              <span class="metric-label">GPU使用率</span>
+              <span class="metric-value">{{ gpu.utilization }}%</span>
+            </div>
+            <div class="metric-bar">
+              <div 
+                class="metric-fill utilization" 
+                :style="{ width: gpu.utilization + '%' }"
+              ></div>
+            </div>
+          </div>
+          
+          <div class="metric">
+            <div class="metric-header">
+              <span class="metric-label">显存使用</span>
+              <span class="metric-value">{{ gpu.memoryUsed }} / {{ gpu.memoryTotal }}</span>
+            </div>
+            <div class="metric-bar">
+              <div 
+                class="metric-fill memory" 
+                :style="{ width: gpu.memoryPercent + '%' }"
+              ></div>
+            </div>
+          </div>
+          
+          <div class="metric">
+            <div class="metric-header">
+              <span class="metric-label">温度</span>
+              <span class="metric-value" :class="{ warning: gpu.temperature > 80 }">
+                {{ gpu.temperature }}°C
               </span>
             </div>
-            <div class="device-info">
-              <div class="info-row">
-                <span class="info-label">显存</span>
-                <div class="progress-bar">
-                  <div 
-                    class="progress-fill"
-                    :style="{ width: device.memoryUsage + '%' }"
-                  ></div>
-                </div>
-                <span class="info-value">{{ device.memoryUsed }} / {{ device.memoryTotal }}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">使用率</span>
-                <div class="progress-bar">
-                  <div 
-                    class="progress-fill usage"
-                    :style="{ width: device.utilization + '%' }"
-                  ></div>
-                </div>
-                <span class="info-value">{{ device.utilization }}%</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">温度</span>
-                <div class="progress-bar">
-                  <div 
-                    class="progress-fill temp"
-                    :style="{ width: Math.min(device.temperature, 100) + '%' }"
-                  ></div>
-                </div>
-                <span class="info-value" :class="{ warning: device.temperature > 80 }">
-                  {{ device.temperature }}°C
-                </span>
-              </div>
+            <div class="metric-bar">
+              <div 
+                class="metric-fill temperature" 
+                :class="{ warning: gpu.temperature > 80, danger: gpu.temperature > 90 }"
+                :style="{ width: gpu.temperature + '%' }"
+              ></div>
+            </div>
+          </div>
+          
+          <div class="metric">
+            <div class="metric-header">
+              <span class="metric-label">功耗</span>
+              <span class="metric-value">{{ gpu.power }}W</span>
+            </div>
+            <div class="metric-bar">
+              <div 
+                class="metric-fill power" 
+                :style="{ width: gpu.powerPercent + '%' }"
+              ></div>
             </div>
           </div>
         </div>
-        <div v-else class="status-empty">
-          <i class="fas fa-video-card"></i>
-          <span>未检测到GPU设备</span>
+        
+        <div class="gpu-details">
+          <div class="detail-row">
+            <span class="detail-label">显存容量</span>
+            <span class="detail-value">{{ gpu.memoryTotal }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">驱动版本</span>
+            <span class="detail-value">{{ gpu.driverVersion }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">CUDA版本</span>
+            <span class="detail-value">{{ gpu.cudaVersion }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">UUID</span>
+            <span class="detail-value">{{ gpu.uuid }}</span>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="gpu-charts-panel">
-      <div class="panel-header">
-        <h3><i class="fas fa-chart-line"></i> 历史监控</h3>
-        <div class="chart-tabs">
-          <button 
-            v-for="tab in chartTabs" 
-            :key="tab.id"
-            class="chart-tab"
-            :class="{ active: activeChartTab === tab.id }"
-            @click="activeChartTab = tab.id"
+    <div class="gpu-settings">
+      <h3><i class="fas fa-cog"></i> GPU设置</h3>
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label>启用GPU监控</label>
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="settings.gpuMonitorEnabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="setting-item">
+          <label>自动风扇控制</label>
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="settings.autoFanControl">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="setting-item">
+          <label>温度预警阈值</label>
+          <input 
+            type="number" 
+            v-model="settings.tempThreshold" 
+            class="form-control" 
+            min="60" 
+            max="100"
           >
-            {{ tab.label }}
-          </button>
         </div>
-      </div>
-      
-      <div class="gpu-chart-content">
-        <canvas id="gpuChart"></canvas>
-      </div>
-      
-      <div class="chart-legend">
-        <div class="legend-item">
-          <span class="legend-color utilization"></span>
-          <span>GPU使用率</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-color temperature"></span>
-          <span>温度(°C)</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-color memory"></span>
-          <span>显存使用率</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="models-status-panel">
-      <div class="panel-header">
-        <h3><i class="fas fa-cubes"></i> 模型状态</h3>
-      </div>
-      
-      <div class="models-status-content" :key="'models-' + refreshKey">
-        <div v-if="modelsStatus.loading" class="status-loading">
-          <i class="fas fa-spinner fa-spin"></i>
-          <span>加载中...</span>
-        </div>
-        <div v-else-if="modelsStatus.models && modelsStatus.models.length > 0" class="models-list">
-          <div 
-            v-for="model in modelsStatus.models" 
-            :key="model.name"
-            class="model-item"
-            :class="model.status"
+        <div class="setting-item">
+          <label>监控刷新间隔(秒)</label>
+          <input 
+            type="number" 
+            v-model="settings.refreshInterval" 
+            class="form-control" 
+            min="1" 
+            max="60"
           >
-            <div class="model-icon">
-              <i class="fas fa-cube"></i>
-            </div>
-            <div class="model-info">
-              <span class="model-name">{{ model.name }}</span>
-              <span class="model-size">{{ model.size }}</span>
-            </div>
-            <span class="model-status">
-              {{ model.status === 'loaded' ? '已加载' : model.status === 'loading' ? '加载中' : '未加载' }}
-            </span>
-          </div>
-        </div>
-        <div v-else class="status-empty">
-          <i class="fas fa-inbox"></i>
-          <span>暂无模型</span>
         </div>
       </div>
+      <button class="btn btn-primary" @click="saveSettings">
+        <i class="fas fa-save"></i> 保存设置
+      </button>
     </div>
-
-    <div class="queue-status-panel">
-      <div class="panel-header">
-        <h3><i class="fas fa-list-ol"></i> 队列状态</h3>
-      </div>
-      
-      <div class="queue-status-content" :key="'queue-' + refreshKey">
-        <div v-if="queueStatus.loading" class="status-loading">
-          <i class="fas fa-spinner fa-spin"></i>
-          <span>加载中...</span>
-        </div>
-        <div v-else class="queue-info">
-          <div class="queue-item">
-            <span class="queue-label">等待队列</span>
-            <span class="queue-value">{{ queueStatus.pending || 0 }}</span>
-          </div>
-          <div class="queue-item">
-            <span class="queue-label">处理中</span>
-            <span class="queue-value processing">{{ queueStatus.processing || 0 }}</span>
-          </div>
-          <div class="queue-item">
-            <span class="queue-label">今日完成</span>
-            <span class="queue-value completed">{{ queueStatus.completedToday || 0 }}</span>
-          </div>
-          <div class="queue-item">
-            <span class="queue-label">平均延迟</span>
-            <span class="queue-value">{{ queueStatus.avgLatency || '--' }}ms</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="control-panel">
-      <div class="panel-header">
-        <h3><i class="fas fa-play"></i> 模型控制</h3>
-      </div>
-      
-      <div class="model-controls" :key="'controls-' + refreshKey">
-        <div v-if="controlStatus.loading" class="status-loading">
-          <i class="fas fa-spinner fa-spin"></i>
-          <span>加载中...</span>
-        </div>
-        <div v-else-if="availableModels.length > 0" class="controls-list">
-          <div 
-            v-for="model in availableModels" 
-            :key="model.name"
-            class="control-item"
-          >
-            <div class="control-info">
-              <span class="control-name">{{ model.name }}</span>
-              <span class="control-desc">{{ model.description }}</span>
-            </div>
-            <div class="control-actions">
-              <button 
-                v-if="!model.loaded"
-                class="btn btn-primary btn-sm"
-                @click="loadModel(model.name)"
-              >
-                <i class="fas fa-download"></i> 加载
-              </button>
-              <button 
-                v-else
-                class="btn btn-danger btn-sm"
-                @click="unloadModel(model.name)"
-              >
-                <i class="fas fa-trash"></i> 卸载
-              </button>
-            </div>
-          </div>
-        </div>
-        <div v-else class="status-empty">
-          <i class="fas fa-server"></i>
-          <span>暂无可用模型</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="controller-integration">
-      <div class="panel-header">
-        <h3><i class="fas fa-desktop"></i> AI控制器</h3>
-        <div class="controller-status">
-          <span 
-            id="controllerConnectionStatus" 
-            class="status-badge"
-            :class="{ offline: !controllerConnected, online: controllerConnected }"
-          >
-            <i class="fas fa-circle"></i> 
-            {{ controllerConnected ? '已连接' : '未连接' }}
-          </span>
-        </div>
-      </div>
-      
-      <div class="iframe-container">
-        <div v-if="!controllerConnected" class="iframe-placeholder">
-          <i class="fas fa-server"></i>
-          <p>AI控制器未启动或配置</p>
-          <p class="hint">请启动 Python 控制器服务以查看详细监控面板</p>
-        </div>
-        <iframe 
-          v-else
-          id="controllerIframe" 
-          :src="controllerUrl"
-          frameborder="0" 
-          allowfullscreen
-        ></iframe>
-      </div>
-    </div>
-  </div>
+  </section>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
+import { ref, computed, reactive } from 'vue'
 
-const gpuStatus = ref({
-  loading: true,
-  error: '',
-  devices: []
+const gpus = ref([
+  {
+    name: 'NVIDIA RTX 4090',
+    status: 'running',
+    utilization: 78,
+    memoryUsed: '14.2 GB',
+    memoryTotal: '24 GB',
+    memoryPercent: 59,
+    temperature: 72,
+    power: '285',
+    powerPercent: 71,
+    driverVersion: '545.29.06',
+    cudaVersion: '12.3',
+    uuid: 'GPU-01234567-89ab-cdef-0123-456789abcdef'
+  },
+  {
+    name: 'NVIDIA RTX 4090',
+    status: 'idle',
+    utilization: 5,
+    memoryUsed: '2.1 GB',
+    memoryTotal: '24 GB',
+    memoryPercent: 9,
+    temperature: 45,
+    power: '45',
+    powerPercent: 11,
+    driverVersion: '545.29.06',
+    cudaVersion: '12.3',
+    uuid: 'GPU-abcdef01-2345-6789-abcd-ef0123456789'
+  }
+])
+
+const settings = reactive({
+  gpuMonitorEnabled: true,
+  autoFanControl: true,
+  tempThreshold: 80,
+  refreshInterval: 5
 })
 
-const modelsStatus = ref({
-  loading: true,
-  models: []
+const gpuCount = computed(() => gpus.value.length)
+
+const avgUtilization = computed(() => {
+  const total = gpus.value.reduce((sum, gpu) => sum + gpu.utilization, 0)
+  return Math.round(total / gpus.value.length)
 })
 
-const queueStatus = ref({
-  loading: true,
-  pending: 0,
-  processing: 0,
-  completedToday: 0,
-  avgLatency: '--'
-})
-
-const controlStatus = ref({
-  loading: true
-})
-
-const availableModels = ref([])
-const activeChartTab = ref('utilization')
-const refreshKey = ref(0)
-const controllerConnected = ref(false)
-const controllerUrl = ref('')
-
-const chartTabs = [
-  { id: 'utilization', label: '使用率' },
-  { id: 'temperature', label: '温度' },
-  { id: 'memory', label: '显存' }
-]
-
-let refreshInterval = null
-
-const getToken = () => {
-  return localStorage.getItem('authToken')
-}
-
-const createAxiosInstance = () => {
-  const token = getToken()
-  return axios.create({
-    baseURL: window.location.origin,
-    headers: {
-      'Authorization': token ? `Bearer ${token}` : '',
-      'Content-Type': 'application/json'
-    }
+const totalMemoryUsed = computed(() => {
+  const total = gpus.value.reduce((sum, gpu) => {
+    const used = parseFloat(gpu.memoryUsed)
+    return sum + used
   })
-}
-
-const fetchGpuStatus = async () => {
-  try {
-    gpuStatus.value.loading = true
-    gpuStatus.value.error = ''
-    
-    const api = createAxiosInstance()
-    const response = await api.get('/api/gpu/status')
-    gpuStatus.value.devices = response.data.devices || []
-  } catch (error) {
-    gpuStatus.value.error = '无法获取GPU状态'
-    console.error('Failed to fetch GPU status:', error)
-  } finally {
-    gpuStatus.value.loading = false
-  }
-}
-
-const fetchModelsStatus = async () => {
-  try {
-    modelsStatus.value.loading = true
-    
-    const api = createAxiosInstance()
-    const response = await api.get('/api/gpu/models')
-    modelsStatus.value.models = response.data.models || []
-  } catch (error) {
-    console.error('Failed to fetch models status:', error)
-  } finally {
-    modelsStatus.value.loading = false
-  }
-}
-
-const fetchQueueStatus = async () => {
-  try {
-    queueStatus.value.loading = true
-    
-    const api = createAxiosInstance()
-    const response = await api.get('/api/gpu/queue')
-    queueStatus.value = {
-      loading: false,
-      pending: response.data.pending || 0,
-      processing: response.data.processing || 0,
-      completedToday: response.data.completedToday || 0,
-      avgLatency: response.data.avgLatency || '--'
-    }
-  } catch (error) {
-    console.error('Failed to fetch queue status:', error)
-    queueStatus.value.loading = false
-  }
-}
-
-const fetchAvailableModels = async () => {
-  try {
-    controlStatus.value.loading = true
-    
-    const api = createAxiosInstance()
-    const response = await api.get('/api/gpu/available-models')
-    availableModels.value = response.data.models || []
-  } catch (error) {
-    console.error('Failed to fetch available models:', error)
-  } finally {
-    controlStatus.value.loading = false
-  }
-}
-
-const checkControllerConnection = async () => {
-  try {
-    const api = createAxiosInstance()
-    const response = await api.get('/api/gpu/controller/status')
-    controllerConnected.value = response.data.connected || false
-    controllerUrl.value = response.data.url || ''
-  } catch (error) {
-    controllerConnected.value = false
-    console.error('Failed to check controller connection:', error)
-  }
-}
-
-const loadModel = async (modelName) => {
-  try {
-    const api = createAxiosInstance()
-    await api.post('/api/gpu/models/load', { model: modelName })
-    refreshKey.value++
-    await fetchModelsStatus()
-    await fetchAvailableModels()
-    alert(`模型 ${modelName} 加载请求已发送`)
-  } catch (error) {
-    alert(`加载模型失败: ${error.message}`)
-  }
-}
-
-const unloadModel = async (modelName) => {
-  try {
-    const api = createAxiosInstance()
-    await api.post('/api/gpu/models/unload', { model: modelName })
-    refreshKey.value++
-    await fetchModelsStatus()
-    await fetchAvailableModels()
-    alert(`模型 ${modelName} 卸载请求已发送`)
-  } catch (error) {
-    alert(`卸载模型失败: ${error.message}`)
-  }
-}
-
-const refreshGpuStatus = async () => {
-  await fetchGpuStatus()
-  await fetchModelsStatus()
-  await fetchQueueStatus()
-  refreshKey.value++
-}
-
-onMounted(async () => {
-  await fetchGpuStatus()
-  await fetchModelsStatus()
-  await fetchQueueStatus()
-  await fetchAvailableModels()
-  await checkControllerConnection()
-
-  refreshInterval = setInterval(async () => {
-    await fetchGpuStatus()
-    await fetchQueueStatus()
-  }, 5000)
+  return total.toFixed(1) + ' GB'
 })
 
-onUnmounted(() => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval)
-  }
+const totalMemory = computed(() => {
+  const total = gpus.value.reduce((sum, gpu) => {
+    const mem = parseFloat(gpu.memoryTotal)
+    return sum + mem
+  })
+  return total + ' GB'
 })
+
+const avgTemperature = computed(() => {
+  const total = gpus.value.reduce((sum, gpu) => sum + gpu.temperature, 0)
+  return Math.round(total / gpus.value.length)
+})
+
+const saveSettings = () => {
+  alert('GPU设置已保存')
+}
 </script>
 
 <style scoped>
-.gpu-monitor-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
+.section {
+  animation: fadeIn 0.3s ease;
 }
 
-.panel {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.gpu-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.summary-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.summary-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--primary-10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+  font-size: 1.25rem;
+}
+
+.summary-info h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.summary-info p {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  margin: 0.25rem 0 0;
+}
+
+.gpu-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.gpu-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+}
+
+.gpu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.gpu-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gpu-name i {
+  color: var(--primary-color);
+}
+
+.gpu-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.gpu-status.running {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.gpu-status.idle {
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.gpu-metrics {
+  margin-bottom: 1rem;
+}
+
+.metric {
+  margin-bottom: 0.75rem;
+}
+
+.metric:last-child {
+  margin-bottom: 0;
+}
+
+.metric-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.metric-label {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.metric-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.metric-value.warning {
+  color: var(--warning-text);
+}
+
+.metric-bar {
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-full);
   overflow: hidden;
 }
 
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid #e2e8f0;
+.metric-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.5s ease;
 }
 
-.panel-header h3 {
-  font-size: 14px;
+.metric-fill.utilization {
+  background: var(--primary-color);
+}
+
+.metric-fill.memory {
+  background: var(--indigo-500);
+}
+
+.metric-fill.temperature {
+  background: var(--success-color);
+}
+
+.metric-fill.temperature.warning {
+  background: var(--warning-color);
+}
+
+.metric-fill.temperature.danger {
+  background: var(--danger-color);
+}
+
+.metric-fill.power {
+  background: var(--info-color);
+}
+
+.gpu-details {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.detail-value {
+  font-size: 0.75rem;
+  color: var(--text-primary);
+}
+
+.gpu-settings {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+}
+
+.gpu-settings h3 {
+  font-size: 1rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.gpu-settings h3 i {
+  color: var(--primary-color);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.setting-item label:first-child {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.form-control {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  width: 100px;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 26px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border-color);
+  transition: 0.3s;
+  border-radius: 26px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--primary-color);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(22px);
 }
 
 .btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
-  border: none;
-  transition: all 0.2s;
-}
-
-.btn-sm {
-  padding: 4px 10px;
-}
-
-.btn-outline {
-  background: #f1f5f9;
-  color: #64748b;
-}
-
-.btn-outline:hover {
-  background: #e2e8f0;
+  border: 1px solid var(--border-color);
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .btn-primary {
-  background: #059669;
+  background: var(--primary-color);
   color: white;
+  border-color: var(--primary-color);
 }
 
 .btn-primary:hover {
-  background: #047857;
+  background: var(--primary-hover);
 }
 
-.btn-danger {
-  background: #dc2626;
-  color: white;
-}
-
-.btn-danger:hover {
-  background: #b91c1c;
-}
-
-.status-loading, .status-empty, .status-error {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 30px;
-  color: #94a3b8;
-}
-
-.status-loading i {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.status-error {
-  color: #dc2626;
-  background: #fef2f2;
-}
-
-.gpu-status-panel, .gpu-charts-panel {
-  grid-column: span 2;
-}
-
-.devices-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-  padding: 16px;
-}
-
-.device-card {
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 14px;
-  border: 1px solid #e2e8f0;
-}
-
-.device-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.device-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.device-status {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.device-status.healthy {
-  background: #dcfce7;
-  color: #059669;
-}
-
-.device-info {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.info-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.info-label {
-  font-size: 12px;
-  color: #64748b;
-  width: 50px;
-}
-
-.progress-bar {
-  flex: 1;
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: #059669;
-  border-radius: 3px;
-  transition: width 0.3s;
-}
-
-.progress-fill.usage {
-  background: #3b82f6;
-}
-
-.progress-fill.temp {
-  background: #f97316;
-}
-
-.info-value {
-  font-size: 12px;
-  color: #334155;
-  width: 70px;
-  text-align: right;
-}
-
-.info-value.warning {
-  color: #dc2626;
-  font-weight: 600;
-}
-
-.chart-tabs {
-  display: flex;
-  gap: 4px;
-}
-
-.chart-tab {
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  background: #f1f5f9;
-  color: #64748b;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.chart-tab.active {
-  background: #059669;
-  color: white;
-}
-
-.gpu-chart-content {
-  padding: 16px;
-  height: 200px;
-  background: #f8fafc;
-}
-
-.chart-legend {
-  display: flex;
-  gap: 16px;
-  padding: 12px 16px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.legend-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-}
-
-.legend-color.utilization { background: #3b82f6; }
-.legend-color.temperature { background: #ef4444; }
-.legend-color.memory { background: #8b5cf6; }
-
-.models-list {
-  padding: 12px;
-}
-
-.model-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px;
-  margin-bottom: 8px;
-  background: #f8fafc;
-  border-radius: 8px;
-  border-left: 3px solid #94a3b8;
-}
-
-.model-item.loaded {
-  border-left-color: #059669;
-}
-
-.model-item.loading {
-  border-left-color: #f59e0b;
-}
-
-.model-icon {
-  width: 36px;
-  height: 36px;
-  background: #e2e8f0;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #64748b;
-}
-
-.model-info {
-  flex: 1;
-}
-
-.model-name {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.model-size {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.model-status {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #f1f5f9;
-  color: #64748b;
-}
-
-.queue-info {
-  padding: 16px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.queue-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px;
-  background: #f8fafc;
-  border-radius: 8px;
-}
-
-.queue-label {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.queue-value {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.queue-value.processing {
-  color: #3b82f6;
-}
-
-.queue-value.completed {
-  color: #059669;
-}
-
-.controls-list {
-  padding: 12px;
-}
-
-.control-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px;
-  margin-bottom: 8px;
-  background: #f8fafc;
-  border-radius: 8px;
-}
-
-.control-info {
-  flex: 1;
-}
-
-.control-name {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.control-desc {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.control-actions {
-  margin-left: 12px;
-}
-
-.controller-integration {
-  grid-column: span 2;
-}
-
-.controller-status {
-  display: flex;
-  align-items: center;
-}
-
-.status-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.status-badge.online {
-  background: #dcfce7;
-  color: #059669;
-}
-
-.status-badge i {
-  font-size: 10px;
-}
-
-.iframe-container {
-  height: 400px;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-}
-
-.iframe-placeholder {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: #94a3b8;
-}
-
-.iframe-placeholder i {
-  font-size: 48px;
-  opacity: 0.5;
-}
-
-.iframe-placeholder p {
-  margin: 0;
-  font-size: 14px;
-}
-
-.iframe-placeholder .hint {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-#iframe {
-  width: 100%;
-  height: 100%;
+@media (max-width: 1024px) {
+  .gpu-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 768px) {
-  .gpu-status-panel, .gpu-charts-panel, .controller-integration {
-    grid-column: span 1;
-  }
-  
-  .devices-grid {
+  .gpu-summary {
     grid-template-columns: 1fr;
   }
   
-  .queue-info {
+  .gpu-cards-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .settings-grid {
     grid-template-columns: 1fr;
   }
 }

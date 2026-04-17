@@ -1,87 +1,46 @@
 <template>
   <aside class="sidebar" role="navigation" aria-label="Main Navigation">
     <nav class="sidebar-nav">
-      <a 
+      <router-link 
         v-for="item in navItems" 
         :key="item.path"
-        :href="item.path" 
+        :to="item.path"
         class="nav-item"
-        :class="{ active: currentSection === item.section }"
+        :class="{ active: isActive(item.path) }"
         :data-section="item.section"
-        @click="handleNavClick(item.section)"
       >
         <i :class="['fas', item.icon]" aria-hidden="true"></i> 
         <span>{{ item.label }}</span>
-      </a>
+      </router-link>
     </nav>
   </aside>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 
-const currentSection = ref('dashboard')
+const route = useRoute()
 
 const navItems = [
-  { path: '#dashboard', label: '仪表盘', icon: 'fa-tachometer-alt', section: 'dashboard' },
-  { path: '#guide', label: '使用指南', icon: 'fa-book', section: 'guide' },
-  { path: '#tutorial', label: '配置教程', icon: 'fa-graduation-cap', section: 'tutorial' },
-  { path: '#config', label: '配置管理', icon: 'fa-cog', section: 'config' },
-  { path: '#providers', label: '提供商池管理', icon: 'fa-network-wired', section: 'providers' },
-  { path: '#custom-models', label: '自定义模型管理', icon: 'fa-cubes', section: 'custom-models' },
-  { path: '#upload-config', label: '凭据文件管理', icon: 'fa-upload', section: 'upload-config' },
-  { path: '#usage', label: '用量查询', icon: 'fa-chart-bar', section: 'usage' },
-  { path: '#plugins', label: '插件管理', icon: 'fa-puzzle-piece', section: 'plugins' },
-  { path: '#logs', label: '实时日志', icon: 'fa-file-alt', section: 'logs' },
-  { path: '#gpu-monitor', label: 'GPU监控', icon: 'fa-video-card', section: 'gpu-monitor' }
+  { path: '/', label: '仪表盘', icon: 'fa-tachometer-alt', section: 'dashboard' },
+  { path: '/guide', label: '使用指南', icon: 'fa-book', section: 'guide' },
+  { path: '/tutorial', label: '配置教程', icon: 'fa-graduation-cap', section: 'tutorial' },
+  { path: '/config', label: '配置管理', icon: 'fa-cog', section: 'config' },
+  { path: '/providers', label: '提供商池管理', icon: 'fa-network-wired', section: 'providers' },
+  { path: '/custom-models', label: '自定义模型管理', icon: 'fa-cubes', section: 'custom-models' },
+  { path: '/upload-config', label: '凭据文件管理', icon: 'fa-upload', section: 'upload-config' },
+  { path: '/usage', label: '用量查询', icon: 'fa-chart-bar', section: 'usage' },
+  { path: '/plugins', label: '插件管理', icon: 'fa-puzzle-piece', section: 'plugins' },
+  { path: '/logs', label: '实时日志', icon: 'fa-file-alt', section: 'logs' },
+  { path: '/gpu-monitor', label: 'GPU监控', icon: 'fa-video-card', section: 'gpu-monitor' }
 ]
 
-const handleNavClick = (section) => {
-  currentSection.value = section
-  const element = document.getElementById(section)
-  if (element) {
-    element.scrollIntoView({ behavior: 'smooth' })
+const isActive = (path) => {
+  if (path === '/' && route.path === '/') {
+    return true
   }
+  return route.path.startsWith(path) && path !== '/'
 }
-
-const handleHashChange = () => {
-  const hash = window.location.hash.slice(1)
-  const matchedItem = navItems.find(item => item.section === hash)
-  if (matchedItem) {
-    currentSection.value = hash
-  } else {
-    currentSection.value = 'dashboard'
-  }
-}
-
-const handleScroll = () => {
-  const sections = ['dashboard', 'guide', 'tutorial', 'config', 'providers', 'custom-models', 'upload-config', 'usage', 'plugins', 'logs', 'gpu-monitor']
-  const scrollPosition = window.scrollY + 200
-  
-  for (const section of sections) {
-    const element = document.getElementById(section)
-    if (element) {
-      const offsetTop = element.offsetTop
-      const offsetHeight = element.offsetHeight
-      if (scrollPosition >= offsetTop && scrollPosition < offsetTop + offsetHeight) {
-        currentSection.value = section
-        window.history.replaceState(null, null, `#${section}`)
-        break
-      }
-    }
-  }
-}
-
-onMounted(() => {
-  handleHashChange()
-  window.addEventListener('hashchange', handleHashChange)
-  window.addEventListener('scroll', handleScroll)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('hashchange', handleHashChange)
-  window.removeEventListener('scroll', handleScroll)
-})
 </script>
 
 <style scoped>

@@ -12,7 +12,7 @@ import { describe, test, expect } from '@jest/globals';
 import { fetch } from 'undici';
 
 const TEST_SERVER_BASE_URL = process.env.TEST_SERVER_BASE_URL || 'http://localhost:3000';
-const TEST_API_KEY = process.env.TEST_API_KEY || '123456';
+const TEST_API_KEY = process.env.TEST_API_KEY;
 
 describe('Security Fixes Integration Tests', () => {
 

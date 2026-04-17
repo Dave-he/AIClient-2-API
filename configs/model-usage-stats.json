@@ -1,22 +1,22 @@
 {
-  "updatedAt": "2026-04-17T15:03:19.098Z",
+  "updatedAt": "2026-04-17T16:51:54.523Z",
   "summary": {
-    "requestCount": 20,
-    "promptTokens": 88,
-    "completionTokens": 59,
-    "totalTokens": 147,
+    "requestCount": 111,
+    "promptTokens": 36211,
+    "completionTokens": 52885,
+    "totalTokens": 89096,
     "cachedTokens": 0,
-    "lastUsedAt": "2026-04-17T15:03:19.098Z"
+    "lastUsedAt": "2026-04-17T16:51:54.523Z"
   },
   "providers": {
     "openai-custom": {
       "summary": {
-        "requestCount": 20,
-        "promptTokens": 88,
-        "completionTokens": 59,
-        "totalTokens": 147,
+        "requestCount": 44,
+        "promptTokens": 9153,
+        "completionTokens": 12423,
+        "totalTokens": 21576,
         "cachedTokens": 0,
-        "lastUsedAt": "2026-04-17T15:03:19.098Z"
+        "lastUsedAt": "2026-04-17T16:51:54.514Z"
       },
       "models": {
         "gemma-4-31b": {
@@ -26,6 +26,54 @@
           "totalTokens": 147,
           "cachedTokens": 0,
           "lastUsedAt": "2026-04-17T15:03:19.098Z"
+        },
+        "gpt-4o-mini": {
+          "requestCount": 24,
+          "promptTokens": 9065,
+          "completionTokens": 12364,
+          "totalTokens": 21429,
+          "cachedTokens": 0,
+          "lastUsedAt": "2026-04-17T16:51:54.514Z"
+        }
+      }
+    },
+    "gemini-cli-oauth": {
+      "summary": {
+        "requestCount": 60,
+        "promptTokens": 5760,
+        "completionTokens": 6387,
+        "totalTokens": 12147,
+        "cachedTokens": 0,
+        "lastUsedAt": "2026-04-17T16:51:54.482Z"
+      },
+      "models": {
+        "gemini-2.5-flash": {
+          "requestCount": 60,
+          "promptTokens": 5760,
+          "completionTokens": 6387,
+          "totalTokens": 12147,
+          "cachedTokens": 0,
+          "lastUsedAt": "2026-04-17T16:51:54.482Z"
+        }
+      }
+    },
+    "claude-custom": {
+      "summary": {
+        "requestCount": 7,
+        "promptTokens": 21298,
+        "completionTokens": 34075,
+        "totalTokens": 55373,
+        "cachedTokens": 0,
+        "lastUsedAt": "2026-04-17T16:51:54.523Z"
+      },
+      "models": {
+        "claude-3-5-sonnet": {
+          "requestCount": 7,
+          "promptTokens": 21298,
+          "completionTokens": 34075,
+          "totalTokens": 55373,
+          "cachedTokens": 0,
+          "lastUsedAt": "2026-04-17T16:51:54.523Z"
         }
       }
     }
@@ -40,12 +88,30 @@
       "lastUsedAt": "2026-04-16T17:12:05.282Z"
     },
     "2026-04-17": {
-      "requestCount": 3,
-      "promptTokens": 0,
-      "completionTokens": 0,
-      "totalTokens": 0,
+      "requestCount": 94,
+      "promptTokens": 36123,
+      "completionTokens": 52826,
+      "totalTokens": 88949,
       "cachedTokens": 0,
-      "lastUsedAt": "2026-04-17T15:03:19.098Z"
+      "lastUsedAt": "2026-04-17T16:51:54.523Z"
+    }
+  },
+  "hourly": {
+    "2026-04-17T16": {
+      "requestCount": 91,
+      "promptTokens": 36123,
+      "completionTokens": 52826,
+      "totalTokens": 88949,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T16:51:54.523Z"
+    },
+    "2026-04-17T16:51": {
+      "requestCount": 91,
+      "promptTokens": 36123,
+      "completionTokens": 52826,
+      "totalTokens": 88949,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T16:51:54.523Z"
     }
   }
 }

@@ -5,6 +5,7 @@ const routes = [
     path: '/',
     name: 'Layout',
     component: () => import('@/components/Layout.vue'),
+    meta: { requiresAuth: true },
     children: [
       {
         path: '',
@@ -73,6 +74,18 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+router.beforeEach((to, from, next) => {
+  const isAuthenticated = localStorage.getItem('authToken')
+  
+  if (to.meta.requiresAuth && !isAuthenticated) {
+    next('/login')
+  } else if (to.path === '/login' && isAuthenticated) {
+    next('/')
+  } else {
+    next()
+  }
 })
 
 export default router

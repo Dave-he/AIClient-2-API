@@ -411,7 +411,10 @@ export async function getApiService(config, requestedModel = null, options = {})
     if (effectiveProvider === MODEL_PROVIDER.AUTO && !actualModelName) return null;
 
     let serviceConfig = config;
-    const isPoolable = PROVIDER_MAPPINGS.some(m => m.providerType === config.MODEL_PROVIDER);
+    const isPoolable = PROVIDER_MAPPINGS.some(m => 
+            m.providerType === config.MODEL_PROVIDER || 
+            config.MODEL_PROVIDER.startsWith(m.providerType + '-')
+        );
     if (providerPoolManager && ((config.providerPools && config.providerPools[config.MODEL_PROVIDER]) || isPoolable)) {
         // 如果有号池管理器，并且当前模型提供者类型有对应的号池（或属于号池类型提供商），则从号池中选择一个提供者配置
         // selectProvider 现在是异步的，使用链式锁确保并发安全
@@ -459,7 +462,10 @@ export async function getApiServiceWithFallback(config, requestedModel = null, o
     let selectedUuid = null;
     let actualModel = actualModelName;
     
-    const isPoolable = PROVIDER_MAPPINGS.some(m => m.providerType === config.MODEL_PROVIDER);
+    const isPoolable = PROVIDER_MAPPINGS.some(m => 
+            m.providerType === config.MODEL_PROVIDER || 
+            config.MODEL_PROVIDER.startsWith(m.providerType + '-')
+        );
     if (providerPoolManager && ((config.providerPools && config.providerPools[config.MODEL_PROVIDER]) || isPoolable)) {
         // selectProviderWithFallback 现在是异步的，使用链式锁确保并发安全
         // 如果开启了并发限制，则使用 acquireSlot 进行选择和占位

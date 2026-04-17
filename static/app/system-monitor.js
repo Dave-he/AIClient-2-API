@@ -26,6 +26,10 @@ export class SystemMonitor {
         this.pythonGpuMemoryHistory = [];
         this.pythonGpuTempHistory = [];
         this.pythonGpuConnected = false;
+
+        this.tokenChart = null;
+        this.currentTokenTimeRange = 'hour';
+        this.tokenChartData = {};
         
         this.initializeDefaultData();
         console.log('[SystemMonitor] Constructor finished, initial data:', {
@@ -127,17 +131,30 @@ export class SystemMonitor {
             });
         }
 
+        const timeRangeTabs = document.querySelectorAll('.time-range-tab');
+        timeRangeTabs.forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                timeRangeTabs.forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+                this.currentTokenTimeRange = e.target.dataset.timeRange;
+                this.updateTokenChart();
+            });
+        });
+
         document.addEventListener('section-change', (event) => {
             if (event.detail.section === 'dashboard') {
                 this.refreshAllStatus();
                 this.ensureChartInitialized();
                 this.ensurePythonGpuChartInitialized();
+                this.ensureTokenChartInitialized();
+                this.loadTokenUsageData();
             }
         });
 
         window.addEventListener('resize', () => {
             this.ensureChartInitialized();
             this.ensurePythonGpuChartInitialized();
+            this.ensureTokenChartInitialized();
         });
     }
 
@@ -1055,6 +1072,260 @@ export class SystemMonitor {
         ctx.arc(x, y, 3, 0, Math.PI * 2);
         ctx.fillStyle = dataset.color;
         ctx.fill();
+    }
+
+    async loadTokenUsageData() {
+        try {
+            const token = localStorage.getItem('authToken');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            
+            const response = await fetch('/api/model-usage-stats', { headers });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.tokenChartData = data.data || data;
+                this.updateTokenChart();
+            }
+        } catch (error) {
+            console.log('[SystemMonitor] Failed to load token usage data:', error);
+        }
+    }
+
+    ensureTokenChartInitialized() {
+        const canvas = document.getElementById('tokenTrendChart');
+        if (!canvas) return;
+
+        const rect = canvas.getBoundingClientRect();
+        
+        if (rect.width <= 0 || rect.height <= 0) {
+            const container = canvas.parentElement;
+            if (container) {
+                const containerRect = container.getBoundingClientRect();
+                if (containerRect.width > 0 && containerRect.height > 0) {
+                    this.tokenChart = null;
+                    this.initTokenChart();
+                }
+            }
+            return;
+        }
+
+        if (!this.tokenChart) {
+            this.initTokenChart();
+        } else if (this.tokenChart.width !== rect.width || this.tokenChart.height !== rect.height) {
+            this.tokenChart = null;
+            this.initTokenChart();
+        }
+        
+        this.updateTokenChart();
+    }
+
+    initTokenChart() {
+        const canvas = document.getElementById('tokenTrendChart');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        
+        let rect = canvas.getBoundingClientRect();
+        
+        if (rect.width === 0 || rect.height === 0) {
+            const container = canvas.parentElement;
+            if (container) {
+                const containerRect = container.getBoundingClientRect();
+                rect = {
+                    width: Math.max(containerRect.width - 32, 300),
+                    height: 160
+                };
+            } else {
+                rect = { width: 400, height: 160 };
+            }
+        }
+
+        if (rect.width <= 0 || rect.height <= 0) {
+            rect = { width: 400, height: 160 };
+        }
+
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        this.tokenChart = {
+            ctx,
+            width: rect.width,
+            height: rect.height,
+            padding: { top: 15, right: 15, bottom: 28, left: 40 }
+        };
+    }
+
+    generateTokenTimeRangeData(data, range) {
+        const now = new Date();
+        const result = { labels: [], promptTokens: [], completionTokens: [], totalTokens: [] };
+        
+        let interval, count;
+        switch(range) {
+            case 'hour':
+                interval = 60 * 1000;
+                count = 60;
+                break;
+            case 'day':
+                interval = 60 * 60 * 1000;
+                count = 24;
+                break;
+            case 'week':
+                interval = 24 * 60 * 60 * 1000;
+                count = 7;
+                break;
+            default:
+                interval = 60 * 1000;
+                count = 60;
+        }
+
+        for (let i = count - 1; i >= 0; i--) {
+            const time = new Date(now.getTime() - i * interval);
+            let label;
+            
+            if (range === 'hour') {
+                label = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+            } else if (range === 'day') {
+                label = `${time.getHours().toString().padStart(2, '0')}:00`;
+            } else {
+                const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                label = weekdays[time.getDay()];
+            }
+            
+            result.labels.push(label);
+            
+            let prompt = 0, completion = 0, total = 0;
+            
+            if (range === 'hour') {
+                const minuteKey = time.toISOString().slice(0, 16);
+                if (data.hourly && data.hourly[minuteKey]) {
+                    const d = data.hourly[minuteKey];
+                    prompt = d.promptTokens || 0;
+                    completion = d.completionTokens || 0;
+                    total = d.totalTokens || 0;
+                }
+            } else if (range === 'day') {
+                const hourKey = time.toISOString().slice(0, 13);
+                if (data.hourly && data.hourly[hourKey]) {
+                    const d = data.hourly[hourKey];
+                    prompt = d.promptTokens || 0;
+                    completion = d.completionTokens || 0;
+                    total = d.totalTokens || 0;
+                } else if (data.daily) {
+                    const dateKey = time.toISOString().slice(0, 10);
+                    if (data.daily[dateKey]) {
+                        const d = data.daily[dateKey];
+                        prompt += (d.promptTokens || 0) / 24;
+                        completion += (d.completionTokens || 0) / 24;
+                        total += (d.totalTokens || 0) / 24;
+                    }
+                }
+            } else {
+                const dateKey = time.toISOString().slice(0, 10);
+                if (data.daily && data.daily[dateKey]) {
+                    const d = data.daily[dateKey];
+                    prompt = d.promptTokens || 0;
+                    completion = d.completionTokens || 0;
+                    total = d.totalTokens || 0;
+                }
+            }
+            
+            result.promptTokens.push(Math.round(prompt));
+            result.completionTokens.push(Math.round(completion));
+            result.totalTokens.push(Math.round(total));
+        }
+        
+        return result;
+    }
+
+    updateTokenChart() {
+        if (!this.tokenChart) {
+            this.ensureTokenChartInitialized();
+        }
+
+        if (!this.tokenChart) return;
+
+        const { ctx, width, height, padding } = this.tokenChart;
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+
+        ctx.clearRect(0, 0, width, height);
+
+        const chartData = this.generateTokenTimeRangeData(this.tokenChartData, this.currentTokenTimeRange);
+        
+        if (chartData.labels.length === 0) {
+            ctx.fillStyle = '#6b7280';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('暂无数据', width / 2, height / 2);
+            return;
+        }
+
+        const allValues = [...chartData.promptTokens, ...chartData.completionTokens, ...chartData.totalTokens];
+        const maxValue = Math.max(...allValues.filter(v => v > 0), 1);
+        const minValue = 0;
+
+        this.drawGrid(ctx, chartWidth, chartHeight, padding);
+        this.drawTokenAxes(ctx, chartWidth, chartHeight, padding, chartData.labels, minValue, maxValue);
+
+        const datasets = [
+            { data: chartData.promptTokens, color: '#3b82f6', gradient: ['#3b82f6', '#60a5fa'], label: '输入 Token' },
+            { data: chartData.completionTokens, color: '#10b981', gradient: ['#10b981', '#34d399'], label: '输出 Token' },
+            { data: chartData.totalTokens, color: '#8b5cf6', gradient: ['#8b5cf6', '#a78bfa'], label: '总 Token' }
+        ];
+
+        datasets.forEach(ds => {
+            this.drawArea(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+            this.drawLine(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+        });
+
+        datasets.forEach(ds => {
+            this.drawPoint(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+        });
+    }
+
+    drawTokenAxes(ctx, chartWidth, chartHeight, padding, labels, minValue, maxValue) {
+        ctx.strokeStyle = '#9ca3af';
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, padding.top + chartHeight);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top + chartHeight);
+        ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+        ctx.stroke();
+
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'right';
+
+        const gridLines = 5;
+        for (let i = 0; i <= gridLines; i++) {
+            const y = padding.top + (chartHeight / gridLines) * i;
+            const value = Math.round(maxValue - ((maxValue - minValue) / gridLines) * i);
+            const formattedValue = this.formatTokenValue(value);
+            ctx.fillText(formattedValue, padding.left - 8, y + 4);
+        }
+
+        ctx.textAlign = 'center';
+        const step = Math.ceil(labels.length / 5);
+        for (let i = 0; i < labels.length; i += step) {
+            const x = padding.left + (chartWidth / (labels.length - 1)) * i;
+            ctx.fillText(labels[i], x, padding.top + chartHeight + 22);
+        }
+    }
+
+    formatTokenValue(value) {
+        if (value >= 1000000) {
+            return (value / 1000000).toFixed(1) + 'M';
+        } else if (value >= 1000) {
+            return (value / 1000).toFixed(1) + 'K';
+        }
+        return value.toString();
     }
 }
 

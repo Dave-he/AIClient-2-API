@@ -204,6 +204,9 @@ export class ProviderPoolManager {
         for (const type in this.providerStatus) {
             const pool = this.providerStatus[type];
             
+            const now = Date.now();
+            const minSeq = Math.min(...pool.map(p => p.config._lastSelectionSeq || 0));
+            
             // 挑选当前提供商下需要预热的节点
             const candidates = pool
                 .filter(p => p.config.isHealthy && !p.config.isDisabled && !this.refreshingUuids.has(p.uuid))
@@ -213,8 +216,8 @@ export class ProviderPoolManager {
                     if (!a.config.needsRefresh && b.config.needsRefresh) return 1;
 
                     // 优先级 B: 按照正常的选择权重排序（最久没用过的优先补）
-                    const scoreA = this._calculateNodeScore(a);
-                    const scoreB = this._calculateNodeScore(b);
+                    const scoreA = this._calculateNodeScore(a, now, minSeq);
+                    const scoreB = this._calculateNodeScore(b, now, minSeq);
                     return scoreA - scoreB;
                 })
                 .slice(0, this.warmupTarget);
