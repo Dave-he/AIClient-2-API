@@ -248,7 +248,7 @@ const avgTemperature = computed(() => {
 })
 
 const saveSettings = () => {
-  alert('GPU设置已保存')
+  window.$toast?.success('GPU设置已保存')
 }
 </script>
 

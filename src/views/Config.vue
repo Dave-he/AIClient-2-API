@@ -524,7 +524,7 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import axios from 'axios'
+import { apiClient } from '@/utils/api.js'
 
 const showApiKey = ref(false)
 const showAdminPassword = ref(false)
@@ -644,14 +644,11 @@ const removeReplacement = (index) => {
 
 const saveConfig = async () => {
   try {
-    const token = localStorage.getItem('authToken')
-    await axios.post('/api/config/save', config, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    alert('配置已保存')
+    await apiClient.post('/api/config/save', config)
+    window.$toast?.success('配置已保存')
   } catch (error) {
     console.error('Failed to save config:', error)
-    alert('保存配置失败')
+    window.$toast?.error('保存配置失败')
   }
 }
 

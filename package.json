@@ -10,7 +10,9 @@
     "test": "jest",
     "test:e2e": "jest tests/e2e/",
     "test:unit": "jest tests/*.unit.test.js",
-    "test:integration": "jest tests/api-integration.test.js"
+    "test:integration": "jest tests/api-integration.test.js",
+    "test:stress": "node --experimental-vm-modules tests/performance-stress.test.js",
+    "test:rate-limit": "node --experimental-vm-modules tests/rate-limit-stress.test.js"
   },
   "dependencies": {
     "@anthropic-ai/tokenizer": "^0.0.4",

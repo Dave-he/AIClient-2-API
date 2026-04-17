@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { api } from '@/utils/api.js';
+import { apiClient } from '@/utils/api.js';
 
 export function useProviders() {
   const providers = ref([]);
@@ -48,7 +48,7 @@ export function useProviders() {
 
   const fetchProviders = async () => {
     try {
-      const response = await api.get('/api/providers');
+      const response = await apiClient.get('/api/providers');
       providers.value = Object.entries(response.data.providers || {}).map(([type, nodes]) => ({
         type,
         nodes: nodes.map(node => ({
@@ -66,7 +66,7 @@ export function useProviders() {
 
   const addProvider = async (data) => {
     try {
-      await api.post('/api/providers', data);
+      await apiClient.post('/api/providers', data);
       await fetchProviders();
       window.$toast?.success('提供商添加成功');
     } catch (error) {
@@ -77,7 +77,7 @@ export function useProviders() {
 
   const updateProvider = async (providerType, nodeId, data) => {
     try {
-      await api.put(`/api/providers/${providerType}/${nodeId}`, data);
+      await apiClient.put(`/api/providers/${providerType}/${nodeId}`, data);
       await fetchProviders();
       window.$toast?.success('提供商更新成功');
     } catch (error) {
@@ -88,7 +88,7 @@ export function useProviders() {
 
   const deleteProvider = async (providerType, nodeId) => {
     try {
-      await api.delete(`/api/providers/${providerType}/${nodeId}`);
+      await apiClient.delete(`/api/providers/${providerType}/${nodeId}`);
       await fetchProviders();
       window.$toast?.success('提供商删除成功');
     } catch (error) {
@@ -99,7 +99,7 @@ export function useProviders() {
 
   const performHealthCheck = async (providerType, nodeId) => {
     try {
-      const response = await api.post(`/api/providers/${providerType}/${nodeId}/health`);
+      const response = await apiClient.post(`/api/providers/${providerType}/${nodeId}/health`);
       await fetchProviders();
       return response.data;
     } catch (error) {

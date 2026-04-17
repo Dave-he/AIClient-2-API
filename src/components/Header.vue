@@ -33,7 +33,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import { api, removeToken } from '@/utils/api.js';
+import { apiClient, removeToken } from '@/utils/api.js';
 
 const isOnline = ref(true);
 const currentTheme = ref('light');
@@ -41,7 +41,7 @@ const restarting = ref(false);
 
 const checkServerStatus = async () => {
   try {
-    const response = await api.get('/api/system');
+    const response = await apiClient.get('/api/system');
     isOnline.value = response.status === 200;
   } catch (error) {
     isOnline.value = false;
@@ -66,7 +66,7 @@ const handleRestart = async () => {
   if (confirm('确定要重启服务吗？')) {
     restarting.value = true;
     try {
-      await api.post('/api/system/restart');
+      await apiClient.post('/api/system/restart');
       window.$toast?.success('服务重启请求已发送');
     } catch (error) {
       window.$toast?.error('重启失败: ' + error.message);

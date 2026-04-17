@@ -55,7 +55,7 @@ describe('Modal Component', () => {
     await wrapper.vm.$nextTick();
     
     const title = document.querySelector('.modal-title');
-    expect(title.textContent).toBe('My Modal');
+    expect(title.textContent.trim()).toBe('My Modal');
   });
 
   it('should display content from slot', async () => {

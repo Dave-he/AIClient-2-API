@@ -181,7 +181,7 @@ const processFiles = (files) => {
       }
       credentials.value.push(credential)
     } else {
-      alert(`文件 ${file.name} 不是有效的 JSON 文件`)
+      window.$toast?.error(`文件 ${file.name} 不是有效的 JSON 文件`)
     }
   })
 }
@@ -203,7 +203,7 @@ const extractProvider = (filename) => {
 }
 
 const downloadCredential = (credential) => {
-  alert(`下载 ${credential.filename}`)
+  window.$toast?.info(`下载 ${credential.filename}`)
 }
 
 const activateCredential = (credential) => {

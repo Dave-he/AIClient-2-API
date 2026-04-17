@@ -1,5 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue';
-import { api } from '@/utils/api.js';
+import { apiClient } from '@/utils/api.js';
 
 export function useDashboard() {
   const systemInfo = ref({
@@ -58,7 +58,7 @@ export function useDashboard() {
 
   const fetchSystemInfo = async () => {
     try {
-      const response = await api.get('/api/system');
+      const response = await apiClient.get('/api/system');
       const data = response.data;
       
       systemInfo.value = {
@@ -78,7 +78,7 @@ export function useDashboard() {
 
   const fetchSystemMonitor = async () => {
     try {
-      const response = await api.get('/api/system/monitor');
+      const response = await apiClient.get('/api/system/monitor');
       const data = response.data;
       
       systemInfo.value = {
@@ -97,7 +97,7 @@ export function useDashboard() {
       gpuStatus.value.loading = true;
       gpuStatus.value.error = '';
       
-      const response = await api.get('/api/gpu/status');
+      const response = await apiClient.get('/api/gpu/status');
       const data = response.data;
       
       gpuStatus.value.devices = data.devices || [];
@@ -110,7 +110,7 @@ export function useDashboard() {
 
   const fetchPythonGpuStatus = async () => {
     try {
-      const response = await api.get('/api/python-gpu/status');
+      const response = await apiClient.get('/api/python-gpu/status');
       const data = response.data;
       
       if (data.success) {
@@ -136,7 +136,7 @@ export function useDashboard() {
 
   const fetchProviderStatus = async () => {
     try {
-      const response = await api.get('/api/providers');
+      const response = await apiClient.get('/api/providers');
       const data = response.data;
       
       const providers = [];
@@ -163,7 +163,7 @@ export function useDashboard() {
 
   const fetchModels = async () => {
     try {
-      const response = await api.get('/api/provider-models');
+      const response = await apiClient.get('/api/provider-models');
       const data = response.data;
       
       const models = new Set();
@@ -181,7 +181,7 @@ export function useDashboard() {
 
   const checkUpdate = async () => {
     try {
-      const response = await api.get('/api/system/check-update');
+      const response = await apiClient.get('/api/system/check-update');
       if (response.data.hasUpdate) {
         hasUpdate.value = true;
         latestVersion.value = response.data.latestVersion;
@@ -193,7 +193,7 @@ export function useDashboard() {
 
   const performUpdate = async () => {
     try {
-      await api.post('/api/system/update');
+      await apiClient.post('/api/system/update');
       window.$toast?.success('更新已开始，请等待服务重启');
     } catch (error) {
       window.$toast?.error('更新失败: ' + error.message);

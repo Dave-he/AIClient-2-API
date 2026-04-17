@@ -228,7 +228,7 @@ curl http://localhost:3000/gemini-cli-oauth/v1/chat/completions \\
 ]
 
 const finishTutorial = () => {
-  alert('教程已完成！您现在可以开始使用 AIClient2API 了。')
+  window.$toast?.success('教程已完成！您现在可以开始使用 AIClient2API 了。')
 }
 </script>
 

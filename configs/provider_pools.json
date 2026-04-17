@@ -3,22 +3,22 @@
     {
       "customName": "本地vLLM控制器",
       "LOCAL_API_KEY": "local-dev-key",
-      "LOCAL_BASE_URL": "http://localhost:5000",
+      "LOCAL_BASE_URL": "http://192.168.7.103:5000",
       "checkModelName": "gemma-4-31b",
       "checkHealth": false,
       "uuid": "local-python-controller",
-      "isHealthy": true,
+      "isHealthy": false,
       "isDisabled": false,
-      "lastUsed": "2026-04-17T18:36:54.240Z",
-      "usageCount": 13,
-      "errorCount": 0,
-      "lastErrorTime": null,
-      "lastErrorMessage": null,
+      "lastUsed": "2026-04-17T18:40:30.499Z",
+      "usageCount": 15,
+      "errorCount": 3,
+      "lastErrorTime": "2026-04-17T18:40:30.498Z",
+      "lastErrorMessage": "Request failed with status code 503",
       "needsRefresh": false,
       "refreshCount": 0,
       "lastHealthCheckTime": null,
       "lastHealthCheckModel": null,
-      "_lastSelectionSeq": 47,
+      "_lastSelectionSeq": 53,
       "supportedModels": [
         "gemma-4-31b",
         "gemma-4-31b-it",
@@ -26,7 +26,7 @@
         "mistral-7b",
         "gemma-2-vision"
       ],
-      "lastRefreshTime": 1776451014052
+      "lastRefreshTime": 1776451220651
     }
   ],
   "claude-custom": [

@@ -388,6 +388,13 @@ export class GPUMonitorModule {
                         <div class="metric-value">${gpu.utilization || 0}%</div>
                     </div>
                     <div class="metric-item">
+                        <div class="metric-label">功耗</div>
+                        <div class="metric-value">${gpu.power_draw || 0}W / ${gpu.power_limit || 0}W</div>
+                        <div class="memory-bar">
+                            <div class="memory-fill power" style="width: ${gpu.power_percent || 0}%"></div>
+                        </div>
+                    </div>
+                    <div class="metric-item">
                         <div class="metric-label">可用显存</div>
                         <div class="metric-value">${(gpu.available_memory / (1024**3)).toFixed(1)} GB</div>
                     </div>
@@ -457,6 +464,13 @@ export class GPUMonitorModule {
                     <div class="metric-item">
                         <div class="metric-label">使用率</div>
                         <div class="metric-value">${gpu.utilization}%</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">功耗</div>
+                        <div class="metric-value">${gpu.power_draw || 0}W / ${gpu.power_limit || 0}W</div>
+                        <div class="memory-bar">
+                            <div class="memory-fill power" style="width: ${gpu.power_percent || 0}%"></div>
+                        </div>
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">可用显存</div>

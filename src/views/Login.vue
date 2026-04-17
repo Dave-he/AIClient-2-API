@@ -70,7 +70,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import { api, setToken } from '@/utils/api.js';
+import { apiClient, setToken } from '@/utils/api.js';
 
 const username = ref('admin');
 const password = ref('');
@@ -88,7 +88,7 @@ const handleLogin = async () => {
   error.value = '';
   
   try {
-    const response = await api.post('/api/login', {
+    const response = await apiClient.post('/api/login', {
       username: username.value,
       password: password.value
     });

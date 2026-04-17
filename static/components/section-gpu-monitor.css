@@ -146,6 +146,10 @@
     background: var(--danger-color);
 }
 
+.memory-fill.power {
+    background: var(--info-color);
+}
+
 /* Models Status */
 .models-status-content {
     min-height: 200px;

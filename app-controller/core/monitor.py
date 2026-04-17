@@ -34,7 +34,7 @@ class GPUMonitor:
         
         try:
             result = subprocess.run(
-                ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu", "--format=csv,noheader,nounits"],
+                ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit", "--format=csv,noheader,nounits"],
                 capture_output=True,
                 text=True
             )
@@ -51,10 +51,12 @@ class GPUMonitor:
             
             for line in lines:
                 parts = line.split(',')
-                if len(parts) >= 6:
+                if len(parts) >= 8:
                     total_mb = int(parts[1].strip())
                     used_mb = int(parts[2].strip())
                     free_mb = int(parts[3].strip())
+                    power_draw = float(parts[6].strip())
+                    power_limit = float(parts[7].strip())
                     
                     gpu_info = {
                         "name": parts[0].strip(),
@@ -63,6 +65,9 @@ class GPUMonitor:
                         "available_memory": free_mb * 1024 ** 2,
                         "temperature": int(parts[4].strip()),
                         "utilization": int(parts[5].strip()),
+                        "power_draw": int(power_draw),
+                        "power_limit": int(power_limit),
+                        "power_percent": int(power_draw / power_limit * 100) if power_limit > 0 else 0,
                         "memory_utilization": int(used_mb / total_mb * 100) if total_mb > 0 else 0
                     }
                     gpus.append(gpu_info)
@@ -78,6 +83,9 @@ class GPUMonitor:
                     "available_memory": primary_gpu["available_memory"],
                     "temperature": primary_gpu["temperature"],
                     "utilization": primary_gpu["utilization"],
+                    "power_draw": primary_gpu["power_draw"],
+                    "power_limit": primary_gpu["power_limit"],
+                    "power_percent": primary_gpu["power_percent"],
                     "memory_utilization": primary_gpu["memory_utilization"],
                     "primary": primary_gpu,
                     "all_gpus": gpus
@@ -320,6 +328,9 @@ class GPUMonitor:
                 "gpu_count": status.get("gpu_count"),
                 "utilization": status.get("utilization"),
                 "temperature": status.get("temperature"),
+                "power_draw": status.get("power_draw"),
+                "power_limit": status.get("power_limit"),
+                "power_percent": status.get("power_percent"),
                 "memory_utilization": status.get("memory_utilization"),
                 "used_memory": status.get("used_memory"),
                 "available_memory": status.get("available_memory"),

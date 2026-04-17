@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { api } from '@/utils/api.js';
+import { apiClient } from '@/utils/api.js';
 
 export function useCustomModels() {
   const models = ref([]);
@@ -31,7 +31,7 @@ export function useCustomModels() {
 
   const fetchModels = async () => {
     try {
-      const response = await api.get('/api/custom-models');
+      const response = await apiClient.get('/api/custom-models');
       models.value = response.data.models || [];
     } catch (error) {
       console.error('Failed to fetch custom models:', error);
@@ -74,10 +74,10 @@ export function useCustomModels() {
 
     try {
       if (isEditing.value) {
-        await api.put(`/api/custom-models/${formData.value.id}`, formData.value);
+        await apiClient.put(`/api/custom-models/${formData.value.id}`, formData.value);
         window.$toast?.success('模型更新成功');
       } else {
-        await api.post('/api/custom-models', formData.value);
+        await apiClient.post('/api/custom-models', formData.value);
         window.$toast?.success('模型添加成功');
       }
       await fetchModels();
@@ -91,7 +91,7 @@ export function useCustomModels() {
     if (!confirm('确定要删除这个模型吗？')) return;
 
     try {
-      await api.delete(`/api/custom-models/${id}`);
+      await apiClient.delete(`/api/custom-models/${id}`);
       await fetchModels();
       window.$toast?.success('模型删除成功');
     } catch (error) {
@@ -101,7 +101,7 @@ export function useCustomModels() {
 
   const toggleModel = async (model) => {
     try {
-      await api.patch(`/api/custom-models/${model.id}/toggle`, {
+      await apiClient.patch(`/api/custom-models/${model.id}/toggle`, {
         enabled: !model.enabled
       });
       await fetchModels();
