@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 configs/token-store.json
+configs/usage-cache.json
+configs/model-usage-stats.json
+configs/provider_pools.json
