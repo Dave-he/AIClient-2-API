@@ -7,18 +7,18 @@
       "checkModelName": "gemma-4-31b",
       "checkHealth": false,
       "uuid": "local-python-controller",
-      "isHealthy": false,
+      "isHealthy": true,
       "isDisabled": false,
-      "lastUsed": "2026-04-17T18:40:30.499Z",
-      "usageCount": 15,
-      "errorCount": 3,
-      "lastErrorTime": "2026-04-17T18:40:30.498Z",
-      "lastErrorMessage": "Request failed with status code 503",
+      "lastUsed": "2026-04-17T18:53:03.758Z",
+      "usageCount": 24,
+      "errorCount": 0,
+      "lastErrorTime": null,
+      "lastErrorMessage": null,
       "needsRefresh": false,
       "refreshCount": 0,
       "lastHealthCheckTime": null,
       "lastHealthCheckModel": null,
-      "_lastSelectionSeq": 53,
+      "_lastSelectionSeq": 67,
       "supportedModels": [
         "gemma-4-31b",
         "gemma-4-31b-it",
@@ -26,7 +26,7 @@
         "mistral-7b",
         "gemma-2-vision"
       ],
-      "lastRefreshTime": 1776451220651
+      "lastRefreshTime": 1776451983702
     }
   ],
   "claude-custom": [

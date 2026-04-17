@@ -34,7 +34,7 @@ class GPUMonitor:
         
         try:
             result = subprocess.run(
-                ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit", "--format=csv,noheader,nounits"],
+                ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit,fanspeed,clocks.sm,clocks.mem", "--format=csv,noheader,nounits"],
                 capture_output=True,
                 text=True
             )
@@ -51,12 +51,15 @@ class GPUMonitor:
             
             for line in lines:
                 parts = line.split(',')
-                if len(parts) >= 8:
+                if len(parts) >= 11:
                     total_mb = int(parts[1].strip())
                     used_mb = int(parts[2].strip())
                     free_mb = int(parts[3].strip())
                     power_draw = float(parts[6].strip())
                     power_limit = float(parts[7].strip())
+                    fan_speed = int(parts[8].strip()) if parts[8].strip().isdigit() else 0
+                    clock_sm = int(parts[9].strip()) if parts[9].strip().isdigit() else 0
+                    clock_mem = int(parts[10].strip()) if parts[10].strip().isdigit() else 0
                     
                     gpu_info = {
                         "name": parts[0].strip(),
@@ -68,6 +71,9 @@ class GPUMonitor:
                         "power_draw": int(power_draw),
                         "power_limit": int(power_limit),
                         "power_percent": int(power_draw / power_limit * 100) if power_limit > 0 else 0,
+                        "fan_speed": fan_speed,
+                        "clock_sm": clock_sm,
+                        "clock_mem": clock_mem,
                         "memory_utilization": int(used_mb / total_mb * 100) if total_mb > 0 else 0
                     }
                     gpus.append(gpu_info)
@@ -86,6 +92,9 @@ class GPUMonitor:
                     "power_draw": primary_gpu["power_draw"],
                     "power_limit": primary_gpu["power_limit"],
                     "power_percent": primary_gpu["power_percent"],
+                    "fan_speed": primary_gpu["fan_speed"],
+                    "clock_sm": primary_gpu["clock_sm"],
+                    "clock_mem": primary_gpu["clock_mem"],
                     "memory_utilization": primary_gpu["memory_utilization"],
                     "primary": primary_gpu,
                     "all_gpus": gpus
@@ -234,6 +243,8 @@ class GPUMonitor:
                 "timestamp": timestamp,
                 "utilization": status.get("utilization", 0),
                 "temperature": status.get("temperature", 0),
+                "power_draw": status.get("power_draw", 0),
+                "power_percent": status.get("power_percent", 0),
                 "memory_utilization": status.get("memory_utilization", 0),
                 "used_memory": status.get("used_memory", 0),
                 "available_memory": status.get("available_memory", 0),

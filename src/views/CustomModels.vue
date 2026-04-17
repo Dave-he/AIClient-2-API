@@ -199,118 +199,26 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { onMounted } from 'vue'
+import { useCustomModels } from '@/composables/useCustomModels.js'
 
-const models = ref([
-  {
-    id: '1',
-    name: 'my-custom-gpt4',
-    provider: 'OpenAI Custom',
-    baseModel: 'gpt-4o-mini',
-    maxTokens: 16384,
-    temperature: 0.7,
-    topP: 0.9,
-    frequencyPenalty: 0,
-    presencePenalty: 0,
-    enabled: true
-  },
-  {
-    id: '2',
-    name: 'creative-writer',
-    provider: 'Claude Custom',
-    baseModel: 'claude-3-5-sonnet-20241022',
-    maxTokens: 200000,
-    temperature: 1.2,
-    topP: 0.85,
-    frequencyPenalty: -0.5,
-    presencePenalty: 0.5,
-    enabled: true
-  },
-  {
-    id: '3',
-    name: 'code-assistant',
-    provider: 'OpenAI Custom',
-    baseModel: 'gpt-5-codex-mini',
-    maxTokens: 8192,
-    temperature: 0.2,
-    topP: 0.5,
-    frequencyPenalty: 0.1,
-    presencePenalty: 0,
-    enabled: false
-  }
-])
+const {
+  models,
+  showModal,
+  isEditing,
+  formData,
+  openAddModal,
+  editModel,
+  closeModal,
+  saveModel,
+  deleteModel,
+  toggleModel,
+  fetchModels
+} = useCustomModels()
 
-const showModal = ref(false)
-const isEditing = ref(false)
-
-const formData = reactive({
-  id: '',
-  name: '',
-  provider: 'openai-custom',
-  baseModel: '',
-  maxTokens: 8192,
-  temperature: 0.7,
-  topP: 1,
-  frequencyPenalty: 0,
-  presencePenalty: 0,
-  enabled: true
+onMounted(() => {
+  fetchModels()
 })
-
-const openAddModal = () => {
-  isEditing.value = false
-  formData.id = ''
-  formData.name = ''
-  formData.provider = 'openai-custom'
-  formData.baseModel = ''
-  formData.maxTokens = 8192
-  formData.temperature = 0.7
-  formData.topP = 1
-  formData.frequencyPenalty = 0
-  formData.presencePenalty = 0
-  formData.enabled = true
-  showModal.value = true
-}
-
-const editModel = (model) => {
-  isEditing.value = true
-  Object.assign(formData, model)
-  showModal.value = true
-}
-
-const closeModal = () => {
-  showModal.value = false
-}
-
-const saveModel = () => {
-  if (!formData.name || !formData.baseModel) {
-    alert('请填写模型名称和基础模型')
-    return
-  }
-  
-  if (isEditing.value) {
-    const index = models.value.findIndex(m => m.id === formData.id)
-    if (index > -1) {
-      models.value[index] = { ...formData }
-    }
-  } else {
-    models.value.push({
-      ...formData,
-      id: Date.now().toString()
-    })
-  }
-  
-  closeModal()
-}
-
-const deleteModel = (id) => {
-  if (confirm('确定要删除这个模型吗？')) {
-    models.value = models.value.filter(m => m.id !== id)
-  }
-}
-
-const toggleModel = (model) => {
-  model.enabled = !model.enabled
-}
 </script>
 
 <style scoped>

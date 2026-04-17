@@ -206,11 +206,11 @@ const formatToken = (num) => {
 const login = async () => {
   const apiKey = apiKeyInput.value.trim()
   if (!apiKey) {
-    alert('请输入 API Key')
+    window.$toast?.error('请输入 API Key')
     return
   }
   if (!apiKey.startsWith('maki_')) {
-    alert('API Key 格式不正确')
+    window.$toast?.error('API Key 格式不正确')
     return
   }
 
@@ -234,7 +234,7 @@ const login = async () => {
     isLoggedIn.value = true
     displayUserInfo(data.data)
   } catch (error) {
-    alert(error.message)
+    window.$toast?.error(error.message)
   }
 }
 

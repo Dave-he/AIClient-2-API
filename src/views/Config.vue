@@ -525,6 +525,7 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { apiClient } from '@/utils/api.js'
+import { logger } from '@/utils/logger.js'
 
 const showApiKey = ref(false)
 const showAdminPassword = ref(false)
@@ -647,7 +648,7 @@ const saveConfig = async () => {
     await apiClient.post('/api/config/save', config)
     window.$toast?.success('配置已保存')
   } catch (error) {
-    console.error('Failed to save config:', error)
+    logger.error('Failed to save config', error)
     window.$toast?.error('保存配置失败')
   }
 }

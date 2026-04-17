@@ -194,6 +194,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useProviders } from '@/composables/useProviders.js'
 import ProviderNode from '@/components/ProviderNode.vue'
+import { logger } from '@/utils/logger.js'
 
 const showModal = ref(false)
 const isEditing = ref(false)

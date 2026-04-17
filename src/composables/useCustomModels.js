@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import { apiClient } from '@/utils/api.js';
+import { logger } from '@/utils/logger.js';
 
 export function useCustomModels() {
   const models = ref([]);
@@ -34,7 +35,7 @@ export function useCustomModels() {
       const response = await apiClient.get('/api/custom-models');
       models.value = response.data.models || [];
     } catch (error) {
-      console.error('Failed to fetch custom models:', error);
+      logger.error('Failed to fetch custom models', error);
       window.$toast?.error('获取自定义模型失败');
     }
   };

@@ -1,5 +1,6 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { apiClient } from '@/utils/api.js';
+import { logger } from '@/utils/logger.js';
 
 export function useDashboard() {
   const systemInfo = ref({
@@ -72,7 +73,7 @@ export function useDashboard() {
         pid: data.pid || '--'
       };
     } catch (error) {
-      console.error('Failed to fetch system info:', error);
+      logger.error('Failed to fetch system info', error);
     }
   };
 
@@ -88,7 +89,7 @@ export function useDashboard() {
         gpu: Math.round(data.gpu?.usage || 0)
       };
     } catch (error) {
-      console.error('Failed to fetch system monitor:', error);
+      logger.error('Failed to fetch system monitor', error);
     }
   };
 
@@ -157,7 +158,7 @@ export function useDashboard() {
       
       providerStatus.value = providers;
     } catch (error) {
-      console.error('Failed to fetch provider status:', error);
+      logger.error('Failed to fetch provider status', error);
     }
   };
 
@@ -175,7 +176,7 @@ export function useDashboard() {
       
       availableModels.value = Array.from(models).sort();
     } catch (error) {
-      console.error('Failed to fetch models:', error);
+      logger.error('Failed to fetch models', error);
     }
   };
 
@@ -187,7 +188,7 @@ export function useDashboard() {
         latestVersion.value = response.data.latestVersion;
       }
     } catch (error) {
-      console.error('Failed to check update:', error);
+      logger.error('Failed to check update', error);
     }
   };
 
@@ -205,7 +206,7 @@ export function useDashboard() {
       await navigator.clipboard.writeText(text);
       window.$toast?.success(`已复制: ${text}`);
     } catch (error) {
-      console.error('Failed to copy:', error);
+      logger.error('Failed to copy', error);
     }
   };
 

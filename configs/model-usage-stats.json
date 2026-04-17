@@ -1,12 +1,12 @@
 {
-  "updatedAt": "2026-04-17T18:40:20.652Z",
+  "updatedAt": "2026-04-17T18:53:06.433Z",
   "summary": {
-    "requestCount": 141,
-    "promptTokens": 36746,
-    "completionTokens": 53201,
-    "totalTokens": 89895,
+    "requestCount": 155,
+    "promptTokens": 37236,
+    "completionTokens": 53370,
+    "totalTokens": 90554,
     "cachedTokens": 0,
-    "lastUsedAt": "2026-04-17T18:40:20.652Z"
+    "lastUsedAt": "2026-04-17T18:53:06.432Z"
   },
   "providers": {
     "openai-custom": {
@@ -79,21 +79,21 @@
     },
     "local-model": {
       "summary": {
-        "requestCount": 30,
-        "promptTokens": 535,
-        "completionTokens": 316,
-        "totalTokens": 799,
+        "requestCount": 44,
+        "promptTokens": 1025,
+        "completionTokens": 485,
+        "totalTokens": 1458,
         "cachedTokens": 0,
-        "lastUsedAt": "2026-04-17T18:40:20.652Z"
+        "lastUsedAt": "2026-04-17T18:53:06.432Z"
       },
       "models": {
         "gemma-4-31b": {
-          "requestCount": 30,
-          "promptTokens": 535,
-          "completionTokens": 316,
-          "totalTokens": 799,
+          "requestCount": 44,
+          "promptTokens": 1025,
+          "completionTokens": 485,
+          "totalTokens": 1458,
           "cachedTokens": 0,
-          "lastUsedAt": "2026-04-17T18:40:20.652Z"
+          "lastUsedAt": "2026-04-17T18:53:06.432Z"
         }
       }
     }
@@ -108,12 +108,12 @@
       "lastUsedAt": "2026-04-16T17:12:05.282Z"
     },
     "2026-04-17": {
-      "requestCount": 124,
-      "promptTokens": 36658,
-      "completionTokens": 53142,
-      "totalTokens": 89748,
+      "requestCount": 138,
+      "promptTokens": 37148,
+      "completionTokens": 53311,
+      "totalTokens": 90407,
       "cachedTokens": 0,
-      "lastUsedAt": "2026-04-17T18:40:20.652Z"
+      "lastUsedAt": "2026-04-17T18:53:06.432Z"
     }
   },
   "hourly": {
@@ -182,12 +182,12 @@
       "lastUsedAt": "2026-04-17T17:58:04.768Z"
     },
     "2026-04-17T18": {
-      "requestCount": 22,
-      "promptTokens": 446,
-      "completionTokens": 248,
-      "totalTokens": 642,
+      "requestCount": 36,
+      "promptTokens": 936,
+      "completionTokens": 417,
+      "totalTokens": 1301,
       "cachedTokens": 0,
-      "lastUsedAt": "2026-04-17T18:40:20.652Z"
+      "lastUsedAt": "2026-04-17T18:53:06.432Z"
     },
     "2026-04-17T18:05": {
       "requestCount": 2,
@@ -302,6 +302,14 @@
       "totalTokens": 0,
       "cachedTokens": 0,
       "lastUsedAt": "2026-04-17T18:40:20.652Z"
+    },
+    "2026-04-17T18:53": {
+      "requestCount": 14,
+      "promptTokens": 490,
+      "completionTokens": 169,
+      "totalTokens": 659,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T18:53:06.432Z"
     }
   }
 }

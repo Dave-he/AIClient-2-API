@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { apiClient } from '@/utils/api.js';
+import { logger } from '@/utils/logger.js';
 
 export function useProviders() {
   const providers = ref([]);
@@ -59,7 +60,7 @@ export function useProviders() {
       }));
       updateStats();
     } catch (error) {
-      console.error('Failed to fetch providers:', error);
+      logger.error('Failed to fetch providers', error);
       window.$toast?.error('获取提供商列表失败');
     }
   };

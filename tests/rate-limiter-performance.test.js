@@ -1,9 +1,10 @@
 import { RateLimiter, RATE_LIMIT_CONFIG } from '../src/utils/rate-limiter.js';
 import os from 'os';
 
-const TEST_DURATION_SECONDS = 30;
+const TEST_DURATION_SECONDS = 60;
 const RATE_LIMIT_VALUES = [50, 100, 200, 500, 1000, 2000];
-const CONCURRENT_CLIENTS = 100;
+const CONCURRENT_CLIENTS = 10;
+const REQUESTS_PER_CLIENT_PER_SECOND = 2;
 
 function getSystemMetrics() {
     const cpus = os.cpus();
@@ -39,7 +40,6 @@ async function runRateLimitTest(rateLimitValue, durationSeconds) {
     const rateLimiter = new RateLimiter();
     rateLimiter.updateConfig({ limit: rateLimitValue, windowMs: 60000 });
     
-    const results = [];
     let completed = 0;
     let blocked = 0;
     let startTime = Date.now();
@@ -50,19 +50,20 @@ async function runRateLimitTest(rateLimitValue, durationSeconds) {
         metricsHistory.push(getSystemMetrics());
     }, 1000);
     
+    const requestDelay = 1000 / REQUESTS_PER_CLIENT_PER_SECOND;
+    
     const runClient = async (clientId) => {
         const ip = `192.168.1.${(clientId % 254) + 1}`;
         const req = createMockRequest(ip, clientId);
         
         while (Date.now() < stopTime) {
             const result = rateLimiter.checkLimit(req);
-            results.push(result);
             if (result.allowed) {
                 completed++;
             } else {
                 blocked++;
             }
-            await new Promise(resolve => setTimeout(resolve, 1));
+            await new Promise(resolve => setTimeout(resolve, requestDelay));
         }
     };
     
@@ -74,7 +75,9 @@ async function runRateLimitTest(rateLimitValue, durationSeconds) {
     const elapsed = (Date.now() - startTime) / 1000;
     const rps = completed / elapsed;
     
-    const successRate = ((completed / (completed + blocked)) * 100).toFixed(2);
+    const successRate = completed + blocked > 0 
+        ? ((completed / (completed + blocked)) * 100).toFixed(2)
+        : '100.00';
     
     const avgMetrics = metricsHistory.length > 0 ? {
         cpuPercent: (metricsHistory.reduce((a, m) => a + parseFloat(m.cpuPercent), 0) / metricsHistory.length).toFixed(2),
@@ -194,6 +197,7 @@ function generateReport(results) {
         testDate: new Date().toISOString(),
         testDurationPerLimit: TEST_DURATION_SECONDS,
         concurrentClients: CONCURRENT_CLIENTS,
+        requestsPerClientPerSecond: REQUESTS_PER_CLIENT_PER_SECOND,
         results: results,
         optimalLimit: analyzeOptimalLimit(results)?.rateLimitValue || null
     };
@@ -213,6 +217,7 @@ async function main() {
     console.log('='.repeat(120));
     console.log(`Test Duration per Limit: ${TEST_DURATION_SECONDS} seconds`);
     console.log(`Concurrent Clients: ${CONCURRENT_CLIENTS}`);
+    console.log(`Requests per Client per Second: ${REQUESTS_PER_CLIENT_PER_SECOND}`);
     console.log(`Rate Limit Values to Test: ${RATE_LIMIT_VALUES.join(', ')}`);
     console.log('='.repeat(120));
     
@@ -232,7 +237,7 @@ async function main() {
         console.log(`    Avg CPU: ${result.avgMetrics.cpuPercent}%`);
         console.log(`    Max CPU: ${result.avgMetrics.maxCpu}%`);
         
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
     }
     
     printResults(allResults);
