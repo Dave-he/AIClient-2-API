@@ -1,4 +1,6 @@
-const CONTROLLER_BASE_URL = 'http://localhost:5000';
+const CONTROLLER_BASE_URL = typeof window !== 'undefined' && window.CONTROLLER_BASE_URL
+    ? window.CONTROLLER_BASE_URL
+    : 'http://localhost:5000';
 
 let systemMonitorInstance = null;
 
@@ -37,6 +39,7 @@ export class SystemMonitor {
             
             this.isInitialized = true;
             this.setupEventListeners();
+            this.loadGpuHistoryFromServer();
             this.startPolling();
         };
 
@@ -270,13 +273,14 @@ export class SystemMonitor {
             const data = await response.json();
             this.renderGpuStatus(data, container);
 
-            if (data.primary) {
-                if (data.primary.utilization !== undefined) {
-                    this.addToHistory(this.gpuHistoryData, data.primary.utilization);
-                }
-                if (data.primary.temperature !== undefined) {
-                    this.addToHistory(this.gpuTempHistoryData, data.primary.temperature);
-                }
+            if (data.status === 'available') {
+                const utilization = data.utilization || 0;
+                const temperature = data.temperature || 0;
+                
+                this.addToHistory(this.gpuHistoryData, utilization);
+                this.addToHistory(this.gpuTempHistoryData, temperature);
+                
+                document.getElementById('gpuValue')?.textContent = `${utilization}%`;
             }
         } catch (error) {
             container.innerHTML = `
@@ -286,8 +290,30 @@ export class SystemMonitor {
                 </div>
             `;
             document.getElementById('gpuValue')?.textContent = '--';
-            this.addToHistory(this.gpuHistoryData, 0);
-            this.addToHistory(this.gpuTempHistoryData, 0);
+        }
+    }
+
+    async loadGpuHistoryFromServer() {
+        try {
+            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/gpu/history?count=60`, {
+                method: 'GET',
+                timeout: 5000
+            });
+
+            if (!response.ok) {
+                console.log('[SystemMonitor] GPU history API not available');
+                return;
+            }
+
+            const data = await response.json();
+            
+            if (data.history && data.history.length > 0) {
+                this.gpuHistoryData = data.history.map(item => item.utilization || 0);
+                this.gpuTempHistoryData = data.history.map(item => item.temperature || 0);
+                console.log('[SystemMonitor] GPU history loaded from server:', this.gpuHistoryData.length);
+            }
+        } catch (error) {
+            console.log('[SystemMonitor] Failed to load GPU history:', error);
         }
     }
 
@@ -303,34 +329,38 @@ export class SystemMonitor {
             return;
         }
 
-        const gpu = data.primary;
-        const memoryPercent = (gpu.used_memory / gpu.total_memory) * 100;
+        const totalMemoryGB = data.total_memory / (1024 ** 3);
+        const usedMemoryGB = data.used_memory / (1024 ** 3);
+        const availableMemoryGB = data.available_memory / (1024 ** 3);
+        const memoryPercent = data.memory_utilization || 0;
         const memoryClass = memoryPercent > 90 ? 'high' : memoryPercent > 70 ? 'medium' : 'low';
+        const utilization = data.utilization || 0;
+        const temperature = data.temperature || 0;
 
-        document.getElementById('gpuValue')?.textContent = `${gpu.utilization || 0}%`;
+        document.getElementById('gpuValue')?.textContent = `${utilization}%`;
 
         container.innerHTML = `
             <div class="gpu-card">
-                <div class="gpu-name">${gpu.name}</div>
+                <div class="gpu-name">${data.name || 'GPU'}</div>
                 <div class="gpu-metrics">
                     <div class="metric-item">
                         <div class="metric-label">显存使用</div>
-                        <div class="metric-value">${(gpu.used_memory / (1024**3)).toFixed(1)} / ${(gpu.total_memory / (1024**3)).toFixed(1)} GB</div>
+                        <div class="metric-value">${usedMemoryGB.toFixed(1)} / ${totalMemoryGB.toFixed(1)} GB</div>
                         <div class="memory-bar">
                             <div class="memory-fill ${memoryClass}" style="width: ${memoryPercent}%"></div>
                         </div>
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">温度</div>
-                        <div class="metric-value">${gpu.temperature}°C</div>
+                        <div class="metric-value">${temperature}°C</div>
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">使用率</div>
-                        <div class="metric-value">${gpu.utilization || 0}%</div>
+                        <div class="metric-value">${utilization}%</div>
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">可用显存</div>
-                        <div class="metric-value">${(gpu.available_memory / (1024**3)).toFixed(1)} GB</div>
+                        <div class="metric-value">${availableMemoryGB.toFixed(1)} GB</div>
                     </div>
                 </div>
             </div>
