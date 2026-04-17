@@ -116,6 +116,18 @@ const VALIDATION_RULES = {
         min: 1,
         max: 65535,
         errorMsg: 'TLS_SIDECAR_PORT must be between 1 and 65535'
+    },
+    MAX_REQUEST_SIZE_MB: {
+        type: 'int',
+        min: 1,
+        max: 50,
+        errorMsg: 'MAX_REQUEST_SIZE_MB must be between 1 and 50 MB'
+    },
+    IMAGE_TIMEOUT_SECONDS: {
+        type: 'int',
+        min: 10,
+        max: 300,
+        errorMsg: 'IMAGE_TIMEOUT_SECONDS must be between 10 and 300 seconds'
     }
 };
 
@@ -301,31 +313,31 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         SERVER_PORT: 3000,
         HOST: '0.0.0.0',
         MODEL_PROVIDER: MODEL_PROVIDER.GEMINI_CLI,
-        SYSTEM_PROMPT_FILE_PATH: INPUT_SYSTEM_PROMPT_FILE, // Default value
+        SYSTEM_PROMPT_FILE_PATH: INPUT_SYSTEM_PROMPT_FILE,
         SYSTEM_PROMPT_MODE: 'append',
-        PROXY_URL: null, // HTTP/HTTPS/SOCKS5 代理地址，如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080
-        PROXY_ENABLED_PROVIDERS: [], // 启用代理的提供商列表，如 ['gemini-cli-oauth', 'claude-kiro-oauth']
+        PROXY_URL: null,
+        PROXY_ENABLED_PROVIDERS: [],
         PROMPT_LOG_BASE_NAME: "prompt_log",
         PROMPT_LOG_MODE: "none",
         REQUEST_MAX_RETRIES: 3,
         REQUEST_BASE_DELAY: 1000,
-        CREDENTIAL_SWITCH_MAX_RETRIES: 5, // 坏凭证切换最大重试次数（用于认证错误后切换凭证）
+        CREDENTIAL_SWITCH_MAX_RETRIES: 5,
         CRON_NEAR_MINUTES: 15,
         CRON_REFRESH_TOKEN: false,
-        LOGIN_EXPIRY: 3600, // 登录过期时间（秒），默认1小时
-        LOGIN_MAX_ATTEMPTS: 5, // 最大失败重试次数
-        LOGIN_LOCKOUT_DURATION: 1800, // 锁定持续时间（秒），默认30分钟
-        LOGIN_MIN_INTERVAL: 5000, // 两次尝试之间的最小间隔（毫秒），默认1秒
-        PROVIDER_POOLS_FILE_PATH: null, // 新增号池配置文件路径
-        MAX_ERROR_COUNT: 10, // 提供商最大错误次数
-        CUSTOM_MODELS_FILE_PATH: null, // 自定义模型配置文件路径
-        SYSTEM_PROMPT_REPLACEMENTS: [], // 系统提示词内容替换规则，例如: [{"old": "AI", "new": "Bot"}, {"old": "OpenAI", "new": "Gemini"}]
+        LOGIN_EXPIRY: 3600,
+        LOGIN_MAX_ATTEMPTS: 5,
+        LOGIN_LOCKOUT_DURATION: 1800,
+        LOGIN_MIN_INTERVAL: 5000,
+        PROVIDER_POOLS_FILE_PATH: null,
+        MAX_ERROR_COUNT: 10,
+        CUSTOM_MODELS_FILE_PATH: null,
+        SYSTEM_PROMPT_REPLACEMENTS: [],
         SCHEDULED_HEALTH_CHECK: {
             enabled: false,
             interval: 600000,
             startupRun: false
         },
-        providerFallbackChain: {}, // 跨类型 Fallback 链配置
+        providerFallbackChain: {},
         LOG_ENABLED: true,
         LOG_OUTPUT_MODE: "all",
         LOG_LEVEL: "info",
@@ -334,12 +346,14 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         LOG_INCLUDE_TIMESTAMP: true,
         LOG_MAX_FILE_SIZE: 10485760,
         LOG_MAX_FILES: 10,
-        TLS_SIDECAR_ENABLED: false, // 启用 Go uTLS sidecar（需要编译 tls-sidecar 二进制）
-        TLS_SIDECAR_ENABLED_PROVIDERS: [], // 启用 TLS Sidecar 的提供商列表
-        TLS_SIDECAR_PORT: 9090,     // sidecar 监听端口
-        TLS_SIDECAR_BINARY_PATH: null, // 自定义二进制路径（默认自动搜索）
-        TLS_SIDECAR_PROXY_URL: null,    // TLS Sidecar 专用的上游代理地址
-        CONTROLLER_BASE_URL: 'http://192.168.7.103:5000' // Python 控制器基础地址
+        TLS_SIDECAR_ENABLED: false,
+        TLS_SIDECAR_ENABLED_PROVIDERS: [],
+        TLS_SIDECAR_PORT: 9090,
+        TLS_SIDECAR_BINARY_PATH: null,
+        TLS_SIDECAR_PROXY_URL: null,
+        CONTROLLER_BASE_URL: 'http://192.168.7.103:5000',
+        MAX_REQUEST_SIZE_MB: 10,
+        IMAGE_TIMEOUT_SECONDS: 60
     };
 
     let currentConfig = { ...defaultConfig };

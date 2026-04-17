@@ -1,14 +1,19 @@
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import StreamingResponse
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any, Union
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Dict, Any, Union, Tuple
 import asyncio
 import httpx
 import json
 import os
 from datetime import datetime
 import uuid
+import base64
+import io
+from PIL import Image
+import re
 
 from core.scheduler import Scheduler
 from core.monitor import GPUMonitor
@@ -35,6 +40,61 @@ from middleware.timeout_handler import TimeoutHandlerMiddleware
 
 logger = setup_logger()
 structured_logger = StructuredLogger("ai_controller")
+
+# --- Image Validation Constants ---
+MAX_IMAGE_SIZE_MB = 10
+MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024
+MAX_WIDTH = 8192
+MAX_HEIGHT = 8192
+SUPPORTED_FORMATS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff'}
+
+def validate_image_data(image_data: bytes) -> Dict[str, Any]:
+    try:
+        image = Image.open(io.BytesIO(image_data))
+        width, height = image.size
+        format = image.format.lower() if image.format else 'unknown'
+        
+        if format not in SUPPORTED_FORMATS:
+            return {
+                'valid': False,
+                'error': f"Unsupported image format: {format}. Supported formats: {', '.join(SUPPORTED_FORMATS)}"
+            }
+        
+        if width > MAX_WIDTH or height > MAX_HEIGHT:
+            return {
+                'valid': False,
+                'error': f"Image dimensions exceed maximum allowed size. Max: {MAX_WIDTH}x{MAX_HEIGHT}, Got: {width}x{height}"
+            }
+        
+        return {
+            'valid': True,
+            'width': width,
+            'height': height,
+            'format': format,
+            'size_bytes': len(image_data)
+        }
+    except Exception as e:
+        return {
+            'valid': False,
+            'error': f"Invalid image data: {str(e)}"
+        }
+
+def decode_base64_image(base64_string: str) -> Optional[bytes]:
+    try:
+        match = re.match(r'^data:image/([\w-]+);base64,(.+)$', base64_string)
+        if match:
+            base64_data = match.group(2)
+        else:
+            base64_data = base64_string
+        
+        decoded = base64.b64decode(base64_data)
+        
+        if len(decoded) > MAX_IMAGE_SIZE_BYTES:
+            return None
+        
+        return decoded
+    except Exception:
+        return None
 
 app = FastAPI(title="AI Controller API", version="1.0.0")
 
@@ -143,7 +203,7 @@ async def shutdown_event():
 
 class ChatCompletionRequest(BaseModel):
     model: str
-    messages: List[Dict[str, str]]
+    messages: List[Dict[str, Any]]
     stream: Optional[bool] = False
     max_tokens: Optional[int] = None
     temperature: Optional[float] = 0.7
@@ -151,6 +211,26 @@ class ChatCompletionRequest(BaseModel):
     stop: Optional[List[str]] = None
     presence_penalty: Optional[float] = 0.0
     frequency_penalty: Optional[float] = 0.0
+
+    @field_validator('messages')
+    def validate_messages_with_images(cls, v):
+        for message in v:
+            if 'content' in message:
+                content = message['content']
+                if isinstance(content, list):
+                    for part in content:
+                        if isinstance(part, dict) and 'image_url' in part:
+                            image_url = part['image_url']
+                            if isinstance(image_url, dict) and 'url' in image_url:
+                                url = image_url['url']
+                                if url.startswith('data:image/'):
+                                    decoded = decode_base64_image(url)
+                                    if decoded is None:
+                                        raise ValueError("Invalid or oversized base64 image data")
+                                    validation = validate_image_data(decoded)
+                                    if not validation['valid']:
+                                        raise ValueError(validation['error'])
+        return v
 
 class ChatCompletionResponseChoice(BaseModel):
     index: int
@@ -178,6 +258,29 @@ async def list_models():
     models = scheduler.get_available_models()
     return {"object": "list", "data": [{"id": m, "object": "model", "created": 0, "owned_by": "local"} for m in models]}
 
+def count_image_content(request_data: Dict) -> Tuple[bool, int]:
+    has_image = False
+    total_size = 0
+    
+    if request_data.get('messages'):
+        for message in request_data['messages']:
+            content = message.get('content')
+            if isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get('image_url'):
+                        has_image = True
+                        image_url = part['image_url']
+                        if isinstance(image_url, dict):
+                            url = image_url.get('url', '')
+                        else:
+                            url = str(image_url)
+                        if url.startswith('data:image/'):
+                            comma_pos = url.find(',')
+                            if comma_pos > 0:
+                                base64_data = url[comma_pos+1:]
+                                total_size += int((len(base64_data) * 3) / 4)
+    return has_image, total_size
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest):
     start_time = datetime.now()
@@ -185,7 +288,13 @@ async def chat_completions(request: ChatCompletionRequest):
     stream = request.stream or False
     status_code = 200
     
-    logger.info(f"Received chat completion request for model: {model_name}, stream: {stream}")
+    request_data = request.model_dump(exclude_unset=True)
+    has_image, total_image_size = count_image_content(request_data)
+    
+    if has_image:
+        logger.info(f"Received chat completion request with image content for model: {model_name}, stream: {stream}, image_size: {total_image_size} bytes")
+    else:
+        logger.info(f"Received chat completion request for model: {model_name}, stream: {stream}")
     
     try:
         if not scheduler.is_model_available(model_name):
@@ -282,8 +391,138 @@ async def chat_completions(request: ChatCompletionRequest):
             endpoint="/v1/chat/completions",
             status_code=status_code,
             response_time=(datetime.now() - start_time).total_seconds(),
-            model_name=model_name
+            model_name=model_name,
+            is_image_request=has_image,
+            image_size_bytes=total_image_size
         )
+
+class ImageUploadResponse(BaseModel):
+    success: bool
+    message: str
+    image_info: Optional[Dict[str, Any]] = None
+
+class ImageValidationRequest(BaseModel):
+    image_data: str
+
+@app.post("/v1/images/validate", response_model=ImageUploadResponse)
+async def validate_image(request: ImageValidationRequest):
+    start_time = datetime.now()
+    logger.info("Received image validation request")
+    
+    try:
+        decoded = decode_base64_image(request.image_data)
+        if decoded is None:
+            return {
+                "success": False,
+                "message": "Failed to decode base64 image data"
+            }
+        
+        validation = validate_image_data(decoded)
+        if validation['valid']:
+            metrics.record_request(
+                endpoint="/v1/images/validate",
+                status_code=200,
+                response_time=(datetime.now() - start_time).total_seconds(),
+                model_name="image-validation"
+            )
+            return {
+                "success": True,
+                "message": "Image validation successful",
+                "image_info": validation
+            }
+        else:
+            metrics.record_request(
+                endpoint="/v1/images/validate",
+                status_code=400,
+                response_time=(datetime.now() - start_time).total_seconds(),
+                model_name="image-validation"
+            )
+            return {
+                "success": False,
+                "message": validation['error'],
+                "image_info": validation
+            }
+    except Exception as e:
+        logger.error(f"Image validation error: {str(e)}")
+        metrics.record_request(
+            endpoint="/v1/images/validate",
+            status_code=500,
+            response_time=(datetime.now() - start_time).total_seconds(),
+            model_name="image-validation"
+        )
+        raise HTTPException(status_code=500, detail=f"Image validation failed: {str(e)}")
+
+@app.post("/v1/images/upload", response_model=ImageUploadResponse)
+async def upload_image(file: UploadFile = File(...)):
+    start_time = datetime.now()
+    logger.info(f"Received image upload request: {file.filename}")
+    
+    try:
+        contents = await file.read()
+        
+        if len(contents) > MAX_IMAGE_SIZE_BYTES:
+            metrics.record_request(
+                endpoint="/v1/images/upload",
+                status_code=413,
+                response_time=(datetime.now() - start_time).total_seconds(),
+                model_name="image-upload"
+            )
+            return {
+                "success": False,
+                "message": f"Image size exceeds maximum allowed size of {MAX_IMAGE_SIZE_MB}MB"
+            }
+        
+        validation = validate_image_data(contents)
+        if validation['valid']:
+            metrics.record_request(
+                endpoint="/v1/images/upload",
+                status_code=200,
+                response_time=(datetime.now() - start_time).total_seconds(),
+                model_name="image-upload"
+            )
+            return {
+                "success": True,
+                "message": "Image uploaded successfully",
+                "image_info": {
+                    **validation,
+                    "filename": file.filename,
+                    "content_type": file.content_type
+                }
+            }
+        else:
+            metrics.record_request(
+                endpoint="/v1/images/upload",
+                status_code=400,
+                response_time=(datetime.now() - start_time).total_seconds(),
+                model_name="image-upload"
+            )
+            return {
+                "success": False,
+                "message": validation['error'],
+                "image_info": validation
+            }
+    except Exception as e:
+        logger.error(f"Image upload error: {str(e)}")
+        metrics.record_request(
+            endpoint="/v1/images/upload",
+            status_code=500,
+            response_time=(datetime.now() - start_time).total_seconds(),
+            model_name="image-upload"
+        )
+        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+
+@app.get("/v1/images/info")
+async def get_image_info():
+    return {
+        "max_size_mb": MAX_IMAGE_SIZE_MB,
+        "max_dimensions": f"{MAX_WIDTH}x{MAX_HEIGHT}",
+        "supported_formats": list(SUPPORTED_FORMATS),
+        "endpoints": {
+            "validate": "POST /v1/images/validate - Validate base64 encoded image",
+            "upload": "POST /v1/images/upload - Upload image file",
+            "info": "GET /v1/images/info - Get image service information"
+        }
+    }
 
 @app.websocket("/ws/monitor")
 async def websocket_monitor(websocket: WebSocket):

@@ -16,6 +16,12 @@ class MetricsCollector:
         self.gpu_status_history: List[Dict] = []
         self.queue_length_history: List[int] = []
         self.redis_prefix = "ai_controller:metrics:"
+        
+        self.image_request_counts: Dict[str, int] = defaultdict(int)
+        self.image_request_sizes: List[int] = []
+        self.image_response_times: List[float] = []
+        self.image_error_counts: Dict[str, int] = defaultdict(int)
+        
         self._load_from_redis()
     
     def _get_key(self, name: str) -> str:
@@ -53,6 +59,26 @@ class MetricsCollector:
                     self.start_time = datetime.fromisoformat(data)
                 except:
                     pass
+            
+            image_request_counts_key = self._get_key("image_request_counts")
+            data = redis_client.get_json(image_request_counts_key)
+            if data:
+                self.image_request_counts = defaultdict(int, data)
+            
+            image_request_sizes_key = self._get_key("image_request_sizes")
+            data = redis_client.get_json(image_request_sizes_key)
+            if data:
+                self.image_request_sizes = data
+            
+            image_response_times_key = self._get_key("image_response_times")
+            data = redis_client.get_json(image_response_times_key)
+            if data:
+                self.image_response_times = data
+            
+            image_error_counts_key = self._get_key("image_error_counts")
+            data = redis_client.get_json(image_error_counts_key)
+            if data:
+                self.image_error_counts = defaultdict(int, data)
         except Exception as e:
             logger.error(f"Failed to load metrics from Redis: {e}")
     
@@ -75,10 +101,22 @@ class MetricsCollector:
             
             start_time_key = self._get_key("start_time")
             redis_client.set(start_time_key, self.start_time.isoformat())
+            
+            image_request_counts_key = self._get_key("image_request_counts")
+            redis_client.set_json(image_request_counts_key, dict(self.image_request_counts))
+            
+            image_request_sizes_key = self._get_key("image_request_sizes")
+            redis_client.set_json(image_request_sizes_key, self.image_request_sizes)
+            
+            image_response_times_key = self._get_key("image_response_times")
+            redis_client.set_json(image_response_times_key, self.image_response_times)
+            
+            image_error_counts_key = self._get_key("image_error_counts")
+            redis_client.set_json(image_error_counts_key, dict(self.image_error_counts))
         except Exception as e:
             logger.error(f"Failed to save metrics to Redis: {e}")
     
-    def record_request(self, endpoint: str, status_code: int, response_time: float, model_name: Optional[str] = None):
+    def record_request(self, endpoint: str, status_code: int, response_time: float, model_name: Optional[str] = None, is_image_request: bool = False, image_size_bytes: int = 0):
         self.request_counts[endpoint] += 1
         
         if status_code >= 400:
@@ -91,7 +129,25 @@ class MetricsCollector:
         if model_name:
             self.model_requests[model_name] += 1
         
+        if is_image_request:
+            self.record_image_request(endpoint, status_code, response_time, image_size_bytes)
+        
         self._save_to_redis()
+    
+    def record_image_request(self, endpoint: str, status_code: int, response_time: float, image_size_bytes: int = 0):
+        self.image_request_counts[endpoint] += 1
+        self.image_response_times.append(response_time)
+        if image_size_bytes > 0:
+            self.image_request_sizes.append(image_size_bytes)
+        
+        if len(self.image_response_times) > 500:
+            self.image_response_times = self.image_response_times[-500:]
+        
+        if len(self.image_request_sizes) > 500:
+            self.image_request_sizes = self.image_request_sizes[-500:]
+        
+        if status_code >= 400:
+            self.image_error_counts[endpoint] += 1
     
     def record_gpu_status(self, gpu_status: Dict):
         self.gpu_status_history.append({
@@ -117,6 +173,12 @@ class MetricsCollector:
         max_response_time = max(self.response_times) if self.response_times else 0
         min_response_time = min(self.response_times) if self.response_times else 0
         
+        avg_image_response_time = sum(self.image_response_times) / len(self.image_response_times) if self.image_response_times else 0
+        max_image_response_time = max(self.image_response_times) if self.image_response_times else 0
+        min_image_response_time = min(self.image_response_times) if self.image_response_times else 0
+        avg_image_size_bytes = sum(self.image_request_sizes) / len(self.image_request_sizes) if self.image_request_sizes else 0
+        max_image_size_bytes = max(self.image_request_sizes) if self.image_request_sizes else 0
+        
         uptime = datetime.now() - self.start_time
         
         avg_queue_length = sum(self.queue_length_history) / len(self.queue_length_history) if self.queue_length_history else 0
@@ -135,6 +197,25 @@ class MetricsCollector:
                 "count": len(self.response_times)
             },
             "model_requests": dict(self.model_requests),
+            "image_requests": {
+                "total": sum(self.image_request_counts.values()),
+                "total_errors": sum(self.image_error_counts.values()),
+                "request_counts": dict(self.image_request_counts),
+                "error_counts": dict(self.image_error_counts),
+                "response_time": {
+                    "average": round(avg_image_response_time, 2),
+                    "max": round(max_image_response_time, 2),
+                    "min": round(min_image_response_time, 2),
+                    "count": len(self.image_response_times)
+                },
+                "size": {
+                    "average_bytes": round(avg_image_size_bytes, 2),
+                    "average_mb": round(avg_image_size_bytes / (1024 * 1024), 2),
+                    "max_bytes": max_image_size_bytes,
+                    "max_mb": round(max_image_size_bytes / (1024 * 1024), 2),
+                    "count": len(self.image_request_sizes)
+                }
+            },
             "queue": {
                 "average_length": round(avg_queue_length, 2),
                 "max_length": max_queue_length,
@@ -156,6 +237,11 @@ class MetricsCollector:
         self.start_time = datetime.now()
         self.gpu_status_history.clear()
         self.queue_length_history.clear()
+        
+        self.image_request_counts.clear()
+        self.image_request_sizes.clear()
+        self.image_response_times.clear()
+        self.image_error_counts.clear()
         
         if redis_client.is_connected():
             try:

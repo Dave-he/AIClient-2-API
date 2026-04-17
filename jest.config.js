@@ -1,10 +1,11 @@
 export default {
-  testEnvironment: 'node',
+  testEnvironment: 'jsdom',
   transform: {
     '^.+\\.(js|mjs)$': 'babel-jest',
+    '^.+\\.vue$': 'jest-transform-stub',
   },
   transformIgnorePatterns: [
-    '/node_modules/(?!(uuid)/)', // uuid is an ESM module that needs to be transformed
+    '/node_modules/(?!(uuid)/)',
   ],
   globals: {
     'jest': {
@@ -12,7 +13,8 @@ export default {
     }
   },
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1'
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+    '\\.(css|less|scss)$': 'jest-transform-stub'
   },
   testMatch: [
     '**/tests/**/*.test.js'
@@ -24,5 +26,5 @@ export default {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  testTimeout: 30000 // Add a global test timeout
+  testTimeout: 30000
 };

@@ -12,28 +12,53 @@ import { PROMPT_LOG_FILENAME } from '../core/config-manager.js';
 import { getPluginManager } from '../core/plugin-manager.js';
 import { randomUUID } from 'crypto';
 import { handleGrokAssetsProxy } from '../utils/grok-assets-proxy.js';
+import { getMaxRequestSize, containsImageContent } from '../utils/network-utils.js';
 
-/**
- * Generate a short unique request ID (8 characters)
- */
+const IMAGE_ENDPOINTS = ['/v1/chat/completions', '/v1/images/validate', '/v1/images/upload'];
+
 function generateRequestId() {
     return randomUUID().slice(0, 8);
 }
 
-/**
- * Parse request body as JSON
- */
-function parseRequestBody(req) {
+function parseRequestBody(req, config) {
     return new Promise((resolve, reject) => {
-        let body = '';
-        req.on('data', chunk => { body += chunk.toString(); });
+        const maxSize = getMaxRequestSize(config);
+        let body = [];
+        let totalSize = 0;
+        
+        req.on('data', chunk => {
+            totalSize += chunk.length;
+            if (totalSize > maxSize) {
+                req.destroy(new Error(`Request size exceeds maximum allowed size of ${maxSize / (1024 * 1024)}MB`));
+                reject(new Error(`Request size exceeds maximum allowed size of ${maxSize / (1024 * 1024)}MB`));
+                return;
+            }
+            body.push(chunk);
+        });
+        
         req.on('end', () => {
             try {
-                resolve(body ? JSON.parse(body) : {});
+                const buffer = Buffer.concat(body);
+                const contentType = req.headers['content-type'] || '';
+                
+                if (contentType.includes('application/json')) {
+                    const bodyStr = buffer.toString('utf8');
+                    const parsed = bodyStr ? JSON.parse(bodyStr) : {};
+                    if (containsImageContent(parsed)) {
+                        logger.info(`[Image Request] Detected image content in request, size: ${totalSize} bytes`);
+                    }
+                    resolve(parsed);
+                } else if (contentType.includes('multipart/form-data')) {
+                    logger.info(`[Image Request] Multipart form data received, size: ${totalSize} bytes`);
+                    resolve({ _rawBody: buffer, _contentType: contentType });
+                } else {
+                    resolve({ _rawBody: buffer, _contentType: contentType });
+                }
             } catch (e) {
                 reject(new Error('Invalid JSON in request body'));
             }
         });
+        
         req.on('error', reject);
     });
 }

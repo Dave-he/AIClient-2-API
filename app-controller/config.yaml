@@ -20,6 +20,14 @@ models:
     required_memory: 8GB
     preload: false
     keep_alive: false
+  
+  gemma-2-vision:
+    service: vllm-gemma-vision
+    port: 8003
+    required_memory: 12GB
+    preload: false
+    keep_alive: true
+    supports_images: true
 
 settings:
   concurrency_limit: 4

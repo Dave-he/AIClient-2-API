@@ -1,5 +1,7 @@
 <template>
-  <div class="dashboard">
+  <section id="dashboard" class="section active" aria-labelledby="dashboard-title">
+    <h2 id="dashboard-title">系统概览</h2>
+    
     <div class="stats-container">
       <div class="stats-row">
         <div class="stat-item">
@@ -7,7 +9,7 @@
             <i class="fas fa-clock"></i>
           </div>
           <div class="stat-content">
-            <span class="stat-value" :key="'uptime-' + componentKey.uptime">{{ systemInfo.uptime || '--' }}</span>
+            <span class="stat-value">{{ systemInfo.uptime || '--' }}</span>
             <span class="stat-label">运行时间</span>
           </div>
         </div>
@@ -16,7 +18,7 @@
             <i class="fas fa-microchip"></i>
           </div>
           <div class="stat-content">
-            <span class="stat-value" :key="'cpu-' + componentKey.cpu">{{ systemInfo.cpu }}%</span>
+            <span class="stat-value">{{ systemInfo.cpu }}%</span>
             <span class="stat-label">CPU</span>
           </div>
         </div>
@@ -25,7 +27,7 @@
             <i class="fas fa-memory"></i>
           </div>
           <div class="stat-content">
-            <span class="stat-value" :key="'memory-' + componentKey.memory">{{ systemInfo.memory }}%</span>
+            <span class="stat-value">{{ systemInfo.memory }}%</span>
             <span class="stat-label">内存</span>
           </div>
         </div>
@@ -34,7 +36,7 @@
             <i class="fas fa-video-card"></i>
           </div>
           <div class="stat-content">
-            <span class="stat-value" :key="'gpu-' + componentKey.gpu">{{ systemInfo.gpu }}%</span>
+            <span class="stat-value">{{ systemInfo.gpu }}%</span>
             <span class="stat-label">GPU</span>
           </div>
         </div>
@@ -59,9 +61,7 @@
             </div>
           </div>
           <div class="chart-area">
-            <div class="chart-placeholder">
-              <canvas id="systemChart"></canvas>
-            </div>
+            <canvas id="systemChart"></canvas>
           </div>
           <div class="chart-legend">
             <div class="legend-item">
@@ -92,7 +92,7 @@
                 <i class="fas fa-sync-alt"></i>
               </button>
             </div>
-            <div class="gpu-content" :key="'gpu-content-' + componentKey.gpu">
+            <div class="gpu-content">
               <div v-if="gpuStatus.loading" class="loading">
                 <i class="fas fa-spinner fa-spin"></i>
                 <span>加载中...</span>
@@ -149,6 +149,106 @@
               <div v-else class="empty">
                 <i class="fas fa-video-card"></i>
                 <span>未检测到GPU设备</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel python-gpu-monitor">
+          <div class="panel-header">
+            <h3><i class="fas fa-server"></i> Python服务端GPU监控</h3>
+            <div class="panel-controls">
+              <div class="connection-status" id="pythonGpuConnectionStatus">
+                <span class="status-badge" :class="{ offline: !pythonGpuConnected }">
+                  <i class="fas fa-circle"></i> <span>{{ pythonGpuConnected ? '已连接' : '未连接' }}</span>
+                </span>
+              </div>
+              <button class="btn btn-sm btn-outline" @click="refreshPythonGpu">
+                <i class="fas fa-sync-alt"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="python-gpu-stats">
+            <div class="python-stat-item">
+              <div class="python-stat-icon gpu">
+                <i class="fas fa-microchip"></i>
+              </div>
+              <div class="python-stat-content">
+                <span class="python-stat-value">{{ pythonGpuInfo.utilization || '--' }}</span>
+                <span class="python-stat-label">GPU使用率</span>
+              </div>
+            </div>
+            <div class="python-stat-item">
+              <div class="python-stat-icon memory">
+                <i class="fas fa-memory"></i>
+              </div>
+              <div class="python-stat-content">
+                <span class="python-stat-value">{{ pythonGpuInfo.memory || '--' }}</span>
+                <span class="python-stat-label">显存使用</span>
+              </div>
+            </div>
+            <div class="python-stat-item">
+              <div class="python-stat-icon temp">
+                <i class="fas fa-thermometer-half"></i>
+              </div>
+              <div class="python-stat-content">
+                <span class="python-stat-value">{{ pythonGpuInfo.temperature || '--' }}</span>
+                <span class="python-stat-label">温度</span>
+              </div>
+            </div>
+            <div class="python-stat-item">
+              <div class="python-stat-icon power">
+                <i class="fas fa-bolt"></i>
+              </div>
+              <div class="python-stat-content">
+                <span class="python-stat-value">{{ pythonGpuInfo.power || '--' }}</span>
+                <span class="python-stat-label">功耗</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="python-gpu-chart-area">
+            <div class="chart-type-tabs">
+              <button 
+                v-for="tab in pythonChartTabs" 
+                :key="tab.id"
+                class="chart-type-tab"
+                :class="{ active: activePythonChartTab === tab.id }"
+                @click="activePythonChartTab = tab.id"
+              >
+                {{ tab.label }}
+              </button>
+            </div>
+            <canvas id="pythonGpuChart"></canvas>
+            <div class="python-chart-legend">
+              <div class="legend-item"><span class="legend-color gpu-util"></span><span>GPU使用率</span></div>
+              <div class="legend-item"><span class="legend-color gpu-mem"></span><span>显存使用率</span></div>
+              <div class="legend-item"><span class="legend-color gpu-temp"></span><span>GPU温度</span></div>
+            </div>
+          </div>
+
+          <div class="python-gpu-details">
+            <div class="python-gpu-info">
+              <div class="info-row">
+                <div class="info-item">
+                  <span class="info-label"><i class="fas fa-tag"></i> GPU型号</span>
+                  <span class="info-value">{{ pythonGpuInfo.name || '--' }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label"><i class="fas fa-hdd"></i> 总显存</span>
+                  <span class="info-value">{{ pythonGpuInfo.totalMemory || '--' }}</span>
+                </div>
+              </div>
+              <div class="info-row">
+                <div class="info-item">
+                  <span class="info-label"><i class="fas fa-chart-bar"></i> 已用显存</span>
+                  <span class="info-value">{{ pythonGpuInfo.usedMemory || '--' }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label"><i class="fas fa-chart-line"></i> 可用显存</span>
+                  <span class="info-value">{{ pythonGpuInfo.availableMemory || '--' }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -218,40 +318,40 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
 
-        <div class="panel provider-status">
-          <div class="panel-header">
-            <h3><i class="fas fa-network-wired"></i> 提供商节点状态</h3>
-            <button 
-              class="btn btn-sm btn-outline"
-              @click="refreshProviderStatus"
-            >
-              <i class="fas fa-sync-alt"></i> 刷新
-            </button>
-          </div>
-          <div class="provider-grid" :key="'provider-grid-' + componentKey.providerStatus">
-            <div v-if="providerStatus.length === 0" class="loading">
-              <i class="fas fa-spinner fa-spin"></i>
-              <span>加载中...</span>
-            </div>
-            <div 
-              v-for="provider in providerStatus" 
-              :key="provider.name"
-              class="provider-card"
+    <div class="panel provider-status provider-status-panel">
+      <div class="panel-header">
+        <h3><i class="fas fa-network-wired"></i> 提供商节点状态</h3>
+        <button 
+          class="btn btn-sm btn-outline"
+          @click="refreshProviderStatus"
+        >
+          <i class="fas fa-sync-alt"></i> 刷新
+        </button>
+      </div>
+      <div class="provider-grid provider-grid-horizontal">
+        <div v-if="providerStatus.length === 0" class="loading">
+          <i class="fas fa-spinner fa-spin"></i>
+          <span>加载中...</span>
+        </div>
+        <div 
+          v-for="provider in providerStatus" 
+          :key="provider.name"
+          class="provider-card"
+          :class="provider.status"
+        >
+          <div class="provider-header">
+            <span 
+              class="status-dot"
               :class="provider.status"
-            >
-              <div class="provider-header">
-                <span 
-                  class="status-dot"
-                  :class="provider.status"
-                ></span>
-                <span class="provider-name">{{ provider.name }}</span>
-              </div>
-              <div class="provider-info">
-                <span class="provider-accounts">{{ provider.accounts }} 账户</span>
-                <span class="provider-requests">{{ provider.requests }} 请求</span>
-              </div>
-            </div>
+            ></span>
+            <span class="provider-name">{{ provider.name }}</span>
+          </div>
+          <div class="provider-info">
+            <span class="provider-accounts">{{ provider.accounts }} 账户</span>
+            <span class="provider-requests">{{ provider.requests }} 请求</span>
           </div>
         </div>
       </div>
@@ -321,7 +421,7 @@
         </div>
       </div>
     </details>
-  </div>
+  </section>
 </template>
 
 <script setup>
@@ -347,6 +447,18 @@ const gpuStatus = ref({
   devices: []
 })
 
+const pythonGpuConnected = ref(false)
+const pythonGpuInfo = ref({
+  utilization: '--',
+  memory: '--',
+  temperature: '--',
+  power: '--',
+  name: '--',
+  totalMemory: '--',
+  usedMemory: '--',
+  availableMemory: '--'
+})
+
 const providerStatus = ref([])
 const availableModels = ref([])
 
@@ -357,14 +469,13 @@ const chartTabs = [
   { id: 'gpu', label: 'GPU' }
 ]
 
-const componentKey = ref({
-  uptime: 0,
-  cpu: 0,
-  memory: 0,
-  gpu: 0,
-  systemInfo: 0,
-  providerStatus: 0
-})
+const activePythonChartTab = ref('utilization')
+const pythonChartTabs = [
+  { id: 'utilization', label: '使用率' },
+  { id: 'memory', label: '显存' },
+  { id: 'temperature', label: '温度' },
+  { id: 'all', label: '全部' }
+]
 
 const hasUpdate = ref(false)
 const latestVersion = ref('')
@@ -416,9 +527,6 @@ const fetchSystemInfo = async () => {
       mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
       pid: data.pid || '--'
     }
-    
-    componentKey.value.systemInfo++
-    componentKey.value.uptime++
   } catch (error) {
     console.error('Failed to fetch system info:', error)
   }
@@ -436,10 +544,6 @@ const fetchSystemMonitor = async () => {
       memory: Math.round(parseFloat(data.memory?.usagePercent || 0)),
       gpu: Math.round(data.gpu?.usage || 0)
     }
-    
-    componentKey.value.cpu++
-    componentKey.value.memory++
-    componentKey.value.gpu++
   } catch (error) {
     console.error('Failed to fetch system monitor:', error)
   }
@@ -460,6 +564,33 @@ const fetchGpuStatus = async () => {
     console.error('Failed to fetch GPU status:', error)
   } finally {
     gpuStatus.value.loading = false
+  }
+}
+
+const fetchPythonGpuStatus = async () => {
+  try {
+    const api = createAxiosInstance()
+    const response = await api.get('/api/python-gpu/status')
+    const data = response.data
+    
+    if (data.success) {
+      pythonGpuConnected.value = true
+      pythonGpuInfo.value = {
+        utilization: `${data.utilization}%`,
+        memory: `${data.memoryUsed}/${data.memoryTotal}`,
+        temperature: `${data.temperature}°C`,
+        power: `${data.power}W`,
+        name: data.name || '--',
+        totalMemory: data.memoryTotal || '--',
+        usedMemory: data.memoryUsed || '--',
+        availableMemory: data.memoryAvailable || '--'
+      }
+    } else {
+      pythonGpuConnected.value = false
+    }
+  } catch (error) {
+    pythonGpuConnected.value = false
+    console.error('Failed to fetch Python GPU status:', error)
   }
 }
 
@@ -486,7 +617,6 @@ const fetchProviderStatus = async () => {
     }
     
     providerStatus.value = providers
-    componentKey.value.providerStatus++
   } catch (error) {
     console.error('Failed to fetch provider status:', error)
   }
@@ -513,6 +643,10 @@ const fetchModels = async () => {
 
 const refreshGpuStatus = async () => {
   await fetchGpuStatus()
+}
+
+const refreshPythonGpu = async () => {
+  await fetchPythonGpuStatus()
 }
 
 const refreshProviderStatus = async () => {
@@ -556,6 +690,7 @@ onMounted(async () => {
   await fetchSystemInfo()
   await fetchSystemMonitor()
   await fetchGpuStatus()
+  await fetchPythonGpuStatus()
   await fetchProviderStatus()
   await fetchModels()
 
@@ -573,7 +708,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.dashboard {
+.section {
   animation: fadeIn 0.3s ease;
 }
 
@@ -583,228 +718,245 @@ onUnmounted(() => {
 }
 
 .stats-container {
-  margin-bottom: 24px;
+  margin-bottom: 1rem;
 }
 
 .stats-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  display: flex;
+  gap: 0.5rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  padding: 0.75rem;
+  box-shadow: var(--shadow-sm);
 }
 
 .stat-item {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: white;
-  padding: 16px;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-right: 1px solid var(--border-color);
+  transition: var(--transition);
+}
+
+.stat-item:last-child {
+  border-right: none;
+}
+
+.stat-item:hover {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
 }
 
 .stat-icon-wrapper {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ecfdf5;
-  color: #059669;
+  font-size: 0.875rem;
+  color: var(--primary-color);
+  background: var(--primary-10);
+  flex-shrink: 0;
 }
 
 .stat-icon-wrapper.cpu {
-  background: #eff6ff;
-  color: #3b82f6;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
 }
 
 .stat-icon-wrapper.memory {
-  background: #f5f3ff;
-  color: #8b5cf6;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
 }
 
 .stat-icon-wrapper.gpu {
-  background: #fff7ed;
-  color: #f97316;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
 }
 
 .stat-content {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
 }
 
 .stat-value {
-  display: block;
-  font-size: 20px;
+  font-size: 1.125rem;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--text-primary);
+  line-height: 1.2;
 }
 
 .stat-label {
-  font-size: 12px;
-  color: #64748b;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .dashboard-layout {
   display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 24px;
-  margin-bottom: 24px;
+  grid-template-columns: 1fr 340px;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dashboard-left {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dashboard-right {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .panel {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
-  margin-bottom: 24px;
 }
 
 .panel-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 16px;
-  border-bottom: 1px solid #e2e8f0;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .panel-header h3 {
-  font-size: 14px;
+  font-size: 0.95rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-primary);
+  margin: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
-.btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  transition: all 0.2s;
+.panel-header h3 i {
+  color: var(--primary-color);
 }
 
-.btn-sm {
-  padding: 4px 10px;
-}
-
-.btn-outline {
-  background: #f1f5f9;
-  color: #64748b;
-}
-
-.btn-outline:hover {
-  background: #e2e8f0;
-}
-
-.btn-primary {
-  background: #059669;
-  color: white;
-}
-
-.btn-primary:hover {
-  background: #047857;
+.panel-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .chart-tabs {
   display: flex;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
 .chart-tab {
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  background: #f1f5f9;
-  color: #64748b;
-  border: none;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--transition);
+}
+
+.chart-tab:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--primary-color);
 }
 
 .chart-tab.active {
-  background: #059669;
+  background: var(--primary-color);
   color: white;
+  border-color: var(--primary-color);
 }
 
 .chart-area {
-  padding: 16px;
-  height: 200px;
+  position: relative;
+  height: 160px;
+  background: var(--bg-secondary);
+  padding: 0.5rem;
 }
 
-.chart-placeholder {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f8fafc;
-  border-radius: 8px;
+#systemChart, #pythonGpuChart {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .chart-legend {
   display: flex;
-  gap: 16px;
-  padding: 0 16px 16px;
-  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-color);
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #64748b;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
 }
 
 .legend-color {
-  width: 12px;
-  height: 12px;
+  width: 0.6rem;
+  height: 0.3rem;
   border-radius: 2px;
 }
 
-.legend-color.cpu { background: #3b82f6; }
-.legend-color.memory { background: #8b5cf6; }
-.legend-color.gpu { background: #f97316; }
-.legend-color.gpu-temp { background: #ef4444; }
+.legend-color.cpu { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.legend-color.memory { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.legend-color.gpu { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.legend-color.gpu-temp { background: linear-gradient(90deg, #ef4444, #f87171); }
+.legend-color.gpu-util { background: #3b82f6; }
+.legend-color.gpu-mem { background: #8b5cf6; }
 
 .gpu-section {
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--border-color);
 }
 
 .gpu-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  align-items: center;
+  padding: 0.75rem 1rem;
 }
 
 .gpu-header h4 {
-  font-size: 13px;
+  font-size: 0.85rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-primary);
+  margin: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.5rem;
 }
 
 .gpu-content {
-  padding: 16px;
+  padding: 0.75rem 1rem;
 }
 
 .loading, .empty, .error {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  color: #94a3b8;
-  padding: 20px;
+  gap: 0.5rem;
+  color: var(--text-tertiary);
+  padding: 1rem;
 }
 
-.loading i, .empty i, .error i {
+.loading i {
   animation: spin 1s linear infinite;
 }
 
@@ -814,113 +966,229 @@ onUnmounted(() => {
 }
 
 .error {
-  color: #dc2626;
-  background: #fef2f2;
-  border-radius: 8px;
+  color: var(--danger-color);
+  background: var(--danger-bg-light);
+  border-radius: var(--radius-md);
 }
 
 .gpu-devices {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .gpu-device {
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
 }
 
 .gpu-device-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  align-items: center;
+  margin-bottom: 0.5rem;
 }
 
 .gpu-name {
-  font-size: 13px;
+  font-size: 0.85rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--text-primary);
 }
 
 .gpu-status {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #fee2e2;
-  color: #dc2626;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
 }
 
 .gpu-status.healthy {
-  background: #dcfce7;
-  color: #059669;
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .gpu-device-info {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .info-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.5rem;
 }
 
 .info-label {
-  font-size: 12px;
-  color: #64748b;
-  width: 60px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  width: 50px;
 }
 
 .info-bar-container {
   flex: 1;
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 3px;
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
   overflow: hidden;
 }
 
 .info-bar {
   height: 100%;
-  background: #059669;
-  border-radius: 3px;
+  background: var(--primary-color);
+  border-radius: 2px;
   transition: width 0.3s;
 }
 
 .info-bar.gpu-usage {
-  background: #3b82f6;
+  background: var(--info-color);
 }
 
 .info-value {
-  font-size: 12px;
-  color: #334155;
-  width: 80px;
+  font-size: 0.7rem;
+  color: var(--text-primary);
+  width: 70px;
   text-align: right;
 }
 
 .info-value.temp {
-  color: #f97316;
+  color: var(--warning-color);
 }
 
 .info-value.temp.warning {
-  color: #dc2626;
+  color: var(--danger-color);
   font-weight: 600;
 }
 
-.info-list {
-  padding: 16px;
+.python-gpu-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.info-row {
+.python-stat-item {
   display: flex;
-  gap: 16px;
-  margin-bottom: 12px;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
 }
 
-.info-row:last-child {
+.python-stat-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+.python-stat-icon.gpu {
+  background: var(--info-bg);
+  color: var(--info-color);
+}
+
+.python-stat-icon.memory {
+  background: var(--warning-bg);
+  color: var(--warning-color);
+}
+
+.python-stat-icon.temp {
+  background: var(--danger-bg);
+  color: var(--danger-color);
+}
+
+.python-stat-icon.power {
+  background: var(--success-bg);
+  color: var(--success-color);
+}
+
+.python-stat-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.python-stat-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.python-stat-label {
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+}
+
+.python-gpu-chart-area {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.chart-type-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.chart-type-tab {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.chart-type-tab:hover {
+  background: var(--bg-tertiary);
+}
+
+.chart-type-tab.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.python-chart-legend {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.python-gpu-details {
+  padding: 0.75rem 1rem;
+}
+
+.python-gpu-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.info-list {
+  padding: 0.75rem 1rem;
+}
+
+.info-list .info-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.info-list .info-row:last-child {
   margin-bottom: 0;
 }
 
@@ -928,148 +1196,155 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
-.info-label {
-  font-size: 12px;
-  color: #64748b;
+.info-list .info-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  width: auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25rem;
+}
+
+.info-list .info-value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  width: auto;
+  text-align: left;
 }
 
 .version-wrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.info-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
+  gap: 0.5rem;
 }
 
 .update-badge {
-  font-size: 11px;
-  padding: 2px 6px;
-  background: #dcfce7;
-  color: #059669;
-  border-radius: 4px;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
+  background: var(--success-bg);
+  color: var(--success-text);
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
 .update-controls {
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .provider-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  padding: 16px;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.provider-grid-horizontal {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
 }
 
 .provider-card {
-  padding: 12px;
-  border-radius: 8px;
-  background: #f8fafc;
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
 }
 
 .provider-card.healthy {
-  border: 1px solid #dcfce7;
+  border: 1px solid var(--success-bg);
 }
 
 .provider-card.warning {
-  border: 1px solid #fef3c7;
+  border: 1px solid var(--warning-border);
 }
 
 .provider-card.error {
-  border: 1px solid #fee2e2;
+  border: 1px solid var(--danger-border);
 }
 
 .provider-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #dc2626;
+  background: var(--danger-color);
 }
 
 .status-dot.healthy {
-  background: #059669;
+  background: var(--success-color);
 }
 
 .status-dot.warning {
-  background: #f59e0b;
+  background: var(--warning-color);
 }
 
 .provider-name {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-primary);
 }
 
 .provider-info {
   display: flex;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .provider-accounts, .provider-requests {
-  font-size: 11px;
-  color: #64748b;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
 }
 
 .expandable-section {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
   overflow: hidden;
+  margin-top: 1rem;
 }
 
 .section-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  padding: 0.75rem 1rem;
   cursor: pointer;
-  background: #f8fafc;
+  background: var(--bg-secondary);
 }
 
 .summary-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.625rem;
 }
 
 .summary-header i {
-  color: #059669;
+  color: var(--primary-color);
 }
 
 .summary-header span:first-of-type {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-primary);
 }
 
 .expand-hint {
-  font-size: 12px;
-  color: #94a3b8;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
 }
 
 .caret {
-  color: #94a3b8;
+  color: var(--text-tertiary);
   transition: transform 0.2s;
 }
 
@@ -1078,89 +1353,88 @@ onUnmounted(() => {
 }
 
 .routing-panel {
-  padding: 20px;
+  padding: 1.25rem;
 }
 
 .routing-panel h3 {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .routing-desc {
-  font-size: 13px;
-  color: #64748b;
-  margin-bottom: 16px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
 }
 
 .routing-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .routing-item {
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--transition);
 }
 
 .routing-item:hover {
-  background: #ecfdf5;
-  border-color: #059669;
+  background: var(--primary-10);
 }
 
 .routing-item i {
-  color: #059669;
-  margin-bottom: 6px;
+  color: var(--primary-color);
+  margin-bottom: 0.375rem;
 }
 
 .route-path {
   display: block;
   font-family: monospace;
-  font-size: 12px;
-  color: #1e293b;
-  margin-bottom: 4px;
+  font-size: 0.7rem;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
 }
 
 .route-description {
-  font-size: 11px;
-  color: #64748b;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
 }
 
 .routing-tips {
-  background: #fffbeb;
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 20px;
+  background: var(--warning-bg-alt);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  margin-bottom: 1.25rem;
 }
 
 .routing-tips h4 {
-  font-size: 13px;
+  font-size: 0.75rem;
   font-weight: 600;
-  color: #92400e;
+  color: var(--warning-text);
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
 }
 
 .routing-tips ul {
   margin: 0;
-  padding-left: 20px;
+  padding-left: 1.25rem;
 }
 
 .routing-tips li {
-  font-size: 12px;
-  color: #78350f;
-  margin-bottom: 4px;
+  font-size: 0.7rem;
+  color: var(--warning-text-dark);
+  margin-bottom: 0.25rem;
 }
 
 .routing-tips li:last-child {
@@ -1168,62 +1442,100 @@ onUnmounted(() => {
 }
 
 .models-area {
-  border-top: 1px solid #e2e8f0;
-  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 1.25rem;
 }
 
 .models-title {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .models-desc {
-  margin-bottom: 12px;
+  margin-bottom: 0.75rem;
 }
 
 .highlight-note {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #64748b;
-  padding: 8px 12px;
-  background: #f8fafc;
-  border-radius: 6px;
+  gap: 0.375rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
 }
 
 .highlight-note i {
-  color: #059669;
+  color: var(--primary-color);
 }
 
 .models-container {
-  min-height: 80px;
+  min-height: 3rem;
 }
 
 .models-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .model-tag {
-  padding: 4px 10px;
-  background: #f1f5f9;
-  border-radius: 20px;
-  font-size: 12px;
-  color: #334155;
+  padding: 0.25rem 0.625rem;
+  background: var(--bg-secondary);
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  color: var(--text-primary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--transition);
 }
 
 .model-tag:hover {
-  background: #ecfdf5;
-  color: #059669;
+  background: var(--primary-10);
+  color: var(--primary-color);
+}
+
+.btn {
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.65rem;
+}
+
+.btn-outline {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.btn-outline:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--primary-color);
+}
+
+.btn-primary {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
 }
 
 @media (max-width: 1024px) {
@@ -1236,17 +1548,45 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .stats-row {
-    grid-template-columns: 1fr;
+    flex-wrap: wrap;
+  }
+  
+  .stat-item {
+    min-width: calc(50% - 0.25rem);
   }
   
   .routing-grid {
     grid-template-columns: 1fr;
   }
   
-  .provider-grid {
+  .provider-grid-horizontal {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .python-gpu-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-item {
+    min-width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .stat-item:last-child {
+    border-bottom: none;
+  }
+  
+  .provider-grid-horizontal {
     grid-template-columns: 1fr;
+  }
+  
+  .python-gpu-stats {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>
