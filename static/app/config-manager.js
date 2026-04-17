@@ -193,8 +193,7 @@ async function loadConfiguration() {
         const modelProviderEl = document.getElementById('modelProvider');
         const systemPromptEl = document.getElementById('systemPrompt');
 
-        // API Key 脱敏处理：如果返回的是脱敏值，保持输入框为空（用户输入新值时才保存）
-        if (apiKeyEl) apiKeyEl.value = (data.REQUIRED_API_KEY && data.REQUIRED_API_KEY !== '******') ? data.REQUIRED_API_KEY : '';
+        if (apiKeyEl) apiKeyEl.value = data.REQUIRED_API_KEY || '';
         if (hostEl) hostEl.value = data.HOST || '127.0.0.1';
         if (portEl) portEl.value = data.SERVER_PORT || 3000;
         

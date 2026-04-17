@@ -84,6 +84,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await auth.handleLoginRequest(req, res);
     }
 
+    // 验证登录Token接口（用于前端检查登录状态）
+    if (method === 'GET' && pathParam === '/api/validate-token') {
+        return await auth.handleValidateToken(req, res);
+    }
+
     // 健康检查接口（用于前端token验证）
     if (method === 'GET' && pathParam === '/api/health') {
         return await systemApi.handleHealthCheck(req, res);

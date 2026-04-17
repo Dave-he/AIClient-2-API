@@ -297,6 +297,31 @@ export async function checkAuth(req) {
 }
 
 /**
+ * 验证登录Token有效性（供前端检查登录状态使用）
+ */
+export async function handleValidateToken(req, res) {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ valid: false, message: 'No token provided' }));
+        return true;
+    }
+
+    const token = authHeader.substring(7);
+    const tokenInfo = await verifyToken(token);
+    
+    if (tokenInfo) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ valid: true, message: 'Token is valid' }));
+    } else {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ valid: false, message: 'Token is invalid or expired' }));
+    }
+    return true;
+}
+
+/**
  * 处理登录请求
  */
 export async function handleLoginRequest(req, res) {

@@ -335,13 +335,14 @@
             if (token) {
                 // Token存在，验证其有效性
                 try {
-                    const response = await fetch('/api/health', {
+                    const response = await fetch('/api/validate-token', {
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }
                     });
                     
-                    if (response.ok) {
+                    const data = await response.json();
+                    if (data.valid) {
                         // Token有效，跳转到主页
                         window.location.href = '/';
                     } else {

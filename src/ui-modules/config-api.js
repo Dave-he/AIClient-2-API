@@ -97,8 +97,7 @@ export async function handleGetConfig(req, res, currentConfig) {
         LOG_MAX_FILE_SIZE: currentConfig.LOG_MAX_FILE_SIZE,
         LOG_MAX_FILES: currentConfig.LOG_MAX_FILES,
         SCHEDULED_HEALTH_CHECK: currentConfig.SCHEDULED_HEALTH_CHECK,
-        // 脱敏：只返回是否设置了 API Key，不返回原文
-        REQUIRED_API_KEY: currentConfig.REQUIRED_API_KEY ? '******' : '',
+        REQUIRED_API_KEY: currentConfig.REQUIRED_API_KEY || '',
         systemPrompt,
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
