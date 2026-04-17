@@ -37,7 +37,9 @@ export class LocalApiService {
         const headers = {
             'Content-Type': 'application/json'
         };
-        headers['Authorization'] = `Bearer ${this.apiKey}`;
+        if (this.apiKey && this.apiKey !== 'local-dev-key') {
+            headers['Authorization'] = `Bearer ${this.apiKey}`;
+        }
 
         const axiosConfig = {
             baseURL: this.baseUrl,

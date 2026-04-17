@@ -92,8 +92,8 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
     const toPrefix = getProtocolPrefix(toProvider);
     
     if (fromPrefix !== toPrefix) {
-        logger.info(`[Request Convert] Converting request from ${fromProvider} to ${toProvider}`);
-        processedRequestBody = convertData(originalRequestBody, 'request', fromProvider, toProvider);
+        logger.info(`[Request Convert] Converting request from ${fromPrefix} to ${toPrefix}`);
+        processedRequestBody = convertData(originalRequestBody, 'request', fromPrefix, toPrefix);
     } else {
         logger.info(`[Request Convert] Request format matches backend provider. No conversion needed.`);
     }

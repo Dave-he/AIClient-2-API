@@ -236,6 +236,29 @@
 .legend-color.completion { background: linear-gradient(90deg, #10b981, #34d399); }
 .legend-color.total { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
 
+/* 分隔线 */
+.section-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+}
+
+.section-divider hr {
+    flex: 1;
+    border: none;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.section-divider .divider-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
 /* GPU区域 */
 .gpu-section {
     padding: 0.75rem 1rem;

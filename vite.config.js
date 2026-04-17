@@ -22,7 +22,7 @@ export default defineConfig({
     port: 9090
   },
   build: {
-    outDir: 'dist',
+    outDir: 'vue-dist',
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html')

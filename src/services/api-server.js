@@ -226,12 +226,29 @@ function setupSignalHandlers() {
     });
 
     process.on('uncaughtException', (error) => {
-        logger.error('[Server] Uncaught exception:', error);
+        // 添加更详细的错误信息记录
+        const errorDetails = {
+            type: typeof error,
+            isObject: error instanceof Object,
+            message: error?.message || 'No message',
+            code: error?.code || 'No code',
+            stack: error?.stack || 'No stack',
+            errorString: String(error),
+            keys: error instanceof Object ? Object.keys(error) : 'Not an object'
+        };
+        
+        logger.error('[Server] Uncaught exception:', errorDetails);
         
         // 检查是否为可重试的网络错误
         if (isRetryableNetworkError(error)) {
             logger.warn('[Server] Network error detected, continuing operation...');
             return; // 不退出程序，继续运行
+        }
+        
+        // 对于空异常对象，不关闭服务，记录警告
+        if (typeof error === 'object' && error !== null && Object.keys(error).length === 0) {
+            logger.warn('[Server] Empty exception object detected, continuing operation...');
+            return;
         }
         
         // 对于其他严重错误，执行优雅关闭
@@ -240,12 +257,29 @@ function setupSignalHandlers() {
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-        logger.error('[Server] Unhandled rejection at:', promise, 'reason:', reason);
+        // 添加更详细的错误信息记录
+        const reasonDetails = {
+            type: typeof reason,
+            isObject: reason instanceof Object,
+            message: reason?.message || 'No message',
+            code: reason?.code || 'No code',
+            stack: reason?.stack || 'No stack',
+            reasonString: String(reason),
+            keys: reason instanceof Object ? Object.keys(reason) : 'Not an object'
+        };
+        
+        logger.error('[Server] Unhandled rejection at:', promise, 'reason:', reasonDetails);
         
         // 检查是否为可重试的网络错误
         if (reason && isRetryableNetworkError(reason)) {
             logger.warn('[Server] Network error in promise rejection, continuing operation...');
             return; // 不退出程序，继续运行
+        }
+        
+        // 对于空异常对象，不关闭服务，记录警告
+        if (typeof reason === 'object' && reason !== null && Object.keys(reason).length === 0) {
+            logger.warn('[Server] Empty rejection reason detected, continuing operation...');
+            return;
         }
     });
 }

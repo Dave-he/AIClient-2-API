@@ -1,16 +1,16 @@
 {
-  "openai-custom": [
+  "local-model": [
     {
       "customName": "本地vLLM控制器",
-      "OPENAI_API_KEY": "local-dev-key",
-      "OPENAI_BASE_URL": "http://localhost:5000/v1",
+      "LOCAL_API_KEY": "local-dev-key",
+      "LOCAL_BASE_URL": "http://localhost:5000",
       "checkModelName": "gemma-4-31b",
       "checkHealth": false,
       "uuid": "local-python-controller",
       "isHealthy": true,
       "isDisabled": false,
-      "lastUsed": null,
-      "usageCount": 0,
+      "lastUsed": "2026-04-17T17:52:43.744Z",
+      "usageCount": 3,
       "errorCount": 0,
       "lastErrorTime": null,
       "lastErrorMessage": null,
@@ -18,13 +18,14 @@
       "refreshCount": 0,
       "lastHealthCheckTime": null,
       "lastHealthCheckModel": null,
-      "_lastSelectionSeq": 1,
+      "_lastSelectionSeq": 0,
       "supportedModels": [
         "gemma-4-31b",
         "llama-3-8b",
         "mistral-7b",
         "gemma-2-vision"
-      ]
+      ],
+      "lastRefreshTime": 1776448363744
     }
   ]
 }

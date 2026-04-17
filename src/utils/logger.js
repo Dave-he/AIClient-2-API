@@ -203,9 +203,9 @@ class Logger {
         const message = args.map(arg => {
             if (typeof arg === 'object') {
                 try {
-                    return JSON.stringify(arg, null, 2);
+                    return JSON.stringify(arg, this._getCircularReplacer(), 2);
                 } catch (e) {
-                    return String(arg);
+                    return this._formatErrorObject(arg);
                 }
             }
             return String(arg);
@@ -214,6 +214,37 @@ class Logger {
         parts.push(message);
 
         return parts.join(' ');
+    }
+
+    _getCircularReplacer() {
+        const seen = new WeakSet();
+        return (key, value) => {
+            if (typeof value === 'object' && value !== null) {
+                if (seen.has(value)) {
+                    return '[Circular Reference]';
+                }
+                seen.add(value);
+            }
+            return value;
+        };
+    }
+
+    _formatErrorObject(error) {
+        if (error instanceof Error) {
+            const errorInfo = {
+                name: error.name,
+                message: error.message,
+                code: error.code,
+                status: error.status,
+                stack: error.stack ? error.stack.split('\n').slice(0, 5).join('\n') : undefined
+            };
+            return JSON.stringify(errorInfo, null, 2);
+        }
+        try {
+            return JSON.stringify(error, this._getCircularReplacer(), 2);
+        } catch {
+            return String(error);
+        }
     }
 
     shouldLog(level) {

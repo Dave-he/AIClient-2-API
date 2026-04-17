@@ -13,6 +13,7 @@ export const RETRYABLE_NETWORK_ERRORS = [
 
 export const DEFAULT_MAX_REQUEST_SIZE_MB = 10;
 export const DEFAULT_IMAGE_TIMEOUT_SECONDS = 60;
+export const MAX_REQUEST_SIZE_BYTES = DEFAULT_MAX_REQUEST_SIZE_MB * 1024 * 1024;
 
 export function getMaxRequestSize(config) {
     const mb = config?.MAX_REQUEST_SIZE_MB || DEFAULT_MAX_REQUEST_SIZE_MB;
@@ -49,12 +50,13 @@ export function getRequestBody(req) {
     return new Promise((resolve, reject) => {
         const chunks = [];
         let totalSize = 0;
+        const maxRequestSize = MAX_REQUEST_SIZE_BYTES;
         
         req.on('data', chunk => {
             totalSize += chunk.length;
-            if (totalSize > MAX_REQUEST_SIZE) {
+            if (totalSize > maxRequestSize) {
                 req.destroy(new Error('Request size exceeds maximum allowed size'));
-                reject(new Error('Request size exceeds maximum allowed size (10MB)'));
+                reject(new Error(`Request size exceeds maximum allowed size (${DEFAULT_MAX_REQUEST_SIZE_MB}MB)`));
                 return;
             }
             chunks.push(chunk);

@@ -513,6 +513,10 @@ export function getProtocolPrefix(provider) {
     if (provider === 'openai-codex-oauth') {
         return 'codex';
     }
+    
+    if (provider === 'local-model') {
+        return 'openai';
+    }
 
     const hyphenIndex = provider.indexOf('-');
     if (hyphenIndex !== -1) {

@@ -3,7 +3,7 @@
 <section id="dashboard" class="section active" aria-labelledby="dashboard-title">
     <h2 id="dashboard-title" data-i18n="dashboard.title">系统概览</h2>
     
-    <!-- 紧凑的统计卡片 -->
+    <!-- Node.js 系统统计卡片 -->
     <div class="stats-container">
         <div class="stats-row">
             <div class="stat-item">
@@ -33,15 +33,6 @@
                     <span class="stat-label" data-i18n="dashboard.memoryUsage">内存</span>
                 </div>
             </div>
-            <div class="stat-item">
-                <div class="stat-icon-wrapper gpu">
-                    <i class="fas fa-video-card"></i>
-                </div>
-                <div class="stat-content">
-                    <span class="stat-value" id="gpuValue">--</span>
-                    <span class="stat-label" data-i18n="dashboard.gpuUsage">GPU</span>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -49,14 +40,13 @@
     <div class="dashboard-layout">
         <!-- 左侧：系统监控 -->
         <div class="dashboard-left">
-            <!-- 系统资源监控面板 -->
+            <!-- Node.js 系统资源监控面板 -->
             <div class="panel system-monitor">
                 <div class="panel-header">
-                    <h3><i class="fas fa-chart-line"></i> <span data-i18n="dashboard.systemMonitor">系统资源监控</span></h3>
+                    <h3><i class="fas fa-chart-line"></i> <span data-i18n="dashboard.systemMonitor">Node.js 系统资源监控</span></h3>
                     <div class="chart-tabs">
                         <button class="chart-tab active" data-chart-type="cpu">CPU</button>
                         <button class="chart-tab" data-chart-type="memory">内存</button>
-                        <button class="chart-tab" data-chart-type="gpu">GPU</button>
                     </div>
                 </div>
                 <div class="chart-area">
@@ -70,30 +60,6 @@
                     <div class="legend-item">
                         <span class="legend-color memory"></span>
                         <span>内存使用率</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-color gpu"></span>
-                        <span>GPU使用率</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-color gpu-temp"></span>
-                        <span>GPU温度</span>
-                    </div>
-                </div>
-                
-                <!-- GPU详细信息 -->
-                <div class="gpu-section">
-                    <div class="gpu-header">
-                        <h4><i class="fas fa-microchip"></i> <span data-i18n="dashboard.gpuStatus">GPU状态</span></h4>
-                        <button id="refreshGpuStatusBtn" class="btn btn-sm btn-outline" data-i18n-title="common.refresh" title="刷新">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
-                    </div>
-                    <div id="gpuStatusContent" class="gpu-content">
-                        <div class="loading">
-                            <i class="fas fa-spinner fa-spin"></i>
-                            <span data-i18n="common.loading">加载中...</span>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -127,7 +93,14 @@
                 </div>
             </div>
 
-        <!-- Python服务端GPU监控面板 -->
+            <!-- 分隔线 -->
+            <div class="section-divider">
+                <hr>
+                <span class="divider-label">Python 服务端监控</span>
+                <hr>
+            </div>
+
+            <!-- Python服务端GPU监控面板 -->
             <div class="panel python-gpu-monitor">
                 <div class="panel-header">
                     <h3><i class="fas fa-server"></i> <span data-i18n="dashboard.pythonGpuMonitor">Python服务端GPU监控</span></h3>

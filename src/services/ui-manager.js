@@ -18,6 +18,40 @@ import * as eventBroadcast from '../ui-modules/event-broadcast.js';
 export { broadcastEvent, initializeUIManagement, handleUploadOAuthCredentials, upload } from '../ui-modules/event-broadcast.js';
 
 /**
+ * Serve Vue app files from vue-dist directory
+ * @param {string} pathParam - The request path (e.g., /vue/index.html)
+ * @param {http.ServerResponse} res - The HTTP response object
+ */
+export async function serveVueFiles(pathParam, res) {
+    let filePath;
+    
+    const strippedPath = pathParam.replace('/vue/', '');
+    filePath = path.join(process.cwd(), 'vue-dist', strippedPath || 'index.html');
+
+    if (existsSync(filePath)) {
+        const ext = path.extname(filePath);
+        const contentType = {
+            '.html': 'text/html',
+            '.css': 'text/css',
+            '.js': 'application/javascript',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.ico': 'image/x-icon',
+            '.svg': 'image/svg+xml',
+            '.json': 'application/json',
+            '.wasm': 'application/wasm'
+        }[ext] || 'text/plain';
+
+        const content = readFileSync(filePath);
+
+        res.writeHead(200, { 'Content-Type': contentType });
+        res.end(content);
+        return true;
+    }
+    return false;
+}
+
+/**
  * Serve static files for the UI
  * @param {string} pathParam - The request path
  * @param {http.ServerResponse} res - The HTTP response object

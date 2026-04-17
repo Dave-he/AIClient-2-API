@@ -1,12 +1,12 @@
 {
-  "updatedAt": "2026-04-17T16:51:54.523Z",
+  "updatedAt": "2026-04-17T17:52:43.746Z",
   "summary": {
-    "requestCount": 111,
-    "promptTokens": 36211,
-    "completionTokens": 52885,
-    "totalTokens": 89096,
+    "requestCount": 114,
+    "promptTokens": 36267,
+    "completionTokens": 52909,
+    "totalTokens": 89176,
     "cachedTokens": 0,
-    "lastUsedAt": "2026-04-17T16:51:54.523Z"
+    "lastUsedAt": "2026-04-17T17:52:43.745Z"
   },
   "providers": {
     "openai-custom": {
@@ -76,6 +76,26 @@
           "lastUsedAt": "2026-04-17T16:51:54.523Z"
         }
       }
+    },
+    "local-model": {
+      "summary": {
+        "requestCount": 3,
+        "promptTokens": 56,
+        "completionTokens": 24,
+        "totalTokens": 80,
+        "cachedTokens": 0,
+        "lastUsedAt": "2026-04-17T17:52:43.745Z"
+      },
+      "models": {
+        "gemma-4-31b": {
+          "requestCount": 3,
+          "promptTokens": 56,
+          "completionTokens": 24,
+          "totalTokens": 80,
+          "cachedTokens": 0,
+          "lastUsedAt": "2026-04-17T17:52:43.745Z"
+        }
+      }
     }
   },
   "daily": {
@@ -88,12 +108,12 @@
       "lastUsedAt": "2026-04-16T17:12:05.282Z"
     },
     "2026-04-17": {
-      "requestCount": 94,
-      "promptTokens": 36123,
-      "completionTokens": 52826,
-      "totalTokens": 88949,
+      "requestCount": 97,
+      "promptTokens": 36179,
+      "completionTokens": 52850,
+      "totalTokens": 89029,
       "cachedTokens": 0,
-      "lastUsedAt": "2026-04-17T16:51:54.523Z"
+      "lastUsedAt": "2026-04-17T17:52:43.745Z"
     }
   },
   "hourly": {
@@ -112,6 +132,30 @@
       "totalTokens": 88949,
       "cachedTokens": 0,
       "lastUsedAt": "2026-04-17T16:51:54.523Z"
+    },
+    "2026-04-17T17": {
+      "requestCount": 3,
+      "promptTokens": 56,
+      "completionTokens": 24,
+      "totalTokens": 80,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T17:52:43.745Z"
+    },
+    "2026-04-17T17:51": {
+      "requestCount": 1,
+      "promptTokens": 28,
+      "completionTokens": 10,
+      "totalTokens": 38,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T17:51:04.111Z"
+    },
+    "2026-04-17T17:52": {
+      "requestCount": 2,
+      "promptTokens": 28,
+      "completionTokens": 14,
+      "totalTokens": 42,
+      "cachedTokens": 0,
+      "lastUsedAt": "2026-04-17T17:52:43.745Z"
     }
   }
 }

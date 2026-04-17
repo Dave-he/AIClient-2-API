@@ -137,8 +137,8 @@ AIClient-2-API/
 ```
 
 **关键设计**：
-- 主进程监控 Worker 进程，崩溃后自动重启
-- Worker 进程支持优雅关闭（SIGTERM → 5秒超时 → SIGKILL）
+- 主进程监控 Worker 进程，崩溃后通过 systemctl 重启服务
+- 重启策略：不直接杀进程，而是通过 `systemctl restart aiclient-node` 命令重启
 - 环境变量 `IS_WORKER_PROCESS` 标识是否为子进程
 
 ### 2. 请求处理管道

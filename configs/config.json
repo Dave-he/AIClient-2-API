@@ -3,9 +3,9 @@
   "SERVER_PORT": 30000,
   "HOST": "0.0.0.0",
   "MASTER_PORT": 3100,
-  "MODEL_PROVIDER": "openai-custom",
+  "MODEL_PROVIDER": "local-model",
   "DEFAULT_MODEL_PROVIDERS": [
-    "openai-custom",
+    "local-model",
     "claude-custom"
   ],
   "SYSTEM_PROMPT_FILE_PATH": "configs/input_system_prompt.txt",

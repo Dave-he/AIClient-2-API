@@ -1,7 +1,7 @@
 import deepmerge from 'deepmerge';
 import logger from '../utils/logger.js';
 import { handleError, getClientIp } from '../utils/common.js';
-import { handleUIApiRequests, serveStaticFiles } from '../services/ui-manager.js';
+import { handleUIApiRequests, serveStaticFiles, serveVueFiles } from '../services/ui-manager.js';
 import { handleAPIRequests } from '../services/api-manager.js';
 import { getApiService, getProviderStatus } from '../services/service-manager.js';
 import { getProviderPoolManager } from '../services/service-manager.js';
@@ -103,6 +103,13 @@ export function createRequestHandler(config, providerPoolManager) {
                     res.writeHead(204);
                     res.end();
                     return;
+                }
+
+                // Serve Vue app files from vue-dist/ directory (new UI)
+                if (path.startsWith('/vue/') || path === '/vue' || path === '/vue/index.html') {
+                    const vuePath = path === '/vue' ? '/vue/index.html' : path;
+                    const served = await serveVueFiles(vuePath, res);
+                    if (served) return;
                 }
 
                 // Serve static files from static/ directory (old UI)
