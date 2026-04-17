@@ -9,6 +9,8 @@
 </template>
 
 <script setup>
+import { logger } from '@/utils/logger.js';
+
 defineProps({
   model: {
     type: String,
@@ -24,7 +26,7 @@ const handleClick = async () => {
     window.$toast?.success(`已复制: ${model}`);
     emit('copy', model);
   } catch (error) {
-    console.error('Failed to copy:', error);
+    logger.error('Failed to copy', error);
   }
 };
 </script>

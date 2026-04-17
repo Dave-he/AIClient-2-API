@@ -496,7 +496,7 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
     Object.assign(CONFIG, currentConfig);
 
     // Initialize logger
-    logger.initialize({
+    await logger.initialize({
         enabled: CONFIG.LOG_ENABLED ?? true,
         outputMode: CONFIG.LOG_OUTPUT_MODE || "all",
         logLevel: CONFIG.LOG_LEVEL || "info",
@@ -508,7 +508,7 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
     });
 
     // Cleanup old logs periodically
-    logger.cleanupOldLogs();
+    await logger.cleanupOldLogs();
 
     return CONFIG;
 }

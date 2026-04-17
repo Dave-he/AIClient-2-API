@@ -299,7 +299,7 @@ const saveNode = async () => {
     }
     closeModal()
   } catch (error) {
-    console.error('Failed to save node:', error)
+    logger.error('Failed to save node', error)
   }
 }
 
@@ -307,7 +307,7 @@ const deleteNode = async (providerType, uuid) => {
   try {
     await deleteProvider(providerType, uuid)
   } catch (error) {
-    console.error('Failed to delete node:', error)
+    logger.error('Failed to delete node', error)
   }
 }
 
@@ -315,7 +315,7 @@ const checkHealth = async (providerType, uuid) => {
   try {
     await performHealthCheck(providerType, uuid)
   } catch (error) {
-    console.error('Health check failed:', error)
+    logger.error('Health check failed', error)
   }
 }
 

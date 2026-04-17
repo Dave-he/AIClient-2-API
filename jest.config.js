@@ -31,9 +31,12 @@ export default {
         '**/tests/**/*.test.js',
         '!**/tests/e2e/**/*.test.js',
         '!**/tests/components/**/*.test.js',
+        '!**/tests/*-stress.test.js',
+        '!**/tests/auto-rate-limit-binary.test.js',
       ],
       moduleNameMapper: {
         '^(\\.{1,2}/.*)\\.js$': '$1',
+        '@/(.*)': '<rootDir>/src/$1',
         'uuid': '<rootDir>/tests/mocks/uuid.js'
       },
       testTimeout: 30000

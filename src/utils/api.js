@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { router } from '@/router/index.js';
+import { performanceMonitor } from '@/utils/performance.js';
+import { logger } from '@/utils/logger.js';
 
 const createApiInstance = (baseURL = window.location.origin) => {
   const token = localStorage.getItem('authToken');
@@ -64,60 +66,127 @@ const requestWithRetry = async (fn, retries = 3, delay = 1000) => {
   }
 };
 
+const withPerformance = async (fn, method, url) => {
+  const startTime = performance.now();
+  try {
+    const result = await fn();
+    const duration = performance.now() - startTime;
+    performanceMonitor.recordApiCall(duration, true);
+    logger.debug(`API ${method} ${url} completed in ${duration.toFixed(2)}ms`);
+    return result;
+  } catch (error) {
+    const duration = performance.now() - startTime;
+    performanceMonitor.recordApiCall(duration, false);
+    logger.error(`API ${method} ${url} failed in ${duration.toFixed(2)}ms`, error);
+    throw error;
+  }
+};
+
 export const apiClient = {
-  get: (url, config = {}) => {
-    return requestWithRetry(() => api.get(url, config));
+  get: async (url, config = {}) => {
+    return withPerformance(
+      () => requestWithRetry(() => api.get(url, config)),
+      'GET',
+      url
+    );
   },
 
-  post: (url, data = {}, config = {}) => {
-    return requestWithRetry(() => api.post(url, data, config));
+  post: async (url, data = {}, config = {}) => {
+    return withPerformance(
+      () => requestWithRetry(() => api.post(url, data, config)),
+      'POST',
+      url
+    );
   },
 
-  put: (url, data = {}, config = {}) => {
-    return requestWithRetry(() => api.put(url, data, config));
+  put: async (url, data = {}, config = {}) => {
+    return withPerformance(
+      () => requestWithRetry(() => api.put(url, data, config)),
+      'PUT',
+      url
+    );
   },
 
-  patch: (url, data = {}, config = {}) => {
-    return requestWithRetry(() => api.patch(url, data, config));
+  patch: async (url, data = {}, config = {}) => {
+    return withPerformance(
+      () => requestWithRetry(() => api.patch(url, data, config)),
+      'PATCH',
+      url
+    );
   },
 
-  delete: (url, config = {}) => {
-    return requestWithRetry(() => api.delete(url, config));
+  delete: async (url, config = {}) => {
+    return withPerformance(
+      () => requestWithRetry(() => api.delete(url, config)),
+      'DELETE',
+      url
+    );
   },
 
-  upload: (url, file, onProgress) => {
+  upload: async (url, file, onProgress) => {
+    const startTime = performance.now();
     const formData = new FormData();
     formData.append('file', file);
     
-    return api.post(url, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
-        if (onProgress) {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
-          onProgress(percentCompleted);
+    try {
+      const result = await api.post(url, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            onProgress(percentCompleted);
+          }
         }
-      }
-    });
+      });
+      const duration = performance.now() - startTime;
+      performanceMonitor.recordApiCall(duration, true);
+      logger.debug(`API UPLOAD ${url} completed in ${duration.toFixed(2)}ms`);
+      return result;
+    } catch (error) {
+      const duration = performance.now() - startTime;
+      performanceMonitor.recordApiCall(duration, false);
+      logger.error(`API UPLOAD ${url} failed in ${duration.toFixed(2)}ms`, error);
+      throw error;
+    }
   },
 
-  createDownload: (url, filename) => {
-    return api.get(url, { responseType: 'blob' }).then(response => {
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+  createDownload: async (url, filename) => {
+    const startTime = performance.now();
+    try {
+      const response = await api.get(url, { responseType: 'blob' });
+      const duration = performance.now() - startTime;
+      performanceMonitor.recordApiCall(duration, true);
+      logger.debug(`API DOWNLOAD ${url} completed in ${duration.toFixed(2)}ms`);
+      
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
-      link.href = url;
+      link.href = blobUrl;
       link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
-    });
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      const duration = performance.now() - startTime;
+      performanceMonitor.recordApiCall(duration, false);
+      logger.error(`API DOWNLOAD ${url} failed in ${duration.toFixed(2)}ms`, error);
+      throw error;
+    }
   },
 
   cancelToken: axios.CancelToken,
 
-  isCancel: axios.isCancel
+  isCancel: axios.isCancel,
+
+  getStats: () => {
+    return performanceMonitor.getStats();
+  },
+
+  resetStats: () => {
+    performanceMonitor.reset();
+  }
 };
 
 export const getToken = () => {

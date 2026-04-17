@@ -1,0 +1,44 @@
+{
+  "testDate": "2026-04-17T19:10:17.147Z",
+  "results": [
+    {
+      "rateLimit": 500,
+      "burstLimit": 100,
+      "completed": 2723,
+      "successful": 0,
+      "successRate": "0.00",
+      "rps": "180.91",
+      "avgMetrics": {
+        "cpuPercent": "1.17",
+        "maxCpu": "1.17"
+      },
+      "rateLimitBlocks": 2723
+    },
+    {
+      "rateLimit": 1000,
+      "burstLimit": 200,
+      "completed": 2443,
+      "successful": 0,
+      "successRate": "0.00",
+      "rps": "161.01",
+      "avgMetrics": {
+        "cpuPercent": "1.17",
+        "maxCpu": "1.17"
+      },
+      "rateLimitBlocks": 2443
+    },
+    {
+      "rateLimit": 2000,
+      "burstLimit": 500,
+      "completed": 2752,
+      "successful": 0,
+      "successRate": "0.00",
+      "rps": "182.86",
+      "avgMetrics": {
+        "cpuPercent": "1.17",
+        "maxCpu": "1.17"
+      },
+      "rateLimitBlocks": 2732
+    }
+  ]
+}

@@ -9,8 +9,8 @@
       "uuid": "local-python-controller",
       "isHealthy": true,
       "isDisabled": false,
-      "lastUsed": "2026-04-17T18:53:03.758Z",
-      "usageCount": 24,
+      "lastUsed": "2026-04-17T18:53:50.065Z",
+      "usageCount": 115,
       "errorCount": 0,
       "lastErrorTime": null,
       "lastErrorMessage": null,
@@ -18,7 +18,7 @@
       "refreshCount": 0,
       "lastHealthCheckTime": null,
       "lastHealthCheckModel": null,
-      "_lastSelectionSeq": 67,
+      "_lastSelectionSeq": 158,
       "supportedModels": [
         "gemma-4-31b",
         "gemma-4-31b-it",
@@ -26,7 +26,7 @@
         "mistral-7b",
         "gemma-2-vision"
       ],
-      "lastRefreshTime": 1776451983702
+      "lastRefreshTime": 1776452022862
     }
   ],
   "claude-custom": [
@@ -43,7 +43,7 @@
       "queueLimit": 50,
       "isHealthy": true,
       "isDisabled": false,
-      "lastUsed": null,
+      "lastUsed": "2026-04-17T19:13:45.613Z",
       "usageCount": 0,
       "errorCount": 0,
       "lastErrorTime": null,
@@ -51,7 +51,8 @@
       "needsRefresh": false,
       "refreshCount": 0,
       "lastHealthCheckTime": null,
-      "lastHealthCheckModel": null
+      "lastHealthCheckModel": null,
+      "_lastSelectionSeq": 198
     }
   ],
   "providerFallbackChain": {},

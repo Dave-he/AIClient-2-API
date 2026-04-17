@@ -1,0 +1,19 @@
+{
+  "testDate": "2026-04-17T19:14:02.587Z",
+  "concurrency": 10,
+  "testDuration": 15,
+  "bestConfig": null,
+  "testedConfigs": [
+    {
+      "rateLimit": 100,
+      "burstLimit": 20,
+      "completedRequests": 2849,
+      "successfulRequests": 0,
+      "successRate": "0.00",
+      "rps": "189.31",
+      "avgCpu": "1.17",
+      "maxCpu": "1.17",
+      "rateLimitBlocks": 2829
+    }
+  ]
+}

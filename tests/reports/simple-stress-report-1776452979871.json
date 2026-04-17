@@ -1,0 +1,158 @@
+[
+  {
+    "rateLimit": 100,
+    "concurrency": 5,
+    "completed": 2820,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "93.80",
+    "avgMetrics": {
+      "cpuPercent": "1.16",
+      "maxCpu": "1.16"
+    },
+    "rateLimitBlocks": 2795
+  },
+  {
+    "rateLimit": 100,
+    "concurrency": 10,
+    "completed": 5544,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "184.32",
+    "avgMetrics": {
+      "cpuPercent": "1.16",
+      "maxCpu": "1.16"
+    },
+    "rateLimitBlocks": 5544
+  },
+  {
+    "rateLimit": 100,
+    "concurrency": 20,
+    "completed": 10466,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "348.39",
+    "avgMetrics": {
+      "cpuPercent": "1.16",
+      "maxCpu": "1.16"
+    },
+    "rateLimitBlocks": 10466
+  },
+  {
+    "rateLimit": 200,
+    "concurrency": 5,
+    "completed": 2753,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "91.07",
+    "avgMetrics": {
+      "cpuPercent": "1.16",
+      "maxCpu": "1.17"
+    },
+    "rateLimitBlocks": 2729
+  },
+  {
+    "rateLimit": 200,
+    "concurrency": 10,
+    "completed": 5667,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "188.61",
+    "avgMetrics": {
+      "cpuPercent": "1.17",
+      "maxCpu": "1.17"
+    },
+    "rateLimitBlocks": 5667
+  },
+  {
+    "rateLimit": 200,
+    "concurrency": 20,
+    "completed": 10731,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "357.08",
+    "avgMetrics": {
+      "cpuPercent": "1.17",
+      "maxCpu": "1.17"
+    },
+    "rateLimitBlocks": 10731
+  },
+  {
+    "rateLimit": 500,
+    "concurrency": 5,
+    "completed": 2859,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "95.23",
+    "avgMetrics": {
+      "cpuPercent": "1.17",
+      "maxCpu": "1.17"
+    },
+    "rateLimitBlocks": 2859
+  },
+  {
+    "rateLimit": 500,
+    "concurrency": 10,
+    "completed": 5322,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "177.11",
+    "avgMetrics": {
+      "cpuPercent": "1.17",
+      "maxCpu": "1.17"
+    },
+    "rateLimitBlocks": 5302
+  },
+  {
+    "rateLimit": 500,
+    "concurrency": 20,
+    "completed": 11509,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "383.01",
+    "avgMetrics": {
+      "cpuPercent": "1.17",
+      "maxCpu": "1.17"
+    },
+    "rateLimitBlocks": 11509
+  },
+  {
+    "rateLimit": 1000,
+    "concurrency": 5,
+    "completed": 2891,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "96.31",
+    "avgMetrics": {
+      "cpuPercent": "1.17",
+      "maxCpu": "1.17"
+    },
+    "rateLimitBlocks": 2869
+  },
+  {
+    "rateLimit": 1000,
+    "concurrency": 10,
+    "completed": 5651,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "188.06",
+    "avgMetrics": {
+      "cpuPercent": "1.17",
+      "maxCpu": "1.17"
+    },
+    "rateLimitBlocks": 5651
+  },
+  {
+    "rateLimit": 1000,
+    "concurrency": 20,
+    "completed": 11042,
+    "successful": 0,
+    "successRate": "0.00",
+    "rps": "367.44",
+    "avgMetrics": {
+      "cpuPercent": "1.17",
+      "maxCpu": "1.17"
+    },
+    "rateLimitBlocks": 11042
+  }
+]

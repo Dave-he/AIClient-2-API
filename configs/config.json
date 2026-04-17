@@ -39,7 +39,7 @@
   "TLS_SIDECAR_ENABLED_PROVIDERS": [],
   "TLS_SIDECAR_PORT": 9090,
   "TLS_SIDECAR_PROXY_URL": null,
-  "CONTROLLER_BASE_URL": "http://192.168.7.103:5000",
+  "CONTROLLER_BASE_URL": "http://localhost:5000",
   "SCHEDULED_HEALTH_CHECK": {
     "enabled": false,
     "startupRun": false,

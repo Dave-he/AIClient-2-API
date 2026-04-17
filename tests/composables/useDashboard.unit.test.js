@@ -1,154 +1,100 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { useDashboard } from '../../src/composables/useDashboard.js';
-import { api } from '../../src/utils/api.js';
+import { apiClient } from '@/utils/api.js';
 
-vi.mock('../../src/utils/api.js', () => ({
-  api: {
-    get: vi.fn()
+jest.mock('@/utils/api.js', () => ({
+  apiClient: {
+    get: jest.fn()
+  }
+}));
+
+jest.mock('@/utils/logger.js', () => ({
+  logger: {
+    error: jest.fn()
   }
 }));
 
 describe('useDashboard Composable', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
   });
 
   it('should initialize with default values', () => {
-    const { stats, providerStats, gpuInfo, isLoading, error } = useDashboard();
+    const { systemInfo, providerStatus, gpuStatus, pythonGpuConnected } = useDashboard();
     
-    expect(stats.value).toEqual({
-      totalRequests: 0,
-      successfulRequests: 0,
-      failedRequests: 0,
-      avgResponseTime: 0
-    });
-    
-    expect(providerStats.value).toEqual([]);
-    expect(gpuInfo.value).toEqual([]);
-    expect(isLoading.value).toBe(false);
-    expect(error.value).toBe(null);
+    expect(systemInfo.value.uptime).toBe('--');
+    expect(systemInfo.value.cpu).toBe(0);
+    expect(systemInfo.value.memory).toBe(0);
+    expect(providerStatus.value).toEqual([]);
+    expect(gpuStatus.value.loading).toBe(true);
+    expect(pythonGpuConnected.value).toBe(false);
   });
 
-  it('should fetch stats successfully', async () => {
-    const mockStats = {
-      totalRequests: 100,
-      successfulRequests: 95,
-      failedRequests: 5,
-      avgResponseTime: 120
+  it('should fetch system info successfully', async () => {
+    const mockSystemInfo = {
+      uptime: 86400,
+      appVersion: '1.0.0',
+      nodeVersion: '20.0.0',
+      serverTime: new Date().toISOString(),
+      platform: 'linux',
+      pid: 1234
     };
     
-    api.get.mockResolvedValueOnce({ data: mockStats });
+    apiClient.get.mockResolvedValueOnce({ data: mockSystemInfo });
     
-    const { stats, fetchStats } = useDashboard();
+    const { fetchSystemInfo, systemInfo } = useDashboard();
     
-    await fetchStats();
+    await fetchSystemInfo();
     
-    expect(api.get).toHaveBeenCalledWith('/api/stats');
-    expect(stats.value).toEqual(mockStats);
+    expect(apiClient.get).toHaveBeenCalledWith('/api/system');
+    expect(systemInfo.value.version).toBe('1.0.0');
   });
 
-  it('should handle error when fetching stats', async () => {
-    const mockError = new Error('Network error');
-    api.get.mockRejectedValueOnce(mockError);
+  it('should fetch system monitor data', async () => {
+    const mockMonitorData = {
+      cpu: { usage: 45 },
+      memory: { usagePercent: '60' },
+      gpu: { usage: 30 }
+    };
     
-    const { error, fetchStats } = useDashboard();
+    apiClient.get.mockResolvedValueOnce({ data: mockMonitorData });
     
-    await fetchStats();
+    const { fetchSystemMonitor, systemInfo } = useDashboard();
     
-    expect(error.value).toBe('获取统计数据失败');
+    await fetchSystemMonitor();
+    
+    expect(apiClient.get).toHaveBeenCalledWith('/api/system/monitor');
+    expect(systemInfo.value.cpu).toBe(45);
+    expect(systemInfo.value.memory).toBe(60);
   });
 
-  it('should fetch provider stats successfully', async () => {
-    const mockProviderStats = [
-      { provider: 'gemini-cli-oauth', count: 50, successRate: 98 },
-      { provider: 'claude-custom', count: 30, successRate: 95 }
-    ];
+  it('should fetch provider status', async () => {
+    const mockProviderData = {
+      providers: {
+        'gemini-cli-oauth': [{ isHealthy: true, requestCount: 10 }],
+        'claude-custom': [{ isHealthy: false }, { isHealthy: true }]
+      }
+    };
     
-    api.get.mockResolvedValueOnce({ data: { providers: mockProviderStats } });
+    apiClient.get.mockResolvedValueOnce({ data: mockProviderData });
     
-    const { providerStats, fetchProviderStats } = useDashboard();
+    const { fetchProviderStatus, providerStatus } = useDashboard();
     
-    await fetchProviderStats();
+    await fetchProviderStatus();
     
-    expect(api.get).toHaveBeenCalledWith('/api/provider-stats');
-    expect(providerStats.value).toEqual(mockProviderStats);
+    expect(apiClient.get).toHaveBeenCalledWith('/api/providers');
+    expect(providerStatus.value.length).toBe(2);
   });
 
-  it('should handle error when fetching provider stats', async () => {
-    const mockError = new Error('Network error');
-    api.get.mockRejectedValueOnce(mockError);
+  it('should format uptime correctly', () => {
+    const { formatUptime } = useDashboard();
     
-    const { error, fetchProviderStats } = useDashboard();
-    
-    await fetchProviderStats();
-    
-    expect(error.value).toBe('获取提供商统计数据失败');
-  });
-
-  it('should fetch GPU info successfully', async () => {
-    const mockGpuInfo = [
-      { name: 'NVIDIA RTX 3090', usage: 45, memoryUsed: 4096, memoryTotal: 24576 },
-      { name: 'NVIDIA RTX 4090', usage: 60, memoryUsed: 8192, memoryTotal: 24576 }
-    ];
-    
-    api.get.mockResolvedValueOnce({ data: { gpus: mockGpuInfo } });
-    
-    const { gpuInfo, fetchGpuInfo } = useDashboard();
-    
-    await fetchGpuInfo();
-    
-    expect(api.get).toHaveBeenCalledWith('/api/gpu-info');
-    expect(gpuInfo.value).toEqual(mockGpuInfo);
-  });
-
-  it('should handle error when fetching GPU info', async () => {
-    const mockError = new Error('GPU not available');
-    api.get.mockRejectedValueOnce(mockError);
-    
-    const { error, fetchGpuInfo } = useDashboard();
-    
-    await fetchGpuInfo();
-    
-    expect(error.value).toBe('获取GPU信息失败');
-  });
-
-  it('should calculate success rate correctly', () => {
-    const { calculateSuccessRate } = useDashboard();
-    
-    expect(calculateSuccessRate(100, 95)).toBe(95);
-    expect(calculateSuccessRate(0, 0)).toBe(0);
-    expect(calculateSuccessRate(10, 5)).toBe(50);
-  });
-
-  it('should calculate memory usage percentage correctly', () => {
-    const { calculateMemoryUsage } = useDashboard();
-    
-    expect(calculateMemoryUsage(4096, 16384)).toBe(25);
-    expect(calculateMemoryUsage(0, 1000)).toBe(0);
-    expect(calculateMemoryUsage(1000, 1000)).toBe(100);
-  });
-
-  it('should fetch all data when fetchAll called', async () => {
-    const mockStats = { totalRequests: 100, successfulRequests: 95, failedRequests: 5, avgResponseTime: 120 };
-    const mockProviderStats = [{ provider: 'test', count: 50, successRate: 98 }];
-    const mockGpuInfo = [{ name: 'Test GPU', usage: 50, memoryUsed: 1000, memoryTotal: 2000 }];
-    
-    api.get
-      .mockResolvedValueOnce({ data: mockStats })
-      .mockResolvedValueOnce({ data: { providers: mockProviderStats } })
-      .mockResolvedValueOnce({ data: { gpus: mockGpuInfo } });
-    
-    const { stats, providerStats, gpuInfo, fetchAll } = useDashboard();
-    
-    await fetchAll();
-    
-    expect(api.get).toHaveBeenCalledTimes(3);
-    expect(stats.value).toEqual(mockStats);
-    expect(providerStats.value).toEqual(mockProviderStats);
-    expect(gpuInfo.value).toEqual(mockGpuInfo);
+    expect(formatUptime(86400)).toBe('1天 0小时 0分钟');
+    expect(formatUptime(3661)).toBe('0天 1小时 1分钟');
+    expect(formatUptime(60)).toBe('0天 0小时 1分钟');
   });
 });

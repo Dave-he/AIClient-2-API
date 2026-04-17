@@ -12,7 +12,10 @@
     "test:unit": "jest tests/*.unit.test.js",
     "test:integration": "jest tests/api-integration.test.js",
     "test:stress": "node --experimental-vm-modules tests/performance-stress.test.js",
-    "test:rate-limit": "node --experimental-vm-modules tests/rate-limit-stress.test.js"
+    "test:rate-limit": "node --experimental-vm-modules tests/rate-limit-stress.test.js",
+    "test:simple-stress": "node --experimental-vm-modules tests/simple-stress.test.js",
+    "test:e2e-stress": "node --experimental-vm-modules tests/e2e-stress.test.js",
+    "test:auto-rate-limit": "node --experimental-vm-modules tests/auto-rate-limit-binary.test.js"
   },
   "dependencies": {
     "@anthropic-ai/tokenizer": "^0.0.4",
@@ -48,6 +51,9 @@
     "jest-environment-jsdom": "^30.3.0",
     "jest-transform-stub": "^2.0.0",
     "jsdom": "^29.0.2",
-    "vite": "^8.0.8"
+    "rollup-plugin-visualizer": "^7.0.1",
+    "terser": "^5.46.1",
+    "vite": "^8.0.8",
+    "vite-plugin-compression": "^0.5.1"
   }
 }
