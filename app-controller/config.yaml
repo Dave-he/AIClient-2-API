@@ -6,6 +6,7 @@ models:
     preload: true
     keep_alive: true
     model_path: /mnt/pve_models/Gemma-4-31B-Abliterated
+    supports_images: true
   
   llama-3-8b:
     service: vllm-llama
