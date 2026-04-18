@@ -21,7 +21,6 @@
       "_lastSelectionSeq": 158,
       "supportedModels": [
         "gemma-4-31b",
-        "gemma-4-31b-it",
         "llama-3-8b",
         "mistral-7b",
         "gemma-2-vision"

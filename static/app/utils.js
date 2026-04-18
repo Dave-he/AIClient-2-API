@@ -74,6 +74,11 @@ function getBaseProviderConfigs() {
             name: 'OpenAI Responses', 
             icon: 'fa-reply-all'
         },
+        {
+            id: 'local-model',
+            name: '本地模型',
+            icon: 'fa-server'
+        },
     ];
 }
 
