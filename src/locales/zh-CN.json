@@ -323,7 +323,7 @@
     "serverTime": "服务端时间",
     "lastUpdate": "上次更新: {time}",
     "loading": "正在加载用量数据...",
-    "empty": "点击"刷新用量"按钮获取授权文件用量信息",
+    "empty": "点击「刷新用量」按钮获取授权文件用量信息",
     "noData": "暂无用量数据",
     "card": {
       "totalUsage": "总用量",
