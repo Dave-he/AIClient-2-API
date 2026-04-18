@@ -3,7 +3,7 @@
     {
       "customName": "本地vLLM控制器",
       "LOCAL_API_KEY": "local-dev-key",
-      "LOCAL_BASE_URL": "http://ubuntu.hamr.top:9151",
+      "LOCAL_BASE_URL": "http://localhost:5000",
       "checkModelName": "gemma-4-31b",
       "checkHealth": false,
       "uuid": "local-python-controller",

@@ -115,9 +115,9 @@ export function createRequestHandler(config, providerPoolManager) {
 
                 // Serve static files from static/ directory (old UI)
                 // 只提供static目录下的旧界面静态文件
-                if (path === '/' || path === '/index.html' || path === '/login.html' || 
-                    path.startsWith('/static/') || path.startsWith('/app/') || 
-                    path.startsWith('/components/') || path === '/favicon.ico') {
+                if (path === '/' || path === '/index.html' || path === '/login.html' ||
+                    path.startsWith('/static/') || path.startsWith('/app/') ||
+                    path.startsWith('/components/') || path.startsWith('/assets/') || path === '/favicon.ico') {
                     const served = await serveStaticFiles(path, res, currentConfig);
                     if (served) return;
                 }

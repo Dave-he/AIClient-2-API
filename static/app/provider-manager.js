@@ -24,7 +24,7 @@ let cachedSupportedProviders = null;
  */
 async function loadSystemInfo() {
     try {
-        const data = await window.apiClient.get('/system');
+        const data = await window.apiClient.get('/api/system');
 
         const appVersionEl = document.getElementById('appVersion');
         const nodeVersionEl = document.getElementById('nodeVersion');
@@ -66,7 +66,7 @@ async function loadSystemInfo() {
  */
 async function loadServiceModeInfo() {
     try {
-        const data = await window.apiClient.get('/service-mode');
+        const data = await window.apiClient.get('/api/service-mode');
         
         const serviceModeEl = document.getElementById('serviceMode');
         const processPidEl = document.getElementById('processPid');
@@ -185,7 +185,7 @@ function updateTimeDisplay() {
  */
 async function loadProvidersStatic() {
     try {
-        const data = await window.apiClient.get('/providers/static');
+        const data = await window.apiClient.get('/api/providers/static');
         if (!data || !data.supportedProviders) return;
 
         const { supportedProviders } = data;
@@ -220,7 +220,7 @@ async function loadProvidersStatic() {
  */
 async function loadProvidersDynamic() {
     try {
-        const data = await window.apiClient.get('/providers/dynamic');
+        const data = await window.apiClient.get('/api/providers/dynamic');
         if (!data || !data.providers) return;
 
         renderProviders(data.providers, cachedSupportedProviders);
@@ -3300,7 +3300,7 @@ async function checkUpdate(silent = false) {
             if (checkBtnText) checkBtnText.textContent = t('dashboard.update.checking');
         }
 
-        const data = await window.apiClient.get('/check-update');
+        const data = await window.apiClient.get('/api/check-update');
 
         // 处理版本列表
         if (versionSelect && data.availableVersions && data.availableVersions.length > 0) {

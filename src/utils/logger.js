@@ -285,6 +285,9 @@ class Logger {
   getRequestId() {
     return this.asyncLocalStorage.getStore()?.requestId;
   }
+
+  clearRequestContext() {
+  }
 }
 
 export const logger = new Logger();

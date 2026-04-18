@@ -60,15 +60,20 @@ export async function serveVueFiles(pathParam, res) {
  */
 export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
     let filePath;
-    
-    if (pathParam === '/' || pathParam === '/index.html') {
-        // Always use static directory for old UI
-        // 始终使用static目录的旧界面
-        filePath = path.join(process.cwd(), 'static', 'index.html');
+
+    if (pathParam === '/' || pathParam === '/index.html' || pathParam === '/login.html') {
+        filePath = path.join(process.cwd(), 'static', pathParam === '/' ? 'index.html' : pathParam);
     } else {
-        const strippedPath = pathParam.replace('/static/', '');
-        // Always use static directory for old UI
-        // 始终使用static目录的旧界面
+        let strippedPath = pathParam;
+        if (strippedPath.startsWith('/static/')) {
+            strippedPath = strippedPath.replace('/static/', '');
+        } else if (strippedPath.startsWith('/assets/')) {
+            strippedPath = strippedPath.replace('/assets/', 'assets/');
+        } else if (strippedPath.startsWith('/app/')) {
+            strippedPath = strippedPath.replace('/app/', 'app/');
+        } else if (strippedPath.startsWith('/components/')) {
+            strippedPath = strippedPath.replace('/components/', 'components/');
+        }
         filePath = path.join(process.cwd(), 'static', strippedPath);
     }
 
