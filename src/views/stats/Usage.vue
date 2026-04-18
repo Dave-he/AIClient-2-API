@@ -151,7 +151,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 
 const selectedRange = ref('today')
 
@@ -162,48 +162,64 @@ const timeRanges = [
   { value: 'year', label: '本年' }
 ]
 
-const totalUsage = ref(1256847)
-const promptTokens = ref(892341)
-const completionTokens = ref(364506)
-const requestCount = ref(1542)
+const totalUsage = ref(0)
+const promptTokens = ref(0)
+const completionTokens = ref(0)
+const requestCount = ref(0)
 
-const topModels = ref([
-  { name: 'gpt-4o-mini', provider: 'OpenAI', tokens: 452310, requests: 423 },
-  { name: 'claude-3-5-sonnet', provider: 'Claude', tokens: 321543, requests: 312 },
-  { name: 'gemini-2.5-flash', provider: 'Gemini', tokens: 287654, requests: 289 },
-  { name: 'claude-opus-4-5', provider: 'Kiro', tokens: 124532, requests: 156 },
-  { name: 'grok-beta', provider: 'Grok', tokens: 70808, requests: 162 }
-])
+const topModels = ref([])
+const recentRequests = ref([])
 
-const recentRequests = ref([
-  { time: '16:45:32', model: 'gpt-4o-mini', provider: 'OpenAI Custom', promptTokens: 128, completionTokens: 256, duration: 845, status: 'SUCCESS' },
-  { time: '16:44:18', model: 'claude-3-5-sonnet', provider: 'Claude Custom', promptTokens: 256, completionTokens: 512, duration: 1234, status: 'SUCCESS' },
-  { time: '16:43:52', model: 'gemini-2.5-flash', provider: 'Gemini CLI', promptTokens: 512, completionTokens: 1024, duration: 987, status: 'SUCCESS' },
-  { time: '16:42:31', model: 'gpt-4o-mini', provider: 'OpenAI Custom', promptTokens: 64, completionTokens: 128, duration: 456, status: 'SUCCESS' },
-  { time: '16:41:05', model: 'claude-opus-4-5', provider: 'Claude Kiro', promptTokens: 1024, completionTokens: 2048, duration: 2156, status: 'SUCCESS' },
-  { time: '16:39:44', model: 'grok-beta', provider: 'Grok Reverse', promptTokens: 256, completionTokens: 512, duration: 1567, status: 'SUCCESS' },
-  { time: '16:38:22', model: 'gemini-2.5-flash', provider: 'Gemini CLI', promptTokens: 128, completionTokens: 256, duration: 654, status: 'SUCCESS' },
-  { time: '16:37:10', model: 'gpt-4o-mini', provider: 'OpenAI Custom', promptTokens: 32, completionTokens: 64, duration: 234, status: 'ERROR' }
-])
+const fetchUsageStats = async () => {
+  try {
+    const response = await fetch(`/api/usage/stats?range=${selectedRange.value}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
 
-onMounted(() => {
-  initCharts()
+    totalUsage.value = data.totalTokens || 0;
+    promptTokens.value = data.inputTokens || 0;
+    completionTokens.value = data.outputTokens || 0;
+    requestCount.value = data.totalRequests || 0;
+    topModels.value = data.topModels || [];
+
+    updateCharts(data.hourlyData || [], data.modelDistribution || []);
+  } catch (error) {
+    console.error('获取用量统计失败:', error);
+  }
+}
+
+watch(selectedRange, () => {
+  fetchUsageStats();
 })
 
-const initCharts = () => {
-  const usageCtx = document.getElementById('usageChart')
+onMounted(() => {
+  fetchUsageStats();
+});
+
+const updateCharts = (hourlyData, modelDistribution) => {
+  const usageCtx = document.getElementById('usageChart');
   if (usageCtx) {
-    const gradient = usageCtx.getContext('2d').createLinearGradient(0, 0, 0, 200)
-    gradient.addColorStop(0, 'rgba(5, 150, 105, 0.3)')
-    gradient.addColorStop(1, 'rgba(5, 150, 105, 0)')
-    
-    new (window.Chart || {})(usageCtx, {
+    const gradient = usageCtx.getContext('2d').createLinearGradient(0, 0, 0, 200);
+    gradient.addColorStop(0, 'rgba(5, 150, 105, 0.3)');
+    gradient.addColorStop(1, 'rgba(5, 150, 105, 0)');
+
+    const labels = hourlyData.length > 0
+      ? hourlyData.map(d => d.hour.slice(11, 16))
+      : ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'];
+    const chartData = hourlyData.length > 0
+      ? hourlyData.map(d => d.tokens)
+      : [0, 0, 0, 0, 0, 0];
+
+    if (window.usageChartInstance) {
+      window.usageChartInstance.destroy();
+    }
+    window.usageChartInstance = new (window.Chart || {})(usageCtx, {
       type: 'line',
       data: {
-        labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'],
+        labels,
         datasets: [{
           label: 'Token消耗',
-          data: [45000, 32000, 89000, 125000, 98000, 67000],
+          data: chartData,
           borderColor: '#059669',
           backgroundColor: gradient,
           fill: true,
@@ -218,18 +234,29 @@ const initCharts = () => {
           x: { grid: { display: false } }
         }
       }
-    })
+    });
   }
-  
-  const distributionCtx = document.getElementById('modelDistributionChart')
+
+  const distributionCtx = document.getElementById('modelDistributionChart');
   if (distributionCtx) {
-    new (window.Chart || {})(distributionCtx, {
+    const distLabels = modelDistribution.length > 0
+      ? modelDistribution.map(m => m.name)
+      : ['暂无数据'];
+    const distData = modelDistribution.length > 0
+      ? modelDistribution.map(m => m.tokens)
+      : [1];
+    const distColors = ['#059669', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+    if (window.modelDistributionChartInstance) {
+      window.modelDistributionChartInstance.destroy();
+    }
+    window.modelDistributionChartInstance = new (window.Chart || {})(distributionCtx, {
       type: 'doughnut',
       data: {
-        labels: ['GPT-4o Mini', 'Claude 3.5 Sonnet', 'Gemini 2.5 Flash', 'Claude Opus', 'Grok'],
+        labels: distLabels,
         datasets: [{
-          data: [36, 25, 22, 10, 7],
-          backgroundColor: ['#059669', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6']
+          data: distData,
+          backgroundColor: distLabels.length > 1 ? distColors.slice(0, distLabels.length) : ['#9ca3af']
         }]
       },
       options: {
@@ -237,9 +264,9 @@ const initCharts = () => {
         plugins: { legend: { position: 'bottom' } },
         cutout: '65%'
       }
-    })
+    });
   }
-}
+};
 </script>
 
 <style scoped>

@@ -303,13 +303,33 @@ class GPUMonitor:
         """获取最大保留天数"""
         return self._max_history_days
     
-    def get_gpu_history(self, count: int = 60) -> List[Dict]:
-        """获取GPU历史记录"""
+    def get_gpu_history(self, count: int = 60, time_range: str = None) -> List[Dict]:
+        """获取GPU历史记录
+        
+        Args:
+            count: 最大记录数
+            time_range: 时间范围 ('hour', 'day', 'week', None)
+                       hour: 最近1小时 (5秒间隔，约720条)
+                       day: 最近1天 (5秒间隔，约17280条，但实际限制为1000条)
+                       week: 最近1周 (5秒间隔，约120960条，但实际限制为1000条)
+        """
         if self._redis_client is None:
             return []
         
         try:
-            history_data = self._redis_client.lrange("gpu:history", 0, count - 1)
+            max_counts = {
+                'hour': 720,
+                'day': 1000,
+                'week': 1000,
+                None: count
+            }
+            actual_count = min(count, max_counts.get(time_range, count))
+            
+            if time_range and time_range != 'all':
+                history_data = self._redis_client.lrange("gpu:history", 0, actual_count - 1)
+            else:
+                history_data = self._redis_client.lrange("gpu:history", 0, actual_count - 1)
+            
             history = []
             for item in history_data:
                 try:

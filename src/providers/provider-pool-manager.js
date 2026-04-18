@@ -61,6 +61,7 @@ export class ProviderPoolManager {
         'openai-codex-oauth': 'gpt-5-codex-mini',
         'openaiResponses-custom': 'gpt-4o-mini',
         'forward-api': 'gpt-4o-mini',
+        'grok-custom': 'grok-3',
         'local-model': 'gemma-2-9b-it',
     };
 
@@ -104,6 +105,7 @@ export class ProviderPoolManager {
         
         this.warmupTarget = options.globalConfig?.WARMUP_TARGET || 0; // 默认预热0个节点
         this.refreshingUuids = new Set(); // 正在刷新的节点 UUID 集合
+        this.refreshingLocks = new Map(); // uuid -> Promise lock for concurrent refresh safety
         
         this.refreshQueues = {}; // 按 providerType 分组的队列
         // 缓冲队列机制：延迟5秒，去重后再执行刷新
@@ -340,15 +342,19 @@ export class ProviderPoolManager {
     _enqueueRefreshImmediate(providerType, providerStatus, force = false) {
         const uuid = providerStatus.uuid;
         
-        // 再次检查是否已经在刷新中（防止并发问题）
-        if (this.refreshingUuids.has(uuid)) {
-            this._log('debug', `Node ${uuid} is already in refresh queue (immediate check).`);
+        const existingLock = this.refreshingLocks.get(uuid);
+        if (existingLock) {
+            this._log('debug', `Node ${uuid} is already being refreshed (lock exists).`);
             return;
         }
-
+        
+        let releaseLock;
+        const lockPromise = new Promise(resolve => {
+            releaseLock = resolve;
+        });
+        this.refreshingLocks.set(uuid, lockPromise);
         this.refreshingUuids.add(uuid);
 
-        // 初始化提供商队列
         if (!this.refreshQueues[providerType]) {
             this.refreshQueues[providerType] = {
                 activeCount: 0,
@@ -357,7 +363,6 @@ export class ProviderPoolManager {
         }
 
         const queue = this.refreshQueues[providerType];
-        // 记录此任务是否持有一个全局槽位（情况1追加的任务不持有）
         let ownsGlobalSlot = false;
 
         const runTask = async () => {
@@ -367,34 +372,30 @@ export class ProviderPoolManager {
                 this._log('error', `Failed to process refresh for node ${uuid}: ${err.message}`);
             } finally {
                 this.refreshingUuids.delete(uuid);
+                this.refreshingLocks.delete(uuid);
+                releaseLock?.();
 
-                // 再次获取当前队列引用
                 const currentQueue = this.refreshQueues[providerType];
                 if (!currentQueue) return;
 
                 currentQueue.activeCount--;
 
-                // 1. 尝试从当前提供商队列中取下一个任务
                 if (currentQueue.waitingTasks.length > 0) {
                     const nextTask = currentQueue.waitingTasks.shift();
                     currentQueue.activeCount++;
-                    // 使用 Promise.resolve().then 避免过深的递归
                     Promise.resolve().then(() => nextTask()).catch(err => {
                         this._log('error', `Failed to execute next task for ${providerType}: ${err.message}`);
                     });
                 } else if (currentQueue.activeCount === 0) {
-                    // 清理空队列：无论是否持有全局槽位，都应删除已无任务的队列对象
                     if (currentQueue.waitingTasks.length === 0 &&
                         this.refreshQueues[providerType] === currentQueue) {
                         delete this.refreshQueues[providerType];
                     }
 
-                    // 只有持有全局槽位的任务才能递减计数器
                     if (ownsGlobalSlot) {
                         this.activeProviderRefreshes--;
                     }
 
-                    // 3. 尝试启动下一个等待中的提供商队列
                     if (this.globalRefreshWaiters.length > 0) {
                         const nextProviderStart = this.globalRefreshWaiters.shift();
                         Promise.resolve().then(() => nextProviderStart()).catch(err => {
@@ -505,7 +506,8 @@ export class ProviderPoolManager {
                 
                 this._debouncedSave(providerType);
             } else {
-                throw new Error(`refreshToken method not implemented for ${providerType}`);
+                this._log('warn', `refreshToken not implemented for ${providerType}, skipping refresh`);
+                return;
             }
 
         } catch (error) {

@@ -83,7 +83,9 @@ function parseRetryDelay(errorBody) {
             const match = message.match(/after\s+(\d+)s\.?/);
             if (match) return parseInt(match[1]) * 1000;
         }
-    } catch (e) {}
+    } catch (e) {
+        logger.debug(`[Gemini] Failed to extract retry delay: ${e.message}`);
+    }
     return null;
 }
 

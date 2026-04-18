@@ -18,6 +18,8 @@ import * as eventBroadcast from '../ui-modules/event-broadcast.js';
 // Re-export from event-broadcast module
 export { broadcastEvent, initializeUIManagement, handleUploadOAuthCredentials, upload } from '../ui-modules/event-broadcast.js';
 
+import { getStats as getModelUsageStats } from '../plugins/model-usage-stats/stats-manager.js';
+
 /**
  * Serve Vue app files from vue-dist directory
  * @param {string} pathParam - The request path (e.g., /vue/index.html)
@@ -412,6 +414,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await usageApi.handleGetProviderUsage(req, res, currentConfig, providerPoolManager, providerType);
     }
 
+    // Get aggregate usage stats (totalRequests, totalTokens, etc.) from model-usage-stats
+    if (method === 'GET' && pathParam === '/api/usage/stats') {
+        return await handleGetUsageStats(req, res);
+    }
+
     // Check for updates - compare local VERSION with latest git tag
     if (method === 'GET' && pathParam === '/api/check-update') {
         return await updateApi.handleCheckUpdate(req, res);
@@ -572,6 +579,114 @@ async function handlePythonGpuStatus(req, res, currentConfig) {
         res.end(JSON.stringify({
             success: false,
             error: error.message
+        }));
+        return true;
+    }
+}
+
+async function handleGetUsageStats(req, res) {
+    try {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const range = url.searchParams.get('range') || 'day';
+
+        const stats = await getModelUsageStats();
+
+        const now = new Date();
+        let startTime;
+        switch (range) {
+            case 'today':
+                startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                break;
+            case 'week':
+                startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                break;
+            case 'month':
+                startTime = new Date(now.getFullYear(), now.getMonth(), 1);
+                break;
+            case 'year':
+                startTime = new Date(now.getFullYear(), 0, 1);
+                break;
+            default:
+                startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        }
+        const startKey = startTime.toISOString().slice(0, 10);
+
+        let filteredStats = stats;
+        let hourlyData = [];
+        if (stats.daily) {
+            const dailyEntries = Object.entries(stats.daily)
+                .filter(([date]) => date >= startKey)
+                .sort(([a], [b]) => a.localeCompare(b));
+
+            const aggregated = dailyEntries.reduce((acc, [, data]) => {
+                acc.requestCount += data.requestCount || 0;
+                acc.promptTokens += data.promptTokens || 0;
+                acc.completionTokens += data.completionTokens || 0;
+                acc.totalTokens += data.totalTokens || 0;
+                acc.cachedTokens += data.cachedTokens || 0;
+                return acc;
+            }, { requestCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, cachedTokens: 0 });
+
+            filteredStats = { ...stats, summary: aggregated };
+        }
+
+        if (stats.hourly) {
+            const hourStartKey = startKey + 'T';
+            const hourEntries = Object.entries(stats.hourly)
+                .filter(([hour]) => hour >= hourStartKey)
+                .sort(([a], [b]) => a.localeCompare(b));
+            hourlyData = hourEntries.map(([hour, data]) => ({
+                hour: hour,
+                tokens: data.totalTokens || 0
+            }));
+        }
+
+        const totalRequests = filteredStats.summary?.requestCount || 0;
+        const totalTokens = filteredStats.summary?.totalTokens || 0;
+        const inputTokens = filteredStats.summary?.promptTokens || 0;
+        const outputTokens = filteredStats.summary?.completionTokens || 0;
+
+        const topModels = [];
+        if (stats.providers) {
+            for (const [provider, providerData] of Object.entries(stats.providers)) {
+                if (providerData.models) {
+                    for (const [model, modelData] of Object.entries(providerData.models)) {
+                        topModels.push({
+                            name: model,
+                            provider: provider,
+                            tokens: modelData.totalTokens || 0,
+                            requests: modelData.requestCount || 0
+                        });
+                    }
+                }
+            }
+        }
+        topModels.sort((a, b) => b.tokens - a.tokens);
+        const top5Models = topModels.slice(0, 5);
+
+        const modelDistribution = top5Models.map(m => ({
+            name: m.name,
+            tokens: m.tokens
+        }));
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            totalRequests,
+            totalTokens,
+            inputTokens,
+            outputTokens,
+            cost: 0,
+            topModels: top5Models,
+            hourlyData,
+            modelDistribution,
+            range
+        }));
+        return true;
+    } catch (error) {
+        logger.error('[UI API] Failed to get usage stats:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            error: { message: 'Failed to get usage stats: ' + error.message }
         }));
         return true;
     }

@@ -256,8 +256,11 @@ function setupSignalHandlers() {
         gracefulShutdown();
     });
 
+    const unhandledRejectionCounter = { count: 0, lastTime: 0 };
+    
     process.on('unhandledRejection', (reason, promise) => {
-        // 添加更详细的错误信息记录
+        const now = Date.now();
+        
         const reasonDetails = {
             type: typeof reason,
             isObject: reason instanceof Object,
@@ -268,18 +271,32 @@ function setupSignalHandlers() {
             keys: reason instanceof Object ? Object.keys(reason) : 'Not an object'
         };
         
-        logger.error('[Server] Unhandled rejection at:', promise, 'reason:', reasonDetails);
-        
-        // 检查是否为可重试的网络错误
         if (reason && isRetryableNetworkError(reason)) {
             logger.warn('[Server] Network error in promise rejection, continuing operation...');
-            return; // 不退出程序，继续运行
+            return;
         }
         
-        // 对于空异常对象，不关闭服务，记录警告
         if (typeof reason === 'object' && reason !== null && Object.keys(reason).length === 0) {
             logger.warn('[Server] Empty rejection reason detected, continuing operation...');
             return;
+        }
+        
+        unhandledRejectionCounter.count++;
+        const timeSinceLastWarning = now - unhandledRejectionCounter.lastTime;
+        
+        if (timeSinceLastWarning > 60000) {
+            unhandledRejectionCounter.count = 1;
+            unhandledRejectionCounter.lastTime = now;
+        }
+        
+        logger.error('[Server] Unhandled rejection:', reasonDetails);
+        
+        if (unhandledRejectionCounter.count >= 5) {
+            logger.error('[Server] Too many unhandled rejections, initiating shutdown...');
+            unhandledRejectionCounter.count = 0;
+            gracefulShutdown();
+        } else {
+            logger.warn(`[Server] Unhandled rejection count: ${unhandledRejectionCounter.count}/5 before shutdown trigger`);
         }
     });
 }

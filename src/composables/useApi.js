@@ -47,7 +47,7 @@ export const pluginsApi = {
 };
 
 export const usageApi = {
-  getStats: (range = 'day') => apiClient.get(`/api/usage?range=${range}`),
+  getStats: (range = 'day') => apiClient.get(`/api/usage/stats?range=${range}`),
   getModelStats: (model) => apiClient.get(`/api/model-usage-stats?model=${model}`)
 };
 

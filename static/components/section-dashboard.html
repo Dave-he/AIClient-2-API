@@ -72,11 +72,18 @@
 
         <!-- Python GPU 折线图 -->
         <div class="python-gpu-chart-area">
-            <div class="chart-type-tabs">
-                <button class="chart-type-tab active" data-python-chart-type="utilization">使用率</button>
-                <button class="chart-type-tab" data-python-chart-type="memory">显存</button>
-                <button class="chart-type-tab" data-python-chart-type="temperature">温度</button>
-                <button class="chart-type-tab" data-python-chart-type="all">全部</button>
+            <div class="chart-controls">
+                <div class="chart-type-tabs">
+                    <button class="chart-type-tab active" data-python-chart-type="utilization">使用率</button>
+                    <button class="chart-type-tab" data-python-chart-type="memory">显存</button>
+                    <button class="chart-type-tab" data-python-chart-type="temperature">温度</button>
+                    <button class="chart-type-tab" data-python-chart-type="all">全部</button>
+                </div>
+                <div class="time-range-tabs gpu-time-range">
+                    <button class="time-range-tab active" data-python-time-range="hour">1小时</button>
+                    <button class="time-range-tab" data-python-time-range="day">1天</button>
+                    <button class="time-range-tab" data-python-time-range="week">1周</button>
+                </div>
             </div>
             <canvas id="pythonGpuChart"></canvas>
             <div class="python-chart-legend" id="pythonGpuChartLegend">

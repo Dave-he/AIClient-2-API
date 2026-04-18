@@ -2782,7 +2782,9 @@ async saveCredentialsToFile(filePath, newData) {
                 let parsedInput = currentToolCall.input;
                 try {
                     parsedInput = JSON.parse(currentToolCall.input);
-                } catch (e) {}
+                } catch (e) {
+                    logger.debug(`[Kiro] Failed to parse tool input: ${e.message}`);
+                }
                 toolCalls.push({
                     toolUseId: currentToolCall.toolUseId,
                     name: currentToolCall.name,

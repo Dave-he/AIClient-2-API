@@ -152,7 +152,9 @@ class RateLimiter:
             request_id = self.client.lpop(queue_key)
             
             if request_id:
-                request_key = self._get_request_key(request_id.decode())
+                if isinstance(request_id, bytes):
+                    request_id = request_id.decode()
+                request_key = self._get_request_key(request_id)
                 request_data = self.client.get(request_key)
                 
                 if request_data:
@@ -245,7 +247,8 @@ class RateLimiter:
         
         status = {}
         for key in keys:
-            model_name = key.decode().replace(self.queue_prefix, "")
+            key_str = key.decode() if isinstance(key, bytes) else key
+            model_name = key_str.replace(self.queue_prefix, "")
             status[model_name] = {
                 "active_requests": self.get_active_requests(model_name),
                 "queue_length": self.get_queue_length(model_name)

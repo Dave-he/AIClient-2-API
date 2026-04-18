@@ -10,10 +10,11 @@ class RedisClient:
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super(RedisClient, cls).__new__(cls)
+            cls._instance._initialized = False
         return cls._instance
     
     def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0):
-        if hasattr(self, '_initialized'):
+        if hasattr(self, '_initialized') and self._initialized:
             return
         
         self.host = host
@@ -23,6 +24,13 @@ class RedisClient:
         self._initialized = True
     
     def connect(self):
+        if self._client is not None:
+            try:
+                self._client.ping()
+                return True
+            except:
+                pass
+        
         try:
             self._client = redis.Redis(
                 host=self.host,

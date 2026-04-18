@@ -106,9 +106,8 @@ class SystemController:
         self._restart_attempts[service_name] = 0
     
     async def _can_restart(self, service_name: str) -> bool:
-        """检查是否可以重启服务（考虑冷却时间）"""
         last_time = self._last_restart_time.get(service_name)
-        if last_time and (datetime.now() - last_time).seconds < self._restart_cooldown:
+        if last_time and (datetime.now() - last_time).total_seconds() < self._restart_cooldown:
             return False
         
         attempts = self._restart_attempts.get(service_name, 0)

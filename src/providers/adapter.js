@@ -10,6 +10,7 @@ import { CodexApiService } from './openai/codex-core.js';
 import { ForwardApiService } from './forward/forward-core.js';
 import { GrokApiService } from './grok/grok-core.js';
 import { LocalApiService } from './local/local-core.js';
+import { LocalApiServiceAdapter } from './local/local-strategy.js';
 import { MODEL_PROVIDER } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 
@@ -689,50 +690,6 @@ export class GrokApiServiceAdapter extends ApiServiceAdapter {
     }
 }
 
-// Local Model API 服务适配器
-export class LocalApiServiceAdapter extends ApiServiceAdapter {
-    constructor(config) {
-        super();
-        this.localApiService = new LocalApiService(config);
-    }
-
-    async generateContent(model, requestBody) {
-        return this.localApiService.generateContent(model, requestBody);
-    }
-
-    async *generateContentStream(model, requestBody) {
-        yield* this.localApiService.generateContentStream(model, requestBody);
-    }
-
-    async listModels() {
-        return this.localApiService.listModels();
-    }
-
-    async refreshToken() {
-        return Promise.resolve();
-    }
-
-    async forceRefreshToken() {
-        return Promise.resolve();
-    }
-
-    isExpiryDateNear() {
-        return false;
-    }
-
-    async getGPUStatus() {
-        return this.localApiService.getGPUStatus();
-    }
-
-    async startModel(modelName) {
-        return this.localApiService.startModel(modelName);
-    }
-
-    async stopModel(modelName) {
-        return this.localApiService.stopModel(modelName);
-    }
-}
-
 // 注册所有内置适配器
 registerAdapter(MODEL_PROVIDER.OPENAI_CUSTOM, OpenAIApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.OPENAI_CUSTOM_RESPONSES, OpenAIResponsesApiServiceAdapter);
@@ -794,7 +751,6 @@ export function getServiceAdapter(config) {
     if (!serviceInstances[providerKey]) {
         let AdapterClass = adapterRegistry.get(provider);
         
-        // 如果没找到精确匹配，尝试通过前缀查找 (例如 openai-custom-1 -> openai-custom)
         if (!AdapterClass) {
             for (const [key, value] of adapterRegistry.entries()) {
                 if (provider === key || provider.startsWith(key + '-')) {
@@ -805,7 +761,12 @@ export function getServiceAdapter(config) {
         }
         
         if (AdapterClass) {
-            serviceInstances[providerKey] = new AdapterClass(config);
+            try {
+                serviceInstances[providerKey] = new AdapterClass(config);
+            } catch (error) {
+                logger.error(`[Adapter] Failed to create adapter instance for ${provider}: ${error.message}`);
+                throw new Error(`Failed to initialize adapter for ${provider}: ${error.message}`);
+            }
         } else {
             throw new Error(`Unsupported model provider: ${provider}`);
         }

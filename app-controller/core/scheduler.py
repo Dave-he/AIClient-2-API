@@ -2,6 +2,7 @@ import yaml
 import os
 import asyncio
 import httpx
+import threading
 from typing import Dict, Optional, List, Set
 from datetime import datetime, timedelta
 from .rate_limiter import RateLimiter
@@ -44,6 +45,7 @@ class Scheduler:
         self.rate_limiter = RateLimiter()
         self.preloaded_models: Set[str] = set()
         self.model_last_used: Dict[str, datetime] = {}
+        self._model_lock = threading.Lock()
         self._init_preloaded_models()
     
     def _load_config(self) -> Dict:
@@ -111,18 +113,19 @@ class Scheduler:
         return self.config.get('settings', {}).get('concurrency_limit', 4)
     
     def is_model_running(self, model_name: str) -> bool:
-        port = self.get_model_port(model_name)
-        if port:
-            process_info = self.sys_controller.get_process_info(port)
-            if process_info:
-                if model_name not in self.running_models:
-                    self.running_models[model_name] = datetime.now()
-                return True
-        
-        if model_name in self.running_models:
-            del self.running_models[model_name]
-        
-        return False
+        with self._model_lock:
+            port = self.get_model_port(model_name)
+            if port:
+                process_info = self.sys_controller.get_process_info(port)
+                if process_info:
+                    if model_name not in self.running_models:
+                        self.running_models[model_name] = datetime.now()
+                    return True
+            
+            if model_name in self.running_models:
+                del self.running_models[model_name]
+            
+            return False
     
     def is_model_preloaded(self, model_name: str) -> bool:
         return model_name in self.preloaded_models
@@ -231,7 +234,8 @@ class Scheduler:
             return False
         
         if self.sys_controller.is_service_running(service_name):
-            self.running_models[model_name] = datetime.now()
+            with self._model_lock:
+                self.running_models[model_name] = datetime.now()
             return True
         
         mem_info = self.gpu_monitor.get_memory_usage()
@@ -244,7 +248,8 @@ class Scheduler:
         
         success = self.sys_controller.start_service(service_name)
         if success:
-            self.running_models[model_name] = datetime.now()
+            with self._model_lock:
+                self.running_models[model_name] = datetime.now()
             
             preload_timeout = self.config.get('settings', {}).get('preload_timeout', 120)
             await asyncio.sleep(min(30, preload_timeout))
@@ -268,13 +273,13 @@ class Scheduler:
         success = self.sys_controller.stop_service(service_name)
         if success:
             await self._cleanup_memory_fragmentation()
-            if model_name in self.running_models:
-                del self.running_models[model_name]
+            with self._model_lock:
+                if model_name in self.running_models:
+                    del self.running_models[model_name]
         
         return success
     
     async def _free_up_memory(self, target_model_name: str) -> bool:
-        """释放显存以启动目标模型"""
         target_config = self.get_model_config(target_model_name)
         if not target_config:
             return False
@@ -292,15 +297,16 @@ class Scheduler:
             return True
         
         models_to_stop = []
-        for model_name in list(self.running_models.keys()):
-            if model_name == target_model_name:
-                continue
-            
-            config = self.get_model_config(model_name)
-            if config and config.get('keep_alive', False):
-                continue
-            
-            models_to_stop.append((model_name, config.get('required_memory', 0)))
+        with self._model_lock:
+            for model_name in list(self.running_models.keys()):
+                if model_name == target_model_name:
+                    continue
+                
+                config = self.get_model_config(model_name)
+                if config and config.get('keep_alive', False):
+                    continue
+                
+                models_to_stop.append((model_name, config.get('required_memory', 0)))
         
         models_to_stop.sort(key=lambda x: x[1], reverse=True)
         

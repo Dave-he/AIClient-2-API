@@ -1,3 +1,26 @@
+/**
+ * HTTP 请求处理器 (Request Handler)
+ * 
+ * 整个系统的请求入口，负责：
+ * 1. CORS 头处理和预检请求
+ * 2. 静态文件服务（Vue 新界面 + 旧界面）
+ * 3. 插件路由分发
+ * 4. UI API 请求处理（配置、提供商、日志等）
+ * 5. 提供商路径重写（支持 /gemini-cli-oauth/v1/... 等路径格式）
+ * 6. 认证流程（通过插件系统）
+ * 7. 中间件流程（通过插件系统）
+ * 8. API 请求分发
+ * 
+ * 提供商切换机制：
+ * - 请求头：Model-Provider
+ * - URL 路径首段：/gemini-cli-oauth/, /claude-custom/ 等
+ * 
+ * 处理流程：
+ * Request → CORS → Static Files → Plugin Routes → UI API 
+ *        → Provider Path Rewrite → Auth (Plugins) → Middleware (Plugins) 
+ *        → Rate Limit → API Request → Response
+ */
+
 import deepmerge from 'deepmerge';
 import logger from '../utils/logger.js';
 import { handleError, getClientIp } from '../utils/common.js';
@@ -414,10 +437,17 @@ export function createRequestHandler(config, providerPoolManager) {
                     try {
                         if (!res.headersSent) {
                             res.writeHead(500, { 'Content-Type': 'application/json' });
-                            res.end(JSON.stringify({ error: 'Internal Server Error' }));
                         }
+                        res.end(JSON.stringify({ error: 'Internal Server Error' }));
                     } catch (e) {
                         logger.error(`[Server] Failed to send error response: ${e.message}`);
+                        try {
+                            if (res.destroy) {
+                                res.destroy();
+                            }
+                        } catch (destroyErr) {
+                            logger.error(`[Server] Failed to destroy response: ${destroyErr.message}`);
+                        }
                     }
                 } finally {
                     // Clear request context after request is complete

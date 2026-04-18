@@ -21,7 +21,7 @@ export function useStats() {
     error.value = '';
 
     try {
-      const response = await apiClient.get(`/api/usage?range=${timeRange.value}`);
+      const response = await apiClient.get(`/api/usage/stats?range=${timeRange.value}`);
       const data = response.data;
 
       stats.value = {
@@ -32,7 +32,7 @@ export function useStats() {
         cost: data.cost || 0
       };
 
-      usageData.value = data.usage || [];
+      usageData.value = data.topModels || [];
     } catch (err) {
       error.value = '获取统计数据失败';
       logger.error('Failed to fetch stats', err);

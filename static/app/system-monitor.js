@@ -22,6 +22,7 @@ export class SystemMonitor {
         
         this.pythonGpuChart = null;
         this.currentPythonChartType = 'utilization';
+        this.currentPythonGpuTimeRange = 'hour';
         this.pythonGpuUtilizationHistory = [];
         this.pythonGpuMemoryHistory = [];
         this.pythonGpuTempHistory = [];
@@ -115,6 +116,16 @@ export class SystemMonitor {
             });
         });
 
+        const gpuTimeRangeTabs = document.querySelectorAll('.gpu-time-range .time-range-tab');
+        gpuTimeRangeTabs.forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                gpuTimeRangeTabs.forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+                this.currentPythonGpuTimeRange = e.target.dataset.pythonTimeRange;
+                this.loadGpuHistoryFromServer();
+            });
+        });
+
         const refreshBtn = document.getElementById('refreshGpuStatusBtn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => this.refreshGpuStatus());
@@ -149,6 +160,7 @@ export class SystemMonitor {
                 this.ensurePythonGpuChartInitialized();
                 this.ensureTokenChartInitialized();
                 this.loadTokenUsageData();
+                this.loadGpuHistoryFromServer();
             }
         });
 
@@ -188,6 +200,8 @@ export class SystemMonitor {
         }, 2000);
         
         this.startTokenDataPolling();
+        this.loadGpuHistoryFromServer();
+        this.startGpuHistoryPolling();
     }
 
     stopPolling() {
@@ -196,6 +210,7 @@ export class SystemMonitor {
             this.pollingInterval = null;
         }
         this.stopTokenDataPolling();
+        this.stopGpuHistoryPolling();
     }
 
     startTokenDataPolling() {
@@ -209,6 +224,20 @@ export class SystemMonitor {
         if (this.tokenDataPollingInterval) {
             clearInterval(this.tokenDataPollingInterval);
             this.tokenDataPollingInterval = null;
+        }
+    }
+
+    startGpuHistoryPolling() {
+        this.stopGpuHistoryPolling();
+        this.gpuHistoryPollingInterval = setInterval(() => {
+            this.loadGpuHistoryFromServer();
+        }, 30000);
+    }
+
+    stopGpuHistoryPolling() {
+        if (this.gpuHistoryPollingInterval) {
+            clearInterval(this.gpuHistoryPollingInterval);
+            this.gpuHistoryPollingInterval = null;
         }
     }
 
@@ -718,7 +747,7 @@ export class SystemMonitor {
 
     async loadGpuHistoryFromServer() {
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/gpu/history?count=60`, {
+            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/gpu/history?count=1000&time_range=${this.currentPythonGpuTimeRange}`, {
                 method: 'GET',
                 timeout: 5000
             });
@@ -731,9 +760,12 @@ export class SystemMonitor {
             const data = await response.json();
             
             if (data.history && data.history.length > 0) {
-                this.gpuHistoryData = data.history.map(item => item.utilization || 0);
-                this.gpuTempHistoryData = data.history.map(item => item.temperature || 0);
-                console.log('[SystemMonitor] GPU history loaded from server:', this.gpuHistoryData.length);
+                this.pythonGpuUtilizationHistory = data.history.map(item => item.utilization || 0);
+                this.pythonGpuMemoryHistory = data.history.map(item => item.memory_utilization || 0);
+                this.pythonGpuTempHistory = data.history.map(item => item.temperature || 0);
+                this.pythonGpuHistoryTimestamp = Date.now();
+                this.updatePythonGpuChart();
+                console.log('[SystemMonitor] GPU history loaded from server:', this.pythonGpuUtilizationHistory.length, 'time_range:', this.currentPythonGpuTimeRange);
             }
         } catch (error) {
             console.log('[SystemMonitor] Failed to load GPU history:', error);
@@ -961,7 +993,7 @@ export class SystemMonitor {
         console.log('[SystemMonitor] Value range:', { minValue, maxValue });
 
         this.drawGrid(ctx, chartWidth, chartHeight, padding, minValue, maxValue);
-        this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue);
+        this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, false);
         datasets.forEach(ds => {
             this.drawArea(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
             this.drawLine(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
@@ -999,7 +1031,7 @@ export class SystemMonitor {
         ctx.setLineDash([]);
     }
 
-    drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue) {
+    drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, showTimeLabels) {
         ctx.strokeStyle = '#9ca3af';
         ctx.lineWidth = 2;
 
@@ -1025,7 +1057,24 @@ export class SystemMonitor {
         }
 
         ctx.textAlign = 'center';
-        const timeLabels = ['-60s', '-45s', '-30s', '-15s', '现在'];
+        let timeLabels;
+        if (showTimeLabels && this.currentPythonGpuTimeRange) {
+            switch(this.currentPythonGpuTimeRange) {
+                case 'hour':
+                    timeLabels = ['-60m', '-45m', '-30m', '-15m', '现在'];
+                    break;
+                case 'day':
+                    timeLabels = ['-24h', '-18h', '-12h', '-6h', '现在'];
+                    break;
+                case 'week':
+                    timeLabels = ['-7d', '-5d', '-3d', '-1d', '现在'];
+                    break;
+                default:
+                    timeLabels = ['-60s', '-45s', '-30s', '-15s', '现在'];
+            }
+        } else {
+            timeLabels = ['-60s', '-45s', '-30s', '-15s', '现在'];
+        }
         for (let i = 0; i < 5; i++) {
             const x = padding.left + (chartWidth / 4) * i;
             ctx.fillText(timeLabels[i], x, padding.top + chartHeight + 22);
@@ -1037,8 +1086,8 @@ export class SystemMonitor {
         if (dataLength < 2) return;
 
         const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight);
-        gradient.addColorStop(0, dataset.gradient[0] + '40');
-        gradient.addColorStop(1, dataset.gradient[1] + '05');
+        gradient.addColorStop(0, dataset.gradient[0] + '66');
+        gradient.addColorStop(1, dataset.gradient[1] + '0D');
 
         ctx.fillStyle = gradient;
         ctx.beginPath();

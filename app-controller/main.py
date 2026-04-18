@@ -301,6 +301,7 @@ async def chat_completions(request: ChatCompletionRequest):
     model_name = request.model
     stream = request.stream or False
     status_code = 200
+    slot_acquired = False
     
     request_data = request.model_dump(exclude_unset=True)
     has_image, total_image_size = count_image_content(request_data)
@@ -336,13 +337,12 @@ async def chat_completions(request: ChatCompletionRequest):
                     logger.warning(f"Queue timeout for {model_name}")
                     raise TooManyRequestsException(active, limit, queue_length)
                 
-                acquired = scheduler.acquire_request(model_name)
-                if not acquired:
-                    logger.warning(f"Failed to acquire request after waiting for {model_name}")
-                    raise TooManyRequestsException(active, limit, queue_length)
+                slot_acquired = True
             else:
                 logger.warning(f"Queue full for {model_name}: {active}/{limit}, queue: {queue_length}")
                 raise TooManyRequestsException(active, limit, queue_length)
+        else:
+            slot_acquired = True
         
         gpu_status = gpu_monitor.get_gpu_status()
         min_memory = scheduler.get_min_available_memory()
@@ -407,7 +407,8 @@ async def chat_completions(request: ChatCompletionRequest):
         logger.error(f"vLLM service error for {model_name}: {str(e)}")
         raise ModelServiceUnavailableException(model_name, str(e))
     finally:
-        scheduler.release_request(model_name)
+        if slot_acquired:
+            scheduler.release_request(model_name)
         metrics.record_request(
             endpoint="/v1/chat/completions",
             status_code=status_code,
@@ -566,12 +567,6 @@ async def get_gpu_status():
     status["serverTime"] = datetime.now().isoformat()
     return status
 
-@app.get("/manage/gpu/history")
-async def get_gpu_history(count: int = 60):
-    logger.info(f"Getting GPU history, count: {count}")
-    history = gpu_monitor.get_gpu_history(count)
-    return {"history": history}
-
 @app.get("/manage/gpu/summary")
 async def get_gpu_summary():
     logger.info("Getting GPU summary")
@@ -620,7 +615,7 @@ async def preload_model(model_name: str):
     logger.info(f"Preloading model {model_name}")
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
-    
+
     success = await scheduler.start_model(model_name)
     if success:
         return {"status": "preloaded", "model": model_name}
@@ -632,10 +627,10 @@ async def start_model(model_name: str):
     logger.info(f"Starting model {model_name}")
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
-    
+
     if scheduler.is_model_running(model_name):
         return {"status": "already_running", "model": model_name}
-    
+
     success = await scheduler.start_model(model_name)
     if success:
         return {"status": "starting", "model": model_name}
@@ -647,10 +642,10 @@ async def stop_model(model_name: str):
     logger.info(f"Stopping model {model_name}")
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
-    
+
     if not scheduler.is_model_running(model_name):
         return {"status": "already_stopped", "model": model_name}
-    
+
     success = await scheduler.stop_model(model_name)
     if success:
         return {"status": "stopped", "model": model_name}
@@ -662,7 +657,7 @@ async def switch_to_model(model_name: str):
     logger.info(f"Switching to model {model_name}")
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
-    
+
     success = await scheduler.switch_model(model_name)
     if success:
         return {"status": "switched", "model": model_name}
@@ -725,7 +720,7 @@ async def enable_preload(model_name: str):
     logger.info(f"Enabling preload for model {model_name}")
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
-    
+
     success = scheduler.schedule_preload(model_name)
     if success:
         return {"status": "preload_enabled", "model": model_name}
@@ -737,7 +732,7 @@ async def disable_preload(model_name: str):
     logger.info(f"Disabling preload for model {model_name}")
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
-    
+
     success = scheduler.cancel_preload(model_name)
     if success:
         return {"status": "preload_disabled", "model": model_name}
@@ -758,7 +753,7 @@ async def check_alert_status():
     gpu_status = gpu_monitor.get_gpu_status()
     health_info = metrics.get_comprehensive_health_score(gpu_status)
     alert_reasons = metrics.get_alert_reasons()
-    
+
     return {
         "should_alert": health_info["overall"] < 70,
         "health_score": health_info["overall"],
@@ -771,10 +766,10 @@ async def check_alert_status():
 async def get_prometheus_metrics():
     gpu_status = gpu_monitor.get_gpu_status()
     prometheus.update_gpu_metrics(gpu_status)
-    
+
     health_info = metrics.get_comprehensive_health_score(gpu_status)
     prometheus.set_health_score(health_info["overall"])
-    
+
     for model_name in scheduler.get_available_models():
         prometheus.set_model_status(
             model_name,
@@ -782,7 +777,7 @@ async def get_prometheus_metrics():
             scheduler.is_model_running(model_name)
         )
         prometheus.set_active_requests(model_name, scheduler.get_active_requests(model_name))
-    
+
     return prometheus.generate_metrics()
 
 @app.get("/metrics/metadata")
@@ -802,12 +797,12 @@ async def redis_health_check():
     try:
         connected = redis_client.is_connected()
         info = {}
-        
+
         if connected:
             client = redis_client.get_client()
             if client:
                 info = client.info()
-        
+
         return {
             "status": "healthy" if connected else "unhealthy",
             "connected": connected,
@@ -827,7 +822,7 @@ async def get_redis_keys(pattern: str = "*"):
     try:
         if not redis_client.is_connected():
             return {"error": "Redis not connected"}
-        
+
         keys = redis_client.keys(pattern)
         return {"keys": keys, "count": len(keys)}
     except Exception as e:
@@ -838,7 +833,7 @@ async def flush_redis():
     try:
         if not redis_client.is_connected():
             return {"error": "Redis not connected"}
-        
+
         success = redis_client.flush_db()
         return {"status": "success" if success else "failed"}
     except Exception as e:

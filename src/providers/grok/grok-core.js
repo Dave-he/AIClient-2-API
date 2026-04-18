@@ -876,7 +876,9 @@ export class GrokApiService {
                     try {
                         const parsed = typeof att.jsonData === 'string' ? JSON.parse(att.jsonData) : att.jsonData;
                         if (parsed?.id) seenCardIds.add(parsed.id);
-                    } catch (e) {}
+                    } catch (e) {
+                        logger.debug(`[Grok] Failed to parse card attachment jsonData: ${e.message}`);
+                    }
                 }
             }
             if (res.generatedImageUrls) {
@@ -1384,7 +1386,9 @@ export class GrokApiService {
                                     // 只要包含图片资源，直接从流中删除该卡片 (指令：resp.cardAttachment 中的图片都不处理)
                                     delete resp.cardAttachment;
                                 }
-                            } catch (e) {}
+                            } catch (e) {
+                                logger.debug(`[Grok] Failed to process card attachment: ${e.message}`);
+                            }
                         }
 
                         // 2. 处理 modelResponse.cardAttachmentsJson (核心图片源)
@@ -1439,7 +1443,9 @@ export class GrokApiService {
                         this._grokLastStreamJsonForDebug = json;
                     }
                     yield json;
-                } catch (e) {}
+                } catch (e) {
+                    logger.warn(`[Grok] Failed to yield stream chunk: ${e.message}`);
+                }
             }
             if ((process.env.GROK_LOG_LAST_CHUNK === '1' || /^true$/i.test(process.env.GROK_LOG_LAST_CHUNK || '')) && this._grokLastStreamJsonForDebug) {
                 try {
