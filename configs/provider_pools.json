@@ -29,30 +29,33 @@
       "lastRefreshTime": 1776452022862
     }
   ],
-  "claude-custom": [
+  "openai-custom": [
     {
-      "uuid": "claude-default",
-      "customName": "Claude Custom",
-      "config": {
-        "OPENAI_API_KEY": "sk-placeholder",
-        "OPENAI_API_BASE_URL": "https://api.anthropic.com/v1"
-      },
-      "enabled": true,
-      "healthCheckEnabled": true,
-      "concurrencyLimit": 5,
-      "queueLimit": 50,
+      "customName": "/mnt/pve_models/Gemma-4-31B-Abliterated",
+      "checkModelName": "/mnt/pve_models/Gemma-4-31B-Abliterated",
+      "checkHealth": false,
+      "concurrencyLimit": 0,
+      "queueLimit": 0,
+      "OPENAI_API_KEY": "1234",
+      "OPENAI_BASE_URL": "http://192.168.7.103:8000/v1",
+      "uuid": "36babfc8-934a-404d-826a-3dd25bef139a",
       "isHealthy": true,
-      "isDisabled": false,
       "lastUsed": null,
       "usageCount": 0,
       "errorCount": 0,
       "lastErrorTime": null,
-      "lastErrorMessage": null,
+      "supportedModels": [
+        "/mnt/pve_models/Gemma-4-31B-Abliterated"
+      ],
+      "notSupportedModels": [],
+      "isDisabled": false,
       "needsRefresh": false,
       "refreshCount": 0,
-      "lastHealthCheckTime": "2026-04-18T15:54:04.281Z",
-      "lastHealthCheckModel": null,
-      "_lastSelectionSeq": 198
+      "lastHealthCheckTime": "2026-04-18T05:32:57.878Z",
+      "lastHealthCheckModel": "/mnt/pve_models/Gemma-4-31B-Abliterated",
+      "lastErrorMessage": null,
+      "lastRefreshTime": 1776490377878,
+      "_lastSelectionSeq": 0
     }
   ],
   "providerFallbackChain": [],

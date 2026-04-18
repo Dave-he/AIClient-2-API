@@ -59,6 +59,14 @@ export async function serveVueFiles(pathParam, res) {
  * @param {Object} [currentConfig] - The current configuration object (optional)
  */
 export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
+    const staticPathPrefixes = ['/static/', '/assets/', '/app/', '/components/'];
+    const isStaticPath = staticPathPrefixes.some(prefix => pathParam.startsWith(prefix)) ||
+                         pathParam === '/' || pathParam === '/index.html' || pathParam === '/login.html' || pathParam === '/favicon.ico';
+
+    if (!isStaticPath) {
+        return false;
+    }
+
     let filePath;
 
     if (pathParam === '/' || pathParam === '/index.html' || pathParam === '/login.html') {
@@ -90,7 +98,7 @@ export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
         }[ext] || 'text/plain';
 
         let content = readFileSync(filePath);
-        
+
         if (ext === '.html') {
             const controllerBaseUrl = currentConfig.CONTROLLER_BASE_URL || 'http://localhost:5000';
             content = content.toString().replace(
@@ -101,6 +109,11 @@ export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
 
         res.writeHead(200, { 'Content-Type': contentType });
         res.end(content);
+        return true;
+    }
+    if (isStaticPath) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
         return true;
     }
     return false;

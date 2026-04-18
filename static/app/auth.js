@@ -106,7 +106,11 @@ class ApiClient {
      * 通用API请求方法
      */
     async request(endpoint, options = {}) {
-        const url = `${this.baseURL}/api${endpoint}`;
+        let apiPath = endpoint;
+        if (!apiPath.startsWith('/api')) {
+            apiPath = '/api' + apiPath;
+        }
+        const url = `${this.baseURL}${apiPath}`;
         const headers = {
             ...this.getAuthHeaders(),
             ...options.headers
