@@ -144,9 +144,9 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
     if (method === 'GET' && pathParam === '/api/health') {
         return await systemApi.handleHealthCheck(req, res);
     }
-    
-    // Handle UI management API requests (需要token验证，除了登录接口、健康检查和Events接口)
-    if (pathParam.startsWith('/api/') && pathParam !== '/api/login' && pathParam !== '/api/health' && pathParam !== '/api/events' && pathParam !== '/api/grok/assets') {
+
+    // Handle UI management API requests (需要token验证，除了登录接口、健康检查、Events接口和GPU状态接口)
+    if (pathParam.startsWith('/api/') && pathParam !== '/api/login' && pathParam !== '/api/health' && pathParam !== '/api/events' && pathParam !== '/api/grok/assets' && pathParam !== '/api/python-gpu/status') {
         // 检查token验证
         const isAuth = await auth.checkAuth(req);
         if (!isAuth) {
@@ -485,11 +485,6 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         if (method === 'DELETE') {
             return await customModelsApi.handleDeleteCustomModel(req, res, currentConfig, modelId);
         }
-    }
-
-    // Python GPU status proxy endpoint
-    if (method === 'GET' && pathParam === '/api/python-gpu/status') {
-        return await handlePythonGpuStatus(req, res, currentConfig);
     }
 
     // Config hot reload API endpoints

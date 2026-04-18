@@ -673,7 +673,7 @@ export class GPUMonitorModule {
 
     async refreshGpuStatus() {
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/gpu`, {
+            const response = await fetch(`/api/python-gpu/status`, {
                 method: 'GET',
                 timeout: 5000
             });
@@ -682,9 +682,14 @@ export class GPUMonitorModule {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json();
-            if (data && data.primary) {
-                this.updateGpuStatusFromSocket(data.primary);
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to get GPU status');
+            }
+            if (result.primary) {
+                this.updateGpuStatusFromSocket(result.primary);
+            } else if (result.status === 'available') {
+                this.updateGpuStatusFromSocket(result);
             }
         } catch (error) {
             logger.warn(`Failed to fetch GPU status: ${error.message}`);
