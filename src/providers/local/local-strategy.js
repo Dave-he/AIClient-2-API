@@ -1,5 +1,5 @@
 import { LocalApiService } from './local-core.js';
-import { ApiServiceAdapter } from '../adapter.js';
+import { ApiServiceAdapter } from '../api-service-adapter-base.js';
 
 export class LocalApiServiceAdapter extends ApiServiceAdapter {
     constructor(config) {

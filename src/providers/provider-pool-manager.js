@@ -62,7 +62,7 @@ export class ProviderPoolManager {
         'openaiResponses-custom': 'gpt-4o-mini',
         'forward-api': 'gpt-4o-mini',
         'grok-custom': 'grok-3',
-        'local-model': 'gemma-2-9b-it',
+        'local-model': 'gemma-4-31b',
     };
 
     constructor(providerPools, options = {}) {

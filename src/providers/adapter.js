@@ -11,6 +11,7 @@ import { ForwardApiService } from './forward/forward-core.js';
 import { GrokApiService } from './grok/grok-core.js';
 import { LocalApiService } from './local/local-core.js';
 import { LocalApiServiceAdapter } from './local/local-strategy.js';
+import { ApiServiceAdapter } from './api-service-adapter-base.js';
 import { MODEL_PROVIDER } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 
@@ -33,68 +34,6 @@ export function registerAdapter(provider, adapterClass) {
  */
 export function getRegisteredProviders() {
     return Array.from(adapterRegistry.keys());
-}
-
-// 定义AI服务适配器接口
-// 所有的服务适配器都应该实现这些方法
-export class ApiServiceAdapter {
-    constructor() {
-        if (new.target === ApiServiceAdapter) {
-            throw new TypeError("Cannot construct ApiServiceAdapter instances directly");
-        }
-    }
-
-    /**
-     * 生成内容
-     * @param {string} model - 模型名称
-     * @param {object} requestBody - 请求体
-     * @returns {Promise<object>} - API响应
-     */
-    async generateContent(model, requestBody) {
-        throw new Error("Method 'generateContent()' must be implemented.");
-    }
-
-    /**
-     * 流式生成内容
-     * @param {string} model - 模型名称
-     * @param {object} requestBody - 请求体
-     * @returns {AsyncIterable<object>} - API响应流
-     */
-    async *generateContentStream(model, requestBody) {
-        throw new Error("Method 'generateContentStream()' must be implemented.");
-    }
-
-    /**
-     * 列出可用模型
-     * @returns {Promise<object>} - 模型列表
-     */
-    async listModels() {
-        throw new Error("Method 'listModels()' must be implemented.");
-    }
-
-    /**
-     * 刷新认证令牌
-     * @returns {Promise<void>}
-     */
-    async refreshToken() {
-        throw new Error("Method 'refreshToken()' must be implemented.");
-    }
-
-    /**
-     * 强制刷新认证令牌（不判断是否接近过期）
-     * @returns {Promise<void>}
-     */
-    async forceRefreshToken() {
-        throw new Error("Method 'forceRefreshToken()' must be implemented.");
-    }
-
-    /**
-     * 判断日期是否接近过期
-     * @returns {boolean}
-     */
-    isExpiryDateNear() {
-        throw new Error("Method 'isExpiryDateNear()' must be implemented.");
-    }
 }
 
 // Gemini API 服务适配器
