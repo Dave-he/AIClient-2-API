@@ -104,7 +104,11 @@ class Scheduler:
     def get_model_service(self, model_name: str) -> Optional[str]:
         config = self.get_model_config(model_name)
         return config.get('service') if config else None
-    
+
+    def get_model_supports_images(self, model_name: str) -> bool:
+        config = self.get_model_config(model_name)
+        return config.get('supports_images', False) if config else False
+
     def get_min_available_memory(self) -> int:
         value = self.config.get('settings', {}).get('min_available_memory', '2GB')
         return _parse_memory_size(value)

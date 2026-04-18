@@ -283,9 +283,7 @@ def count_image_content(request_data: Dict) -> Tuple[bool, int]:
     return has_image, total_size
 
 def is_multimodal_model(model_name: str) -> bool:
-    multimodal_keywords = ['vision', 'image', 'mm', 'multimodal', 'vlm', 'gemma-4']
-    model_lower = model_name.lower()
-    return any(keyword in model_lower for keyword in multimodal_keywords)
+    return scheduler.get_model_supports_images(model_name)
 
 @lru_cache(maxsize=128)
 def get_model_capabilities(model_name: str) -> Dict[str, bool]:
