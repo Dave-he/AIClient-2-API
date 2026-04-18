@@ -40,10 +40,10 @@
       "OPENAI_BASE_URL": "http://192.168.7.103:8000/v1",
       "uuid": "36babfc8-934a-404d-826a-3dd25bef139a",
       "isHealthy": true,
-      "lastUsed": null,
+      "lastUsed": "2026-04-18T17:16:39.444Z",
       "usageCount": 0,
-      "errorCount": 0,
-      "lastErrorTime": null,
+      "errorCount": 1,
+      "lastErrorTime": "2026-04-18T17:16:39.444Z",
       "supportedModels": [
         "/mnt/pve_models/Gemma-4-31B-Abliterated"
       ],
@@ -51,9 +51,9 @@
       "isDisabled": false,
       "needsRefresh": false,
       "refreshCount": 0,
-      "lastHealthCheckTime": "2026-04-18T05:32:57.878Z",
+      "lastHealthCheckTime": "2026-04-18T17:16:39.444Z",
       "lastHealthCheckModel": "/mnt/pve_models/Gemma-4-31B-Abliterated",
-      "lastErrorMessage": null,
+      "lastErrorMessage": "socket hang up",
       "lastRefreshTime": 1776490377878,
       "_lastSelectionSeq": 0
     }

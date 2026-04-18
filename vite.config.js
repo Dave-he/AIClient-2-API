@@ -6,7 +6,7 @@ import compressPlugin from 'vite-plugin-compression'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd())
-  
+
   return {
     plugins: [
       vue(),
@@ -22,7 +22,8 @@ export default defineConfig(({ mode }) => {
     ],
     resolve: {
       alias: {
-        '@': resolve(__dirname, 'src')
+        '@': resolve(__dirname, 'src'),
+        '@/utils/logger': resolve(__dirname, 'src/utils/logger.client.js')
       }
     },
     server: {

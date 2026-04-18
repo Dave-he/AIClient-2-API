@@ -1,5 +1,3 @@
-const isBrowser = typeof window !== 'undefined';
-
 const LOG_LEVELS = {
   DEBUG: 0,
   INFO: 1,
@@ -8,21 +6,15 @@ const LOG_LEVELS = {
   SILENT: 4
 };
 
-const LOG_COLORS = isBrowser ? {
+const LOG_COLORS = {
   DEBUG: '#3498db',
   INFO: '#2ecc71',
   WARN: '#f39c12',
   ERROR: '#e74c3c',
   RESET: '#333333'
-} : {
-  DEBUG: '\x1b[34m',
-  INFO: '\x1b[32m',
-  WARN: '\x1b[33m',
-  ERROR: '\x1b[31m',
-  RESET: '\x1b[0m'
 };
 
-class Logger {
+class BrowserLogger {
   constructor() {
     this.level = LOG_LEVELS.INFO;
     this.prefix = '[AIClient]';
@@ -79,7 +71,7 @@ class Logger {
     }
 
     return {
-      console: isBrowser ? formatted : `${timestamp} ${this.prefix} ${color}[${levelName}]${LOG_COLORS.RESET} ${message}`,
+      console: formatted,
       file: formatted,
       color,
       levelName
@@ -102,17 +94,10 @@ class Logger {
     }
 
     if (this.enableConsole) {
-      if (isBrowser) {
-        const logMethod = level === LOG_LEVELS.DEBUG ? 'debug' :
-                          level === LOG_LEVELS.INFO ? 'info' :
-                          level === LOG_LEVELS.WARN ? 'warn' : 'error';
-        console[logMethod](`%c${consoleMsg}`, `color: ${color}`);
-      } else {
-        const logMethod = level === LOG_LEVELS.DEBUG ? 'debug' :
-                          level === LOG_LEVELS.INFO ? 'info' :
-                          level === LOG_LEVELS.WARN ? 'warn' : 'error';
-        console[logMethod](consoleMsg);
-      }
+      const logMethod = level === LOG_LEVELS.DEBUG ? 'debug' :
+                        level === LOG_LEVELS.INFO ? 'info' :
+                        level === LOG_LEVELS.WARN ? 'warn' : 'error';
+      console[logMethod](`%c${consoleMsg}`, `color: ${color}`);
     }
   }
 
@@ -182,15 +167,14 @@ class Logger {
   }
 }
 
-const logger = new Logger();
+export const logger = new BrowserLogger();
 
-function setLogLevel(level) {
+export const setLogLevel = (level) => {
   logger.setLevel(level);
-}
+};
 
-function getLogLevel() {
+export const getLogLevel = () => {
   return logger.level;
-}
+};
 
-export { logger, setLogLevel, getLogLevel };
 export default logger;

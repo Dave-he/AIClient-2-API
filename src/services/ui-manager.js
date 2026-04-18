@@ -508,6 +508,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await configApi.handleHotReloadInvalidateAdapter(req, res);
     }
 
+    // Python GPU status proxy endpoint
+    if (method === 'GET' && pathParam === '/api/python-gpu/status') {
+        return await handlePythonGpuStatus(req, res, currentConfig);
+    }
+
     return false;
 }
 
