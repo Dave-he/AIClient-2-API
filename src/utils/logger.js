@@ -280,7 +280,10 @@ class Logger {
     return this.requestId;
   }
 
-  clearRequestContext() {
+  clearRequestContext(requestId = null) {
+    if (requestId && this.requestId !== requestId) {
+      return;
+    }
     this.requestId = null;
   }
 
