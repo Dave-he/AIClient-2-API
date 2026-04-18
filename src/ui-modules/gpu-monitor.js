@@ -673,8 +673,15 @@ export class GPUMonitorModule {
 
     async refreshGpuStatus() {
         try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
             const response = await fetch(`/api/python-gpu/status`, {
                 method: 'GET',
+                headers,
                 timeout: 5000
             });
 
