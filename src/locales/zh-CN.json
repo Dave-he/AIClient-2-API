@@ -23,7 +23,12 @@
     "usernamePlaceholder": "请输入用户名",
     "passwordPlaceholder": "请输入密码",
     "loginButton": "登录",
-    "loginLoading": "登录中..."
+    "loginLoading": "登录中...",
+    "defaultUsername": "默认用户名",
+    "defaultPassword": "默认密码",
+    "usernamePasswordRequired": "请输入用户名和密码",
+    "loginFailed": "登录失败",
+    "loginFailedTryLater": "登录失败，请稍后重试"
   },
   "dashboard": {
     "title": "系统概览",

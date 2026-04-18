@@ -163,8 +163,7 @@ class GPUMonitor:
         return strategies.get(self._memory_strategy, 0.90)
     
     async def optimize_memory(self, vllm_port: int = 8000) -> bool:
-        """智能显存优化"""
-        if (datetime.now() - self._last_flush_time).seconds < self._flush_interval:
+        if (datetime.now() - self._last_flush_time).total_seconds() < self._flush_interval:
             return False
         
         fragmentation = self.detect_fragmentation()
