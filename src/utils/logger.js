@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { AsyncLocalStorage } from 'async_hooks';
 
 const LOG_LEVELS = {
   DEBUG: 0,
@@ -33,6 +34,7 @@ class Logger {
     this.enabled = true;
     this.currentLogFile = null;
     this.fileWritePromise = Promise.resolve();
+    this.asyncLocalStorage = new AsyncLocalStorage();
   }
 
   async initialize(options) {
@@ -274,6 +276,14 @@ class Logger {
 
   enableConsoleLogging(enabled) {
     this.enableConsole = enabled;
+  }
+
+  runWithContext(requestId, fn) {
+    return this.asyncLocalStorage.run({ requestId }, fn);
+  }
+
+  getRequestId() {
+    return this.asyncLocalStorage.getStore()?.requestId;
   }
 }
 

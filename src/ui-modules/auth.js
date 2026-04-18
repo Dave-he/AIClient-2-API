@@ -397,7 +397,7 @@ export async function handleLoginRequest(req, res) {
                 expiryTime
             });
 
-             res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 success: true,
                 message: 'Login successful',
