@@ -31,15 +31,37 @@ class Logger {
     this.maxBufferSize = 100;
     this.enabled = true;
     this.requestId = null;
+
+    this.logDir = 'logs';
+    this.maxFileSize = 10485760;
+    this.maxFiles = 10;
+    this.outputMode = 'all';
+    this.includeRequestId = true;
+    this.includeTimestamp = true;
+    this.currentLogFile = null;
+    this.currentLogSize = 0;
   }
 
   initialize(options = {}) {
     const {
       enabled = true,
-      logLevel = 'info'
+      outputMode = 'all',
+      logLevel = 'info',
+      logDir = 'logs',
+      includeRequestId = true,
+      includeTimestamp = true,
+      maxFileSize = 10485760,
+      maxFiles = 10
     } = options;
 
     this.enabled = enabled;
+    this.outputMode = outputMode;
+    this.logDir = logDir;
+    this.maxFileSize = maxFileSize;
+    this.maxFiles = maxFiles;
+    this.includeRequestId = includeRequestId;
+    this.includeTimestamp = includeTimestamp;
+
     const levelValue = LOG_LEVELS[logLevel.toUpperCase()] ?? LOG_LEVELS.INFO;
     this.setLevel(levelValue);
   }
@@ -58,28 +80,103 @@ class Logger {
     return this.enabled && level >= this.level;
   }
 
+  getLogFilePath() {
+    if (isBrowser) {
+      return null;
+    }
+    const now = new Date();
+    const pad = (num) => String(num).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    return `${this.logDir}/aiclient-${dateStr}.log`;
+  }
+
+  async ensureLogDir() {
+    if (isBrowser) {
+      return;
+    }
+    const fs = await import('fs');
+    try {
+      if (!fs.existsSync(this.logDir)) {
+        fs.mkdirSync(this.logDir, { recursive: true });
+      }
+    } catch (error) {
+      console.error('Failed to create log directory:', error.message);
+    }
+  }
+
+  async writeToFile(message) {
+    if (isBrowser || this.outputMode === 'console' || this.outputMode === 'browser') {
+      return;
+    }
+
+    await this.ensureLogDir();
+
+    const logFile = this.getLogFilePath();
+    if (!logFile || logFile === this.currentLogFile && this.currentLogSize >= this.maxFileSize) {
+      await this.rotateLogFile();
+    }
+
+    const fs = await import('fs');
+    try {
+      fs.appendFileSync(logFile, message + '\n');
+      this.currentLogFile = logFile;
+      this.currentLogSize += Buffer.byteLength(message, 'utf8') + 1;
+    } catch (error) {
+      console.error('Failed to write to log file:', error.message);
+    }
+  }
+
+  async rotateLogFile() {
+    if (isBrowser) {
+      return;
+    }
+    await this.cleanupOldLogs();
+    this.currentLogFile = null;
+    this.currentLogSize = 0;
+  }
+
   formatMessage(level, message, ...args) {
-    const timestamp = new Date().toISOString();
+    const parts = [];
+
+    if (this.includeTimestamp) {
+      parts.push(new Date().toISOString());
+    }
+
+    parts.push(this.prefix);
+
     const levelName = Object.keys(LOG_LEVELS).find(key => LOG_LEVELS[key] === level);
     const color = LOG_COLORS[levelName] || LOG_COLORS.RESET;
 
-    let formatted = `${timestamp} ${this.prefix} [${levelName}] ${message}`;
+    if (!isBrowser) {
+      parts.push(`${color}[${levelName}]${LOG_COLORS.RESET}`);
+    } else {
+      parts.push(`[${levelName}]`);
+    }
+
+    parts.push(message);
+
+    if (this.includeRequestId && this.requestId) {
+      parts.push(`[req:${this.requestId}]`);
+    }
 
     if (args.length > 0) {
       try {
-        formatted += ' ' + args.map(arg => {
+        const extraInfo = args.map(arg => {
           if (typeof arg === 'object') {
             return JSON.stringify(arg, null, 2);
           }
           return String(arg);
         }).join(' ');
+        parts.push(extraInfo);
       } catch (e) {
-        formatted += ' [Arguments serialization error]';
+        parts.push('[Arguments serialization error]');
       }
     }
 
+    const formatted = parts.join(' ');
+
     return {
-      console: isBrowser ? formatted : `${timestamp} ${this.prefix} ${color}[${levelName}]${LOG_COLORS.RESET} ${message}`,
+      console: formatted,
       file: formatted,
       color,
       levelName
@@ -89,7 +186,7 @@ class Logger {
   _log(level, message, ...args) {
     if (!this.shouldLog(level)) return;
 
-    const { console: consoleMsg, color, levelName } = this.formatMessage(level, message, ...args);
+    const { console: consoleMsg, file: fileMsg, color, levelName } = this.formatMessage(level, message, ...args);
 
     this.logBuffer.push({
       timestamp: new Date().toISOString(),
@@ -113,6 +210,12 @@ class Logger {
                           level === LOG_LEVELS.WARN ? 'warn' : 'error';
         console[logMethod](consoleMsg);
       }
+    }
+
+    if (this.outputMode !== 'console' && this.outputMode !== 'browser') {
+      this.writeToFile(fileMsg).catch(err => {
+        console.error('Async writeToFile failed:', err.message);
+      });
     }
   }
 
@@ -179,6 +282,35 @@ class Logger {
 
   clearRequestContext() {
     this.requestId = null;
+  }
+
+  async cleanupOldLogs() {
+    if (isBrowser) {
+      return;
+    }
+    const fs = await import('fs');
+    const path = await import('path');
+
+    try {
+      if (!fs.existsSync(this.logDir)) {
+        return;
+      }
+      const files = fs.readdirSync(this.logDir).filter(f => f.endsWith('.log'));
+      if (files.length <= this.maxFiles) {
+        return;
+      }
+      const fileStats = files.map(f => ({
+        name: f,
+        mtime: fs.statSync(path.join(this.logDir, f)).mtime.getTime()
+      }));
+      fileStats.sort((a, b) => a.mtime - b.mtime);
+      const toDelete = fileStats.slice(0, fileStats.length - this.maxFiles);
+      for (const file of toDelete) {
+        fs.unlinkSync(path.join(this.logDir, file.name));
+      }
+    } catch (error) {
+      console.error('Failed to cleanup old logs:', error.message);
+    }
   }
 }
 
