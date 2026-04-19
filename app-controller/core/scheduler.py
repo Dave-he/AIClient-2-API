@@ -187,6 +187,50 @@ class Scheduler:
         """获取支持的优先级列表"""
         return list(self.rate_limiter.PRIORITIES.keys())
     
+    def schedule_preload(self, model_name: str) -> bool:
+        """调度预加载模型"""
+        if not self.is_model_available(model_name):
+            return False
+        
+        self.preloaded_models.add(model_name)
+        
+        model_config = self.get_model_config(model_name)
+        if model_config:
+            model_config['preload'] = True
+        
+        return True
+    
+    def cancel_preload(self, model_name: str) -> bool:
+        """取消预加载模型"""
+        if model_name not in self.preloaded_models:
+            return False
+        
+        self.preloaded_models.discard(model_name)
+        
+        model_config = self.get_model_config(model_name)
+        if model_config:
+            model_config['preload'] = False
+        
+        return True
+    
+    def get_preload_status(self) -> Dict:
+        """获取预加载状态"""
+        preloaded = list(self.preloaded_models)
+        all_models = self.get_available_models()
+        status = {}
+        for model in all_models:
+            config = self.get_model_config(model)
+            status[model] = {
+                "preloaded": model in preloaded,
+                "running": self.is_model_running(model),
+                "preload_config": config.get("preload", False) if config else False
+            }
+        return {
+            "preloaded_models": preloaded,
+            "all_models": all_models,
+            "status": status
+        }
+    
     async def _cleanup_memory_fragmentation(self) -> bool:
         """尝试清理显存碎片"""
         cleanup_delay = self.config.get('settings', {}).get('memory_cleanup_delay', 3)

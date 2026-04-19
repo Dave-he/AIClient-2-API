@@ -217,24 +217,37 @@ def get_vllm_service_status() -> Dict[str, Any]:
     获取 vLLM 服务状态
     """
     try:
-        # 获取服务状态
         result = subprocess.run(
-            ['systemctl', 'show', VLLM_SERVICE_NAME, '--property=ActiveState,SubState,MainPID,MemoryCurrent,CPUUsageNSec', '--value'],
+            ['systemctl', 'show', VLLM_SERVICE_NAME, '--property=ActiveState,SubState,MainPID,MemoryCurrent', '--value'],
             capture_output=True, text=True, timeout=5
         )
         lines = result.stdout.strip().split('\n')
-
-        status_info = {
+        
+        active_state = "unknown"
+        sub_state = "unknown"
+        pid = None
+        memory_bytes = None
+        
+        for line in lines:
+            line = line.strip()
+            if line in ['active', 'inactive', 'failed', 'deactivating', 'activating']:
+                active_state = line
+            elif line in ['running', 'dead', 'exited', 'failed']:
+                sub_state = line
+            elif line.isdigit():
+                if pid is None:
+                    pid = int(line)
+                else:
+                    memory_bytes = int(line)
+        
+        return {
             "service": VLLM_SERVICE_NAME,
-            "active_state": lines[0] if len(lines) > 0 else "unknown",
-            "sub_state": lines[1] if len(lines) > 1 else "unknown",
-            "pid": int(lines[2]) if len(lines) > 2 and lines[2].isdigit() else None,
-            "memory_bytes": int(lines[3]) if len(lines) > 3 and lines[3].isdigit() else None,
-            "cpu_ns": int(lines[4]) if len(lines) > 4 and lines[4].isdigit() else None,
-            "running": lines[0] == "active" if len(lines) > 0 else False
+            "active_state": active_state,
+            "sub_state": sub_state,
+            "pid": pid,
+            "memory_bytes": memory_bytes,
+            "running": active_state == "active"
         }
-
-        return status_info
     except Exception as e:
         return {"service": VLLM_SERVICE_NAME, "running": False, "error": str(e)}
 

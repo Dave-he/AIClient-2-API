@@ -38,6 +38,7 @@ import { apiClient, removeToken } from '@/utils/api.js';
 const isOnline = ref(true);
 const currentTheme = ref('light');
 const restarting = ref(false);
+const mobileMenuOpen = ref(false);
 
 const checkServerStatus = async () => {
   try {
@@ -45,6 +46,16 @@ const checkServerStatus = async () => {
     isOnline.value = response.status === 200;
   } catch (error) {
     isOnline.value = false;
+  }
+};
+
+const toggleMobileMenu = () => {
+  mobileMenuOpen.value = !mobileMenuOpen.value;
+  const menu = document.getElementById('content-container');
+  const toggle = document.getElementById('mobileMenuToggle');
+  if (menu && toggle) {
+    menu.classList.toggle('sidebar-visible', mobileMenuOpen.value);
+    toggle.classList.toggle('active', mobileMenuOpen.value);
   }
 };
 
@@ -85,11 +96,35 @@ onMounted(() => {
   
   checkServerStatus();
   statusInterval = setInterval(checkServerStatus, 10000);
+
+  // 绑定移动端菜单按钮事件
+  const mobileToggle = document.getElementById('mobileMenuToggle');
+  if (mobileToggle) {
+    mobileToggle.addEventListener('click', toggleMobileMenu);
+  }
+
+  // 点击内容区域关闭移动端菜单
+  document.addEventListener('click', (e) => {
+    if (mobileMenuOpen.value && !e.target.closest('.sidebar') && !e.target.closest('#mobileMenuToggle')) {
+      mobileMenuOpen.value = false;
+      const menu = document.getElementById('content-container');
+      const toggle = document.getElementById('mobileMenuToggle');
+      if (menu && toggle) {
+        menu.classList.remove('sidebar-visible');
+        toggle.classList.remove('active');
+      }
+    }
+  });
 });
 
 onUnmounted(() => {
   if (statusInterval) {
     clearInterval(statusInterval);
+  }
+  
+  const mobileToggle = document.getElementById('mobileMenuToggle');
+  if (mobileToggle) {
+    mobileToggle.removeEventListener('click', toggleMobileMenu);
   }
 });
 </script>

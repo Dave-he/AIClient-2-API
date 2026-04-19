@@ -1,6 +1,7 @@
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { apiClient } from '@/utils/api.js';
 import { logger } from '@/utils/logger.js';
+import { SimpleChart } from '@/utils/chart.js';
 
 export function useDashboard() {
   const systemInfo = ref({
@@ -48,13 +49,97 @@ export function useDashboard() {
     { path: '/openai-custom/v1/chat/completions', description: 'OpenAI Custom', fullPath: '/openai-custom/v1/chat/completions' }
   ]);
 
+  // 图表实例
+  let systemChart = null;
+  let pythonGpuChart = null;
+  let tokenChart = null;
   let refreshInterval = null;
+  let chartUpdateInterval = null;
+
+  // 图表数据
+  const cpuData = ref([]);
+  const memoryData = ref([]);
+  const gpuData = ref([]);
+  const gpuTempData = ref([]);
+  const tokenChartData = ref({
+    total: 0,
+    input: 0,
+    output: 0,
+    history: []
+  });
 
   const formatUptime = (seconds) => {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${days}天 ${hours}小时 ${minutes}分钟`;
+  };
+
+  // 初始化图表
+  const initCharts = async () => {
+    await nextTick();
+    
+    const chartConfigs = {
+      cpu: { lineColor: '#3b82f6', fillColor: 'rgba(59, 130, 246, 0.1)', label: 'CPU使用率' },
+      memory: { lineColor: '#10b981', fillColor: 'rgba(16, 185, 129, 0.1)', label: '内存使用率' },
+      gpu: { lineColor: '#8b5cf6', fillColor: 'rgba(139, 92, 246, 0.1)', label: 'GPU使用率' }
+    };
+
+    systemChart = new SimpleChart('systemChart', {
+      ...chartConfigs.cpu,
+      maxPoints: 60
+    });
+
+    pythonGpuChart = new SimpleChart('pythonGpuChart', {
+      lineColor: '#f59e0b',
+      fillColor: 'rgba(245, 158, 11, 0.1)',
+      maxPoints: 60
+    });
+
+    tokenChart = new SimpleChart('tokenChart', {
+      lineColor: '#06b6d4',
+      fillColor: 'rgba(6, 182, 212, 0.1)',
+      maxPoints: 60,
+      maxValue: 100000,
+      minValue: 0
+    });
+  };
+
+  // 更新图表数据
+  const updateChartData = () => {
+    if (systemChart) {
+      systemChart.data = cpuData.value.length > 0 ? cpuData.value : [];
+      systemChart.draw();
+    }
+    if (pythonGpuChart && pythonGpuConnected.value) {
+      const utilValue = parseFloat(pythonGpuInfo.value.utilization) || 0;
+      pythonGpuChart.addPoint(utilValue);
+      pythonGpuChart.draw();
+    }
+  };
+
+  // 获取Token统计数据
+  const fetchTokenStats = async () => {
+    try {
+      const response = await apiClient.get('/api/token-stats');
+      const data = response.data;
+      
+      if (data.total) {
+        tokenChartData.value = {
+          total: data.total || 0,
+          input: data.input || 0,
+          output: data.output || 0,
+          history: data.history || []
+        };
+
+        if (tokenChart && tokenChartData.value.history.length > 0) {
+          tokenChart.data = tokenChartData.value.history.map(h => h.total || 0);
+          tokenChart.draw();
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to fetch token stats', error);
+    }
   };
 
   const fetchSystemInfo = async () => {
@@ -82,12 +167,32 @@ export function useDashboard() {
       const response = await apiClient.get('/api/system/monitor');
       const data = response.data;
       
+      const cpu = Math.round(data.cpu?.usage || 0);
+      const memory = Math.round(parseFloat(data.memory?.usagePercent || 0));
+      const gpu = Math.round(data.gpu?.usage || 0);
+      const gpuTemp = data.gpu?.temperature || 0;
+      
       systemInfo.value = {
         ...systemInfo.value,
-        cpu: Math.round(data.cpu?.usage || 0),
-        memory: Math.round(parseFloat(data.memory?.usagePercent || 0)),
-        gpu: Math.round(data.gpu?.usage || 0)
+        cpu,
+        memory,
+        gpu
       };
+
+      // 记录图表数据
+      cpuData.value.push(cpu);
+      memoryData.value.push(memory);
+      gpuData.value.push(gpu);
+      gpuTempData.value.push(gpuTemp);
+
+      // 保留最多60个数据点
+      if (cpuData.value.length > 60) cpuData.value.shift();
+      if (memoryData.value.length > 60) memoryData.value.shift();
+      if (gpuData.value.length > 60) gpuData.value.shift();
+      if (gpuTempData.value.length > 60) gpuTempData.value.shift();
+
+      // 更新图表
+      updateChartData();
     } catch (error) {
       logger.error('Failed to fetch system monitor', error);
     }
@@ -231,17 +336,42 @@ export function useDashboard() {
     await fetchProviderStatus();
     await fetchModels();
     await checkUpdate();
+    await fetchTokenStats();
 
+    // 初始化图表
+    await initCharts();
+
+    // 每5秒更新系统监控
     refreshInterval = setInterval(async () => {
       await fetchSystemMonitor();
       await fetchSystemInfo();
     }, 5000);
+
+    // 每30秒更新Token统计
+    chartUpdateInterval = setInterval(async () => {
+      await fetchTokenStats();
+    }, 30000);
+
+    // 窗口resize时重绘图表
+    window.addEventListener('resize', () => {
+      if (systemChart) systemChart.draw();
+      if (pythonGpuChart) pythonGpuChart.draw();
+      if (tokenChart) tokenChart.draw();
+    });
   });
 
   onUnmounted(() => {
     if (refreshInterval) {
       clearInterval(refreshInterval);
     }
+    if (chartUpdateInterval) {
+      clearInterval(chartUpdateInterval);
+    }
+    window.removeEventListener('resize', () => {
+      if (systemChart) systemChart.draw();
+      if (pythonGpuChart) pythonGpuChart.draw();
+      if (tokenChart) tokenChart.draw();
+    });
   });
 
   return {
