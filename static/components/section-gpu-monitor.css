@@ -16,21 +16,31 @@
 
 .gpu-monitor-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
 }
 
 .gpu-charts-panel {
     grid-column: 1 / -1;
 }
 
+.model-switch-panel {
+    grid-column: 1 / -1;
+}
+
 .gpu-monitor-container > div {
     background: var(--card-bg);
     border-radius: var(--border-radius);
-    padding: 1rem;
+    padding: 1.25rem;
     box-shadow: var(--card-shadow);
     border: 1px solid var(--border-color);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.gpu-monitor-container > div:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
 }
 
 .panel-header {
@@ -102,15 +112,79 @@
     justify-content: center;
     padding: 2rem;
     color: var(--text-muted);
+    text-align: center;
 }
 
 .status-loading i {
     margin-bottom: 0.5rem;
     font-size: 1.5rem;
+    color: var(--danger-color);
+}
+
+.status-loading span {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+}
+
+.error-hint {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0.5rem 0;
+    line-height: 1.4;
+}
+
+.error-suggestion {
+    font-size: 0.875rem;
+    color: var(--primary-color);
+    margin: 0.5rem 0;
+    line-height: 1.4;
+    font-weight: 500;
+}
+
+.node-env-info {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: var(--surface-bg);
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+}
+
+.env-header {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+}
+
+.env-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+}
+
+.env-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.env-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.env-value {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
 }
 
 .gpu-status-content {
-    min-height: 300px;
+    min-height: 320px;
 }
 
 .gpu-card {
@@ -358,7 +432,7 @@
 }
 
 .models-status-content {
-    min-height: 200px;
+    min-height: 240px;
 }
 
 .model-status-grid {
@@ -429,7 +503,7 @@
 }
 
 .queue-status-content {
-    min-height: 150px;
+    min-height: 180px;
 }
 
 .queue-info-grid {
@@ -478,7 +552,7 @@
 }
 
 .model-controls {
-    min-height: 150px;
+    min-height: 180px;
 }
 
 .control-grid {
@@ -589,10 +663,10 @@
 
 .gpu-chart-content {
     position: relative;
-    height: 280px;
+    height: 320px;
     background: var(--surface-bg);
     border-radius: 0.5rem;
-    padding: 1rem;
+    padding: 1.25rem;
 }
 
 #gpuChart {
@@ -734,7 +808,7 @@
 }
 
 .quick-switch-content {
-    min-height: 200px;
+    min-height: 240px;
 }
 
 .current-model-info {

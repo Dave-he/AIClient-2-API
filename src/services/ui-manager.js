@@ -623,15 +623,21 @@ async function handlePythonGpuStatus(req, res, currentConfig) {
     try {
         const pythonUrl = new URL('/manage/gpu', controllerBaseUrl);
         
+        const options = {
+            hostname: pythonUrl.hostname,
+            port: pythonUrl.port,
+            path: pythonUrl.pathname,
+            method: 'GET',
+            timeout: 5000,
+            headers: {}
+        };
+        
+        // Add authorization header if present
+        if (req.headers.authorization) {
+            options.headers['Authorization'] = req.headers.authorization;
+        }
+        
         const response = await new Promise((resolve, reject) => {
-            const options = {
-                hostname: pythonUrl.hostname,
-                port: pythonUrl.port,
-                path: pythonUrl.pathname,
-                method: 'GET',
-                timeout: 5000
-            };
-            
             const proxyReq = http.request(options, (proxyRes) => {
                 let data = '';
                 proxyRes.on('data', (chunk) => {

@@ -12,6 +12,7 @@ export class SystemMonitor {
         
         this.pollingInterval = null;
         this.chart = null;
+        this.gpuChart = null;
         this.currentChartType = 'cpu';
         this.cpuHistoryData = [];
         this.memoryHistoryData = [];
@@ -65,9 +66,10 @@ export class SystemMonitor {
             
             console.log('[SystemMonitor] Initializing...');
             const dashboardSection = document.getElementById('dashboard');
+            const gpuMonitorSection = document.getElementById('gpu-monitor');
             
-            if (!dashboardSection) {
-                console.log('[SystemMonitor] Dashboard not found, retrying...');
+            if (!dashboardSection && !gpuMonitorSection) {
+                console.log('[SystemMonitor] Dashboard or GPU monitor not found, retrying...');
                 setTimeout(initWhenReady, 500);
                 return;
             }
@@ -80,6 +82,7 @@ export class SystemMonitor {
             // 延迟初始化图表，确保DOM已完全渲染
             setTimeout(() => {
                 this.ensureChartInitialized();
+                this.ensureGpuChartInitialized();
             }, 500);
         };
 
@@ -174,6 +177,8 @@ export class SystemMonitor {
                 this.loadCurrentModel();
                 this.refreshGpuStatus();
                 this.loadGpuHistoryFromServer();
+                this.ensureGpuChartInitialized();
+                this.updateGpuChart();
             }
         });
 
@@ -181,6 +186,7 @@ export class SystemMonitor {
             this.ensureChartInitialized();
             this.ensurePythonGpuChartInitialized();
             this.ensureTokenChartInitialized();
+            this.ensureGpuChartInitialized();
         });
     }
 
@@ -265,6 +271,8 @@ export class SystemMonitor {
         this.updateChart();
         this.ensurePythonGpuChartInitialized();
         this.updatePythonGpuChart();
+        this.ensureGpuChartInitialized();
+        this.updateGpuChart();
     }
 
     async refreshPythonGpuStatus() {
@@ -764,6 +772,29 @@ export class SystemMonitor {
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
                     <span>无法获取GPU状态</span>
+                    <p class="error-hint">错误信息: ${error.message}</p>
+                    <p class="error-suggestion">请确保Python控制器服务已启动并运行在 ${CONTROLLER_BASE_URL}</p>
+                </div>
+                <div class="node-env-info">
+                    <div class="env-header">Node.js 环境信息</div>
+                    <div class="env-details">
+                        <div class="env-item">
+                            <span class="env-label">Node.js 版本</span>
+                            <span class="env-value">${window.__nodeVersion || '--'}</span>
+                        </div>
+                        <div class="env-item">
+                            <span class="env-label">运行模式</span>
+                            <span class="env-value">${window.__serviceMode || '--'}</span>
+                        </div>
+                        <div class="env-item">
+                            <span class="env-label">进程 PID</span>
+                            <span class="env-value">${window.__processPid || '--'}</span>
+                        </div>
+                        <div class="env-item">
+                            <span class="env-label">平台</span>
+                            <span class="env-value">${window.__platform || '--'}</span>
+                        </div>
+                    </div>
                 </div>
             `;
             const gpuValElErr = document.getElementById('gpuValue');
@@ -1262,6 +1293,139 @@ export class SystemMonitor {
         this.updateTokenChart();
     }
 
+    ensureGpuChartInitialized() {
+        const canvas = document.getElementById('gpuChart');
+        if (!canvas) return;
+
+        const rect = canvas.getBoundingClientRect();
+        
+        if (rect.width <= 0 || rect.height <= 0) {
+            const container = canvas.parentElement;
+            if (container) {
+                const containerRect = container.getBoundingClientRect();
+                if (containerRect.width > 0 && containerRect.height > 0) {
+                    this.gpuChart = null;
+                    this.initGpuChart();
+                }
+            }
+            return;
+        }
+
+        if (!this.gpuChart) {
+            this.initGpuChart();
+        } else if (this.gpuChart.width !== rect.width || this.gpuChart.height !== rect.height) {
+            this.gpuChart = null;
+            this.initGpuChart();
+        }
+        
+        this.updateGpuChart();
+    }
+
+    initGpuChart() {
+        const canvas = document.getElementById('gpuChart');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        
+        let rect = canvas.getBoundingClientRect();
+        
+        if (rect.width === 0 || rect.height === 0) {
+            const container = canvas.parentElement;
+            if (container) {
+                const containerRect = container.getBoundingClientRect();
+                rect = {
+                    width: Math.max(containerRect.width - 32, 300),
+                    height: Math.max(containerRect.height - 32, 200)
+                };
+            } else {
+                rect = { width: 400, height: 250 };
+            }
+        }
+
+        if (rect.width <= 0 || rect.height <= 0) {
+            rect = { width: 400, height: 250 };
+        }
+
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        this.gpuChart = {
+            ctx,
+            width: rect.width,
+            height: rect.height,
+            padding: { top: 15, right: 15, bottom: 28, left: 40 }
+        };
+    }
+
+    updateGpuChart() {
+        if (!this.gpuChart) {
+            this.ensureGpuChartInitialized();
+        }
+
+        if (!this.gpuChart) return;
+
+        const { ctx, width, height, padding } = this.gpuChart;
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+
+        ctx.clearRect(0, 0, width, height);
+
+        let datasets = [];
+        let dataLength = 0;
+
+        if (this.gpuHistoryData.length > 0) {
+            datasets.push({
+                data: [...this.gpuHistoryData],
+                color: '#8b5cf6',
+                label: 'GPU使用率',
+                gradient: ['#8b5cf6', '#a78bfa']
+            });
+            dataLength = Math.max(dataLength, this.gpuHistoryData.length);
+        }
+        if (this.gpuTempHistoryData.length > 0) {
+            datasets.push({
+                data: [...this.gpuTempHistoryData],
+                color: '#ef4444',
+                label: 'GPU温度',
+                gradient: ['#ef4444', '#f87171'],
+                isTemperature: true
+            });
+            dataLength = Math.max(dataLength, this.gpuTempHistoryData.length);
+        }
+
+        if (dataLength === 0) {
+            this.renderGpuEmptyChart();
+            return;
+        }
+
+        let allValues = [];
+        datasets.forEach(ds => allValues.push(...ds.data.filter(v => v > 0)));
+        const minValue = allValues.length > 0 ? Math.min(...allValues) * 0.9 : 0;
+        const maxValue = allValues.length > 0 ? Math.max(...allValues) * 1.1 : 100;
+
+        this.drawGrid(ctx, chartWidth, chartHeight, padding, minValue, maxValue);
+        this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, false);
+        datasets.forEach(ds => {
+            this.drawArea(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+            this.drawLine(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+        });
+        datasets.forEach(ds => {
+            this.drawPoint(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+        });
+    }
+
+    renderGpuEmptyChart() {
+        if (!this.gpuChart) return;
+        const { ctx, width, height } = this.gpuChart;
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('暂无数据', width / 2, height / 2);
+    }
+
     initTokenChart() {
         const canvas = document.getElementById('tokenTrendChart');
         if (!canvas) return;
@@ -1495,6 +1659,11 @@ export class SystemMonitor {
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
                     <span>无法加载模型列表</span>
+                    <p class="error-hint">错误信息: ${error.message}</p>
+                    <p class="error-suggestion">请确保Python控制器服务已启动并运行在 ${CONTROLLER_BASE_URL}</p>
+                    <button class="btn btn-primary btn-sm mt-2" onclick="window.systemMonitor.loadModelsList()">
+                        <i class="fas fa-sync-alt"></i> 重试
+                    </button>
                 </div>
             `;
         }

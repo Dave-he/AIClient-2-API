@@ -52,7 +52,16 @@ from middleware.error_handler import (
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.timeout_handler import TimeoutHandlerMiddleware
 
-logger = setup_logger()
+# 先创建配置监控器以读取配置
+config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+config_watcher = ConfigWatcher(config_path)
+
+# 加载配置以获取日志路径
+config = config_watcher.load_config()
+log_dir = config.get('settings', {}).get('logging', {}).get('log_dir', None)
+
+# 初始化日志器
+logger = setup_logger(log_dir=log_dir)
 structured_logger = StructuredLogger("ai_controller")
 
 # --- Image Validation Constants ---
@@ -130,9 +139,6 @@ ws_manager = WebSocketManager()
 metrics = MetricsCollector()
 prometheus = PrometheusExporter()
 model_tester = ModelTestingFramework(scheduler, gpu_monitor)
-
-config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
-config_watcher = ConfigWatcher(config_path)
 
 def on_config_changed(new_config: Dict):
     structured_logger.info("Configuration updated", action="config_reload")
@@ -977,12 +983,112 @@ async def get_config():
     logger.info("Getting current configuration")
     return config_watcher.get_config()
 
+@app.put("/manage/config")
+async def update_config(request: Request):
+    logger.info("Updating configuration")
+    try:
+        body = await request.json()
+        
+        current_config = config_watcher.get_config()
+        
+        if 'settings' in body:
+            if 'settings' not in current_config:
+                current_config['settings'] = {}
+            current_config['settings'].update(body['settings'])
+        
+        if 'models' in body:
+            if 'models' not in current_config:
+                current_config['models'] = {}
+            current_config['models'].update(body['models'])
+        
+        if 'vllm' in body:
+            if 'vllm' not in current_config:
+                current_config['vllm'] = {}
+            current_config['vllm'].update(body['vllm'])
+        
+        success = config_watcher.save_config(current_config)
+        
+        if success:
+            on_config_changed(current_config)
+            logger.info("Configuration updated and saved successfully")
+            return {"status": "success", "message": "Configuration updated and persisted", "config": current_config}
+        else:
+            logger.error("Failed to persist configuration")
+            raise HTTPException(status_code=500, detail="Failed to persist configuration")
+    except yaml.YAMLError as e:
+        logger.error(f"Invalid YAML in config update: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid YAML format: {e}")
+    except Exception as e:
+        logger.error(f"Error updating config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/manage/config/reload")
 async def reload_config():
     logger.info("Manual configuration reload requested")
     new_config = config_watcher.load_config()
     on_config_changed(new_config)
     return {"status": "reloaded", "config": new_config}
+
+class ServiceControlRequest(BaseModel):
+    service_name: Optional[str] = None
+
+@app.get("/manage/service/status")
+async def get_python_service_status():
+    """获取 Python 控制器服务状态"""
+    logger.info("Getting Python service status")
+    
+    service_name = "aiclient-python"
+    is_running = sys_controller.is_service_running(service_name)
+    status = sys_controller.get_service_status(service_name)
+    service_info = sys_controller.get_service_info(service_name)
+    
+    current_config = config_watcher.get_config()
+    
+    return {
+        "service": service_name,
+        "status": status,
+        "running": is_running,
+        "info": service_info,
+        "config": current_config,
+        "config_file": config_watcher.config_path,
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.post("/manage/service/start")
+async def start_python_service(request: ServiceControlRequest = None):
+    """启动 Python 控制器服务"""
+    service_name = request.service_name if request and request.service_name else "aiclient-python"
+    logger.info(f"Starting service: {service_name}")
+    
+    success = sys_controller.start_service(service_name)
+    if success:
+        return {"status": "started", "service": service_name}
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to start service: {service_name}")
+
+@app.post("/manage/service/stop")
+async def stop_python_service(request: ServiceControlRequest = None):
+    """停止 Python 控制器服务"""
+    service_name = request.service_name if request and request.service_name else "aiclient-python"
+    logger.info(f"Stopping service: {service_name}")
+    
+    success = sys_controller.stop_service(service_name)
+    if success:
+        return {"status": "stopped", "service": service_name}
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to stop service: {service_name}")
+
+@app.post("/manage/service/restart")
+async def restart_python_service(request: ServiceControlRequest = None):
+    """重启 Python 控制器服务"""
+    service_name = request.service_name if request and request.service_name else "aiclient-python"
+    logger.info(f"Restarting service: {service_name}")
+    
+    success = sys_controller.restart_service(service_name)
+    if success:
+        return {"status": "restarted", "service": service_name}
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to restart service: {service_name}")
 
 @app.get("/manage/preload/status")
 async def get_preload_status():
@@ -1343,5 +1449,18 @@ async def switch_and_test_model(model_name: str):
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting AI Controller service")
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="AI Controller Service")
+    parser.add_argument("--log-dir", type=str, default=None, help="Custom log directory path")
+    parser.add_argument("--port", type=int, default=5000, help="Server port")
+    
+    args = parser.parse_args()
+    
+    # Reinitialize logger with custom log directory if provided
+    if args.log_dir:
+        global logger
+        logger = setup_logger(log_dir=args.log_dir)
+    
+    logger.info(f"Starting AI Controller service on port {args.port}")
+    uvicorn.run(app, host="0.0.0.0", port=args.port)

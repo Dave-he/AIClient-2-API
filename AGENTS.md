@@ -411,9 +411,31 @@ journalctl -u aiclient-python -f
 ```
 
 ### 日志位置
-- 日志目录：`logs/`
+- **Node.js 部分**：通过 `configs/config.json` 中的 `LOG_DIR` 配置项指定，默认为 `logs/`
+- **Python 部分**：通过 `app-controller/config.yaml` 中的 `settings.logging.log_dir` 配置项指定，默认为 `logs/`
 - 最大文件大小：10MB
 - 最大保留文件数：10
+
+### 日志路径配置示例
+
+**Node.js 配置** (`configs/config.json`)：
+```json
+{
+  "LOG_DIR": "/path/to/your/logs"
+}
+```
+
+**Python 配置** (`app-controller/config.yaml`)：
+```yaml
+settings:
+  logging:
+    log_dir: /path/to/your/logs
+```
+
+**Python 命令行参数**：
+```bash
+python main.py --log-dir /path/to/your/logs
+```
 
 ### 管理端点
 - `GET /master/status` - 主进程状态

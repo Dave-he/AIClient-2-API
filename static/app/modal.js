@@ -2243,7 +2243,7 @@ async function showModelSwitchModal() {
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 600px;">
             <div class="modal-header">
-                <h3><i class="fas fa-exchange-alt"></i> <span data-i18n="modal.provider.switchModel">一键切换模型</span></h3>
+                <h3><i class="fas fa-exchange-alt"></i> <span data-i18n="modal.provider.switchModelTitle">${t('modal.provider.switchModelTitle')}</span></h3>
                 <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
                     <i class="fas fa-times"></i>
                 </button>
@@ -2252,12 +2252,12 @@ async function showModelSwitchModal() {
                 <div id="modelSwitchContent" class="model-switch-content">
                     <div class="status-loading">
                         <i class="fas fa-spinner fa-spin"></i>
-                        <span data-i18n="common.loading">加载中...</span>
+                        <span data-i18n="common.loading">${t('common.loading')}</span>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="modal-cancel" onclick="this.closest('.modal-overlay').remove()" data-i18n="modal.provider.cancel">取消</button>
+                <button class="modal-cancel" onclick="this.closest('.modal-overlay').remove()" data-i18n="modal.provider.cancel">${t('modal.provider.cancel')}</button>
             </div>
         </div>
     `;
@@ -2305,15 +2305,15 @@ async function loadModelsListForSwitch(modal) {
 
         renderModelSwitchPanel(container, modelsList, currentModel);
     } catch (error) {
-        console.log('[ModelSwitch] Failed to load models list:', error.message);
-        container.innerHTML = `
-            <div class="status-loading">
-                <i class="fas fa-exclamation-circle"></i>
-                <span>无法加载模型列表</span>
-                <p class="hint">请确保 Python Controller 服务已启动</p>
-            </div>
-        `;
-    }
+            console.log('[ModelSwitch] Failed to load models list:', error.message);
+            container.innerHTML = `
+                <div class="status-loading">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>${t('modal.provider.loadModelsFailed')}</span>
+                    <p class="hint">${t('modal.provider.loadModelsHint')}</p>
+                </div>
+            `;
+        }
 }
 
 /**
@@ -2324,8 +2324,8 @@ function renderModelSwitchPanel(container, modelsList, currentModel) {
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-cube"></i>
-                <p>暂无可用模型</p>
-                <p class="hint">请在 Python Controller 中配置模型</p>
+                <p>${t('modal.provider.noAvailableModels')}</p>
+                <p class="hint">${t('modal.provider.noAvailableModelsHint')}</p>
             </div>
         `;
         return;
@@ -2335,9 +2335,9 @@ function renderModelSwitchPanel(container, modelsList, currentModel) {
     
     let html = `
         <div class="current-model-info" style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
-            <div class="current-model-label" style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 8px;">当前运行模型</div>
+            <div class="current-model-label" style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 8px;">${t('modal.provider.currentModel')}</div>
             <div class="current-model-value" style="font-size: 18px; font-weight: 600;">
-                ${currentModelName ? `<span class="model-name">${currentModelName}</span>` : '<span class="no-model">- 无 -</span>'}
+                ${currentModelName ? `<span class="model-name">${currentModelName}</span>` : `<span class="no-model">${t('modal.provider.noModel')}</span>`}
             </div>
         </div>
         <div class="models-switch-list">
@@ -2346,16 +2346,16 @@ function renderModelSwitchPanel(container, modelsList, currentModel) {
     modelsList.forEach(model => {
         const isRunning = model.name === currentModelName;
         const statusClass = isRunning ? 'status-running' : model.running ? 'status-running' : 'status-stopped';
-        const statusText = isRunning ? '当前运行' : model.running ? '运行中' : '已停止';
+        const statusText = isRunning ? t('modal.provider.status.running') : model.running ? t('modal.provider.status.otherRunning') : t('modal.provider.status.stopped');
         
         html += `
             <div class="model-switch-item" data-model="${model.name}" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color);">
                 <div class="model-switch-info" style="flex: 1;">
                     <div class="model-switch-name" style="font-weight: 600;">${model.name}</div>
                     <div class="model-switch-details" style="font-size: 12px; color: var(--text-tertiary);">
-                        <span class="model-switch-port">端口: ${model.port || '-'}</span>
+                        <span class="model-switch-port">${t('modal.provider.modelPort')}: ${model.port || '-'}</span>
                         <span style="margin: 0 8px;">|</span>
-                        <span class="model-switch-memory">显存需求: ${model.required_memory || '-'}</span>
+                        <span class="model-switch-memory">${t('modal.provider.modelMemory')}: ${model.required_memory || '-'}</span>
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
@@ -2363,15 +2363,15 @@ function renderModelSwitchPanel(container, modelsList, currentModel) {
                     <div class="model-switch-actions">
                         ${isRunning ? `
                             <button class="btn btn-danger btn-sm" onclick="window.stopModel('${model.name}')">
-                                <i class="fas fa-stop"></i> 停止
+                                <i class="fas fa-stop"></i> ${t('modal.provider.action.stop')}
                             </button>
                         ` : model.running ? `
                             <button class="btn btn-primary btn-sm" onclick="window.switchModel('${model.name}')">
-                                <i class="fas fa-exchange-alt"></i> 切换到此
+                                <i class="fas fa-exchange-alt"></i> ${t('modal.provider.action.switch')}
                             </button>
                         ` : `
                             <button class="btn btn-success btn-sm" onclick="window.startModel('${model.name}')">
-                                <i class="fas fa-play"></i> 启动
+                                <i class="fas fa-play"></i> ${t('modal.provider.action.start')}
                             </button>
                         `}
                     </div>
@@ -2396,7 +2396,7 @@ async function switchModel(modelName) {
         if (actionsEl) {
             actionsEl.innerHTML = `
                 <button class="btn btn-primary btn-sm disabled" disabled>
-                    <i class="fas fa-spinner fa-spin"></i> 切换中...
+                    <i class="fas fa-spinner fa-spin"></i> ${t('modal.provider.action.switching')}
                 </button>
             `;
         }
@@ -2417,7 +2417,7 @@ async function switchModel(modelName) {
         const data = await response.json();
         
         if (data.success) {
-            showToast('成功', `已切换到模型: ${modelName}`, 'success');
+            showToast(t('common.success'), t('modal.provider.switchSuccess', { model: modelName }), 'success');
             if (modal) modal.remove();
             // 刷新提供商列表
             if (window.providerManager?.loadProviders) {
@@ -2428,13 +2428,13 @@ async function switchModel(modelName) {
         }
     } catch (error) {
         console.error('Failed to switch model:', error);
-        showToast('错误', '切换模型失败: ' + error.message, 'error');
+        showToast(t('common.error'), t('common.error') + ': ' + error.message, 'error');
         if (modelItem) {
             const actionsEl = modelItem.querySelector('.model-switch-actions');
             if (actionsEl) {
                 actionsEl.innerHTML = `
                     <button class="btn btn-primary btn-sm" onclick="window.switchModel('${modelName}')">
-                        <i class="fas fa-exchange-alt"></i> 切换到此
+                        <i class="fas fa-exchange-alt"></i> ${t('modal.provider.action.switch')}
                     </button>
                 `;
             }
@@ -2454,7 +2454,7 @@ async function startModel(modelName) {
         if (actionsEl) {
             actionsEl.innerHTML = `
                 <button class="btn btn-success btn-sm disabled" disabled>
-                    <i class="fas fa-spinner fa-spin"></i> 启动中...
+                    <i class="fas fa-spinner fa-spin"></i> ${t('modal.provider.action.starting')}
                 </button>
             `;
         }
@@ -2475,7 +2475,7 @@ async function startModel(modelName) {
         const data = await response.json();
         
         if (data.success) {
-            showToast('成功', `模型 ${modelName} 已启动`, 'success');
+            showToast(t('common.success'), t('modal.provider.startSuccess', { model: modelName }), 'success');
             // 刷新模型列表
             await loadModelsListForSwitch(modal);
         } else {
@@ -2483,13 +2483,13 @@ async function startModel(modelName) {
         }
     } catch (error) {
         console.error('Failed to start model:', error);
-        showToast('错误', '启动模型失败: ' + error.message, 'error');
+        showToast(t('common.error'), t('common.error') + ': ' + error.message, 'error');
         if (modelItem) {
             const actionsEl = modelItem.querySelector('.model-switch-actions');
             if (actionsEl) {
                 actionsEl.innerHTML = `
                     <button class="btn btn-success btn-sm" onclick="window.startModel('${modelName}')">
-                        <i class="fas fa-play"></i> 启动
+                        <i class="fas fa-play"></i> ${t('modal.provider.action.start')}
                     </button>
                 `;
             }
@@ -2509,7 +2509,7 @@ async function stopModel(modelName) {
         if (actionsEl) {
             actionsEl.innerHTML = `
                 <button class="btn btn-danger btn-sm disabled" disabled>
-                    <i class="fas fa-spinner fa-spin"></i> 停止中...
+                    <i class="fas fa-spinner fa-spin"></i> ${t('modal.provider.action.stopping')}
                 </button>
             `;
         }
@@ -2530,7 +2530,7 @@ async function stopModel(modelName) {
         const data = await response.json();
         
         if (data.success) {
-            showToast('成功', `模型 ${modelName} 已停止`, 'success');
+            showToast(t('common.success'), t('modal.provider.stopSuccess', { model: modelName }), 'success');
             // 刷新模型列表
             await loadModelsListForSwitch(modal);
         } else {
@@ -2538,13 +2538,13 @@ async function stopModel(modelName) {
         }
     } catch (error) {
         console.error('Failed to stop model:', error);
-        showToast('错误', '停止模型失败: ' + error.message, 'error');
+        showToast(t('common.error'), t('common.error') + ': ' + error.message, 'error');
         if (modelItem) {
             const actionsEl = modelItem.querySelector('.model-switch-actions');
             if (actionsEl) {
                 actionsEl.innerHTML = `
                     <button class="btn btn-danger btn-sm" onclick="window.stopModel('${modelName}')">
-                        <i class="fas fa-stop"></i> 停止
+                        <i class="fas fa-stop"></i> ${t('modal.provider.action.stop')}
                     </button>
                 `;
             }

@@ -121,6 +121,9 @@ settings:
   gpu_memory_utilization: 0.92
   default_memory_strategy: balanced
   
+  logging:
+    log_dir: logs
+  
   queue:
     max_length: 100
     poll_interval: 0.5
