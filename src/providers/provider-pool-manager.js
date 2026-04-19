@@ -65,6 +65,25 @@ export class ProviderPoolManager {
         'local-model': 'gemma-4-31b',
     };
 
+    // 运行时状态字段 - 这些字段不应该保存在静态配置文件中
+    // 而是存储在单独的运行时状态文件中，排除在版本控制之外
+    static RUNTIME_FIELDS = new Set([
+        'isHealthy',
+        'lastUsed',
+        'usageCount',
+        'errorCount',
+        'lastErrorTime',
+        'lastErrorMessage',
+        'needsRefresh',
+        'refreshCount',
+        'lastRefreshTime',
+        'lastHealthCheckTime',
+        'lastHealthCheckModel',
+        '_lastSelectionSeq',
+        'supportedModels',
+        'notSupportedModels'
+    ]);
+
     constructor(providerPools, options = {}) {
         this.providerPools = providerPools;
         this.globalConfig = options.globalConfig || {}; // 存储全局配置
@@ -116,8 +135,34 @@ export class ProviderPoolManager {
         
         // 用于并发选点时的原子排序辅助（自增序列）
         this._selectionSequence = 0;
+        
+        // 加载运行时状态（如果存在）
+        this.runtimeState = this._loadRuntimeState();
  
         this.initializeProviderStatus();
+    }
+    
+    /**
+     * 加载运行时状态文件
+     * @returns {object} 运行时状态数据
+     * @private
+     */
+    _loadRuntimeState() {
+        try {
+            const runtimeFilePath = this.globalConfig.PROVIDER_POOLS_FILE_PATH ? 
+                this.globalConfig.PROVIDER_POOLS_FILE_PATH.replace('.json', '_runtime.json') : 
+                'configs/provider_pools_runtime.json';
+            
+            if (fs.existsSync(runtimeFilePath)) {
+                const fileContent = fs.readFileSync(runtimeFilePath, 'utf8');
+                const runtimeState = JSON.parse(fileContent);
+                this._log('info', `Loaded runtime state from ${runtimeFilePath}`);
+                return runtimeState;
+            }
+        } catch (error) {
+            this._log('warn', `Failed to load runtime state: ${error.message}`);
+        }
+        return {};
     }
 
     /**
@@ -742,6 +787,10 @@ export class ProviderPoolManager {
                 try {
                     // 尝试从旧状态中恢复活跃请求计数和队列，避免重载配置时重置并发限制
                     const existing = oldStatus.find(p => p.uuid === providerConfig.uuid);
+                    
+                    // 从运行时状态文件恢复运行时字段
+                    const runtimeStateForType = this.runtimeState[providerType] || [];
+                    const runtimeConfig = runtimeStateForType.find(r => r.uuid === providerConfig.uuid);
 
                     // Ensure initial health and usage stats are present in the config
                     providerConfig.isHealthy = providerConfig.isHealthy !== undefined ? providerConfig.isHealthy : true;
@@ -749,12 +798,20 @@ export class ProviderPoolManager {
                     
                     // --- V3: 统计数据管理 ---
                     if (isColdStart) {
-                        // 冷启动：清空所有统计数据
-                        providerConfig.lastUsed = null;
-                        providerConfig.usageCount = 0;
-                        providerConfig.errorCount = 0;
-                        providerConfig.lastErrorTime = null;
-                        providerConfig.lastErrorMessage = null;
+                        // 冷启动：优先从运行时状态恢复，如果没有则使用默认值
+                        if (runtimeConfig) {
+                            providerConfig.lastUsed = runtimeConfig.lastUsed || null;
+                            providerConfig.usageCount = runtimeConfig.usageCount || 0;
+                            providerConfig.errorCount = runtimeConfig.errorCount || 0;
+                            providerConfig.lastErrorTime = runtimeConfig.lastErrorTime || null;
+                            providerConfig.lastErrorMessage = runtimeConfig.lastErrorMessage || null;
+                        } else {
+                            providerConfig.lastUsed = null;
+                            providerConfig.usageCount = 0;
+                            providerConfig.errorCount = 0;
+                            providerConfig.lastErrorTime = null;
+                            providerConfig.lastErrorMessage = null;
+                        }
                     } else if (existing) {
                         // 热重载：从旧状态中恢复统计数据，避免被配置文件中的旧数据覆盖
                         providerConfig.lastUsed = existing.config.lastUsed;
@@ -762,32 +819,57 @@ export class ProviderPoolManager {
                         providerConfig.errorCount = existing.config.errorCount;
                         providerConfig.lastErrorTime = existing.config.lastErrorTime;
                         providerConfig.lastErrorMessage = existing.config.lastErrorMessage;
+                    } else if (runtimeConfig) {
+                        // 新增节点但有运行时状态：从运行时状态恢复
+                        providerConfig.lastUsed = runtimeConfig.lastUsed || null;
+                        providerConfig.usageCount = runtimeConfig.usageCount || 0;
+                        providerConfig.errorCount = runtimeConfig.errorCount || 0;
+                        providerConfig.lastErrorTime = runtimeConfig.lastErrorTime || null;
+                        providerConfig.lastErrorMessage = runtimeConfig.lastErrorMessage || null;
                     } else {
-                        // 新增节点或默认初始化
+                        // 新增节点且无运行时状态：默认初始化
                         providerConfig.lastUsed = providerConfig.lastUsed || null;
                         providerConfig.usageCount = providerConfig.usageCount || 0;
                         providerConfig.errorCount = providerConfig.errorCount || 0;
                     }
                     
                     // --- V2: 刷新监控字段 ---
-                    const persistedNeedsRefresh = providerConfig.needsRefresh !== undefined ? providerConfig.needsRefresh : false;
-                    const persistedRefreshCount = providerConfig.refreshCount !== undefined ? providerConfig.refreshCount : 0;
+                    let persistedNeedsRefresh = providerConfig.needsRefresh !== undefined ? providerConfig.needsRefresh : false;
+                    let persistedRefreshCount = providerConfig.refreshCount !== undefined ? providerConfig.refreshCount : 0;
+                    
+                    // 从运行时状态恢复
+                    if (runtimeConfig) {
+                        persistedNeedsRefresh = runtimeConfig.needsRefresh !== undefined ? runtimeConfig.needsRefresh : persistedNeedsRefresh;
+                        persistedRefreshCount = runtimeConfig.refreshCount !== undefined ? runtimeConfig.refreshCount : persistedRefreshCount;
+                    }
+                    
                     if (isColdStart && (persistedNeedsRefresh || persistedRefreshCount > 0)) {
                         this._log('info', `Resetting stale refresh state for provider ${providerConfig.uuid} (${providerType}) on startup.`);
                     }
                     providerConfig.needsRefresh = isColdStart ? false : persistedNeedsRefresh;
                     providerConfig.refreshCount = isColdStart ? 0 : persistedRefreshCount;
+                    providerConfig.lastRefreshTime = runtimeConfig?.lastRefreshTime || null;
                     
                     // 优化2: 简化 lastErrorTime 处理逻辑
                     providerConfig.lastErrorTime = providerConfig.lastErrorTime instanceof Date
                         ? providerConfig.lastErrorTime.toISOString()
                         : (providerConfig.lastErrorTime || null);
                     
-                    // 健康检测相关字段
-                    providerConfig.lastHealthCheckTime = providerConfig.lastHealthCheckTime || null;
-                    providerConfig.lastHealthCheckModel = providerConfig.lastHealthCheckModel || null;
+                    // 健康检测相关字段 - 从运行时状态恢复
+                    providerConfig.lastHealthCheckTime = runtimeConfig?.lastHealthCheckTime || providerConfig.lastHealthCheckTime || null;
+                    providerConfig.lastHealthCheckModel = runtimeConfig?.lastHealthCheckModel || providerConfig.lastHealthCheckModel || null;
                     providerConfig.lastErrorMessage = providerConfig.lastErrorMessage || null;
                     providerConfig.customName = providerConfig.customName || null;
+                    
+                    // 从运行时状态恢复其他字段
+                    if (runtimeConfig) {
+                        providerConfig._lastSelectionSeq = runtimeConfig._lastSelectionSeq || 0;
+                        providerConfig.supportedModels = runtimeConfig.supportedModels || [];
+                        providerConfig.notSupportedModels = runtimeConfig.notSupportedModels || [];
+                        if (runtimeConfig.isHealthy !== undefined) {
+                            providerConfig.isHealthy = runtimeConfig.isHealthy;
+                        }
+                    }
 
                     this.providerStatus[providerType].push({
                         config: providerConfig,
@@ -2238,17 +2320,30 @@ export class ProviderPoolManager {
         this.saveTimer = null;
         
         try {
-            const filePath = this.globalConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
-            let currentPools = {};
+            const poolsFilePath = this.globalConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+            const runtimeFilePath = this.globalConfig.PROVIDER_POOLS_FILE_PATH ? 
+                this.globalConfig.PROVIDER_POOLS_FILE_PATH.replace('.json', '_runtime.json') : 
+                'configs/provider_pools_runtime.json';
             
-            // 一次性读取文件
+            let currentStaticPools = {};
+            let currentRuntimePools = {};
+            
+            // 读取静态配置文件
             try {
-                const fileContent = await fs.promises.readFile(filePath, 'utf8');
-                currentPools = JSON.parse(fileContent);
+                const fileContent = await fs.promises.readFile(poolsFilePath, 'utf8');
+                currentStaticPools = JSON.parse(fileContent);
             } catch (readError) {
-                if (readError.code === 'ENOENT') {
-                    this._log('info', 'configs/provider_pools.json does not exist, creating new file.');
-                } else {
+                if (readError.code !== 'ENOENT') {
+                    throw readError;
+                }
+            }
+
+            // 读取运行时状态文件
+            try {
+                const fileContent = await fs.promises.readFile(runtimeFilePath, 'utf8');
+                currentRuntimePools = JSON.parse(fileContent);
+            } catch (readError) {
+                if (readError.code !== 'ENOENT') {
                     throw readError;
                 }
             }
@@ -2256,30 +2351,45 @@ export class ProviderPoolManager {
             // 更新所有待保存的 providerType
             for (const providerType of typesToSave) {
                 if (this.providerStatus[providerType]) {
-                    currentPools[providerType] = this.providerStatus[providerType].map(p => {
-                        // Convert Date objects to ISOString if they exist
-                        const config = { ...p.config };
-                        if (config.lastUsed instanceof Date) {
-                            config.lastUsed = config.lastUsed.toISOString();
+                    // 分离静态配置和运行时状态
+                    currentStaticPools[providerType] = this.providerStatus[providerType].map(p => {
+                        const staticConfig = {};
+                        for (const [key, value] of Object.entries(p.config)) {
+                            if (!ProviderPoolManager.RUNTIME_FIELDS.has(key)) {
+                                staticConfig[key] = value;
+                            }
                         }
-                        if (config.lastErrorTime instanceof Date) {
-                            config.lastErrorTime = config.lastErrorTime.toISOString();
+                        return staticConfig;
+                    });
+                    
+                    currentRuntimePools[providerType] = this.providerStatus[providerType].map(p => {
+                        const runtimeConfig = {};
+                        for (const [key, value] of Object.entries(p.config)) {
+                            if (ProviderPoolManager.RUNTIME_FIELDS.has(key)) {
+                                let val = value;
+                                if (val instanceof Date) {
+                                    val = val.toISOString();
+                                }
+                                runtimeConfig[key] = val;
+                            }
                         }
-                        if (config.lastHealthCheckTime instanceof Date) {
-                            config.lastHealthCheckTime = config.lastHealthCheckTime.toISOString();
-                        }
-                        return config;
+                        runtimeConfig.uuid = p.config.uuid;
+                        return runtimeConfig;
                     });
                 } else {
                     this._log('warn', `Attempted to save unknown providerType: ${providerType}`);
                 }
             }
             
-            // 一次性写入文件
-            await fs.promises.writeFile(filePath, JSON.stringify(currentPools, null, 2), 'utf8');
-            this._log('info', `configs/provider_pools.json updated successfully for types: ${typesToSave.join(', ')}`);
+            // 写入静态配置文件（不包含运行时状态）
+            await fs.promises.writeFile(poolsFilePath, JSON.stringify(currentStaticPools, null, 2), 'utf8');
+            
+            // 写入运行时状态文件（排除在版本控制之外）
+            await fs.promises.writeFile(runtimeFilePath, JSON.stringify(currentRuntimePools, null, 2), 'utf8');
+            
+            this._log('info', `Provider pools updated successfully for types: ${typesToSave.join(', ')}`);
         } catch (error) {
-            this._log('error', `Failed to write provider_pools.json: ${error.message}`);
+            this._log('error', `Failed to write provider pools: ${error.message}`);
         }
     }
 

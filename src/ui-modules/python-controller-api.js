@@ -19,6 +19,23 @@ const modelsCache = {
     ttl: 5000
 };
 
+function buildHeaders(req) {
+    const headers = {};
+    
+    if (CONFIG.CONTROLLER_API_KEY) {
+        headers['X-Controller-Api-Key'] = CONFIG.CONTROLLER_API_KEY;
+    }
+    
+    if (req.headers.authorization) {
+        headers['Authorization'] = req.headers.authorization;
+    }
+    if (req.headers['x-request-id']) {
+        headers['X-Request-Id'] = req.headers['x-request-id'];
+    }
+    headers['X-Proxy-By'] = 'AIClient-2-API';
+    return headers;
+}
+
 async function callPythonController(endpoint, method = 'GET', body = null, headers = {}) {
     const CONTROLLER_BASE_URL = CONFIG.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
     const url = `${CONTROLLER_BASE_URL}${endpoint}`;
@@ -49,10 +66,7 @@ async function callPythonController(endpoint, method = 'GET', body = null, heade
 
 export async function handleGetVLLMModels(req, res) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/v1/models', 'GET', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -65,10 +79,7 @@ export async function handleGetVLLMModels(req, res) {
 
 export async function handleGetModelStatus(req, res) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/manage/models', 'GET', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, models: data }));
@@ -81,10 +92,7 @@ export async function handleGetModelStatus(req, res) {
 
 export async function handleGetModelSummary(req, res) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/manage/models/summary', 'GET', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -97,10 +105,7 @@ export async function handleGetModelSummary(req, res) {
 
 export async function handleStartModel(req, res, modelName) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController(`/manage/models/${encodeURIComponent(modelName)}/start`, 'POST', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -113,10 +118,7 @@ export async function handleStartModel(req, res, modelName) {
 
 export async function handleStopModel(req, res, modelName) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController(`/manage/models/${encodeURIComponent(modelName)}/stop`, 'POST', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -129,10 +131,7 @@ export async function handleStopModel(req, res, modelName) {
 
 export async function handleSwitchModel(req, res, modelName) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController(`/manage/models/${encodeURIComponent(modelName)}/switch`, 'POST', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -152,10 +151,7 @@ export async function handleGetGPUStatus(req, res) {
             return true;
         }
 
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/manage/gpu', 'GET', null, headers);
         gpuCache.data = data;
         gpuCache.timestamp = now;
@@ -173,11 +169,7 @@ export async function handleGetGPUHistory(req, res) {
         const url = new URL(req.url, `http://${req.headers.host}`);
         const queryString = url.search;
         
-        // Extract authorization header from request
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         
         const data = await callPythonController(`/manage/gpu/history${queryString}`, 'GET', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -198,10 +190,7 @@ export async function handleGetQueueStatus(req, res) {
             return true;
         }
 
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/manage/queue', 'GET', null, headers);
         queueCache.data = data;
         queueCache.timestamp = now;
@@ -223,10 +212,7 @@ export async function handleGetModelsStatus(req, res) {
             return true;
         }
 
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/manage/models', 'GET', null, headers);
         modelsCache.data = data;
         modelsCache.timestamp = now;
@@ -241,10 +227,7 @@ export async function handleGetModelsStatus(req, res) {
 
 export async function handleGetHealthStatus(req, res) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/health', 'GET', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -257,10 +240,7 @@ export async function handleGetHealthStatus(req, res) {
 
 export async function handleTestModel(req, res, modelName) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController(`/v1/test/model/${encodeURIComponent(modelName)}`, 'POST', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -273,10 +253,7 @@ export async function handleTestModel(req, res, modelName) {
 
 export async function handleGetModelTestReport(req, res, modelName) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController(`/v1/test/report/${encodeURIComponent(modelName)}`, 'GET', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -289,10 +266,7 @@ export async function handleGetModelTestReport(req, res, modelName) {
 
 export async function handleGetAllTestReports(req, res) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/v1/test/reports', 'GET', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -305,10 +279,7 @@ export async function handleGetAllTestReports(req, res) {
 
 export async function handleSwitchAndTestModel(req, res, modelName) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController(`/v1/test/model/${encodeURIComponent(modelName)}/switch-and-test`, 'POST', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -335,10 +306,7 @@ export async function handleRunComparativeAnalysis(req, res) {
                 });
             });
         }
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/v1/test/comparative', 'POST', body, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -351,10 +319,7 @@ export async function handleRunComparativeAnalysis(req, res) {
 
 export async function handleClearTestReports(req, res) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/v1/test/reports', 'DELETE', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -367,10 +332,7 @@ export async function handleClearTestReports(req, res) {
 
 export async function handleGetTestStatus(req, res) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/v1/test/status', 'GET', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -383,10 +345,7 @@ export async function handleGetTestStatus(req, res) {
 
 export async function handleGetPythonServiceStatus(req, res) {
     try {
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/manage/service/status', 'GET', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -413,10 +372,7 @@ export async function handleStartPythonService(req, res) {
                 });
             });
         }
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/manage/service/start', 'POST', body, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -443,10 +399,7 @@ export async function handleStopPythonService(req, res) {
                 });
             });
         }
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/manage/service/stop', 'POST', body, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -473,10 +426,7 @@ export async function handleRestartPythonService(req, res) {
                 });
             });
         }
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/manage/service/restart', 'POST', body, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -503,10 +453,7 @@ export async function handleUpdateConfig(req, res) {
                 });
             });
         }
-        const headers = {};
-        if (req.headers.authorization) {
-            headers['Authorization'] = req.headers.authorization;
-        }
+        const headers = buildHeaders(req);
         const data = await callPythonController('/manage/config', 'PUT', body, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));

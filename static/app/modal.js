@@ -2286,7 +2286,7 @@ async function loadModelsListForSwitch(modal) {
         }
 
         const data = await response.json();
-        const modelsList = data || [];
+        const modelsList = data?.models || [];
         
         // 获取当前运行的模型
         let currentModel = null;

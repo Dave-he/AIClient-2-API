@@ -75,7 +75,6 @@ export class SystemMonitor {
             }
 
             this.isInitialized = true;
-            this.updatePythonGpuVisibility(false);
             this.setupEventListeners();
             this.loadGpuHistoryFromServer();
             this.startPolling();
@@ -325,12 +324,7 @@ export class SystemMonitor {
     }
 
     updatePythonGpuVisibility(isConnected) {
-        const sidebarGpuLink = document.querySelector('.nav-item[data-section="gpu-monitor"]');
         const dashboardGpuPanel = document.querySelector('.python-gpu-monitor');
-
-        if (sidebarGpuLink) {
-            sidebarGpuLink.style.display = isConnected ? '' : 'none';
-        }
 
         if (dashboardGpuPanel) {
             dashboardGpuPanel.style.display = isConnected ? '' : 'none';
@@ -1681,7 +1675,7 @@ export class SystemMonitor {
             }
 
             const data = await response.json();
-            this.modelsList = data || [];
+            this.modelsList = data?.models || [];
             
             this.renderQuickSwitchPanel();
         } catch (error) {

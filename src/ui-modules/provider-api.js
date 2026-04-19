@@ -18,6 +18,33 @@ const providerDynamicCache = {
     ttl: 5000
 };
 
+const RUNTIME_FIELDS = new Set([
+    'isHealthy',
+    'lastUsed',
+    'usageCount',
+    'errorCount',
+    'lastErrorTime',
+    'lastErrorMessage',
+    'needsRefresh',
+    'refreshCount',
+    'lastRefreshTime',
+    'lastHealthCheckTime',
+    'lastHealthCheckModel',
+    '_lastSelectionSeq',
+    'supportedModels',
+    'notSupportedModels'
+]);
+
+function filterRuntimeFields(providerConfig) {
+    const result = {};
+    for (const [key, value] of Object.entries(providerConfig)) {
+        if (!RUNTIME_FIELDS.has(key)) {
+            result[key] = value;
+        }
+    }
+    return result;
+}
+
 // 文件级互斥锁：防止并发读写导致数据丢失
 // 安全净化：移除用户输入字段中的危险内容（script、事件处理器、javascript:协议等），
 // 存储原始文本。HTML 转义统一由前端 escHtml() 负责，避免双编码问题。
@@ -621,10 +648,11 @@ async function _handleAddProvider(req, res, currentConfig, providerPoolManager) 
             providerPools[providerType] = [];
         }
         
-        // 过滤掉脱敏字段
-        const filteredConfig = filterMaskedData(providerConfig);
+        // 过滤掉脱敏字段和运行时状态字段
+        let filteredConfig = filterMaskedData(providerConfig);
+        filteredConfig = filterRuntimeFields(filteredConfig);
         if (usesManagedModelList(providerType)) {
-            filteredConfig.supportedModels = normalizeModelIds(filteredConfig.supportedModels);
+            filteredConfig.supportedModels = normalizeModelIds(filteredConfig.supportedModels || []);
             filteredConfig.notSupportedModels = [];
         }
         providerPools[providerType].push(filteredConfig);
@@ -720,21 +748,18 @@ async function _handleUpdateProvider(req, res, currentConfig, providerPoolManage
         // Update provider while preserving certain fields
         const existingProvider = providers[providerIndex];
         
-        // 过滤掉传入配置中的脱敏占位符，避免覆盖真实数据
-        const filteredConfig = filterMaskedData(providerConfig);
+        // 过滤掉传入配置中的脱敏占位符和运行时状态字段
+        let filteredConfig = filterMaskedData(providerConfig);
+        filteredConfig = filterRuntimeFields(filteredConfig);
         if (usesManagedModelList(providerType)) {
-            filteredConfig.supportedModels = normalizeModelIds(filteredConfig.supportedModels);
+            filteredConfig.supportedModels = normalizeModelIds(filteredConfig.supportedModels || []);
             filteredConfig.notSupportedModels = [];
         }
         
         const updatedProvider = {
             ...existingProvider,
             ...filteredConfig,
-            uuid: providerUuid, // Ensure UUID doesn't change
-            lastUsed: existingProvider.lastUsed, // Preserve usage stats
-            usageCount: existingProvider.usageCount,
-            errorCount: existingProvider.errorCount,
-            lastErrorTime: existingProvider.lastErrorTime
+            uuid: providerUuid // Ensure UUID doesn't change
         };
 
         providerPools[providerType][providerIndex] = updatedProvider;

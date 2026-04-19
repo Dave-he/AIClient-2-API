@@ -7,23 +7,9 @@
       "checkModelName": "gemma-4-31b",
       "checkHealth": false,
       "uuid": "local-python-controller",
-      "isHealthy": false,
       "isDisabled": false,
-      "lastUsed": "2026-04-19T15:42:34.274Z",
-      "usageCount": 0,
-      "errorCount": 3,
-      "lastErrorTime": "2026-04-19T15:42:34.274Z",
-      "lastErrorMessage": "connect ECONNREFUSED 127.0.0.1:5000",
-      "needsRefresh": false,
-      "refreshCount": 0,
-      "lastHealthCheckTime": "2026-04-19T15:42:34.179Z",
-      "lastHealthCheckModel": "gemma-4-31b",
-      "_lastSelectionSeq": 0,
-      "supportedModels": [],
-      "lastRefreshTime": 1776613075141,
       "concurrencyLimit": 0,
-      "queueLimit": 0,
-      "notSupportedModels": []
+      "queueLimit": 0
     }
   ],
   "openai-custom": [
@@ -36,23 +22,7 @@
       "OPENAI_API_KEY": "1234",
       "OPENAI_BASE_URL": "http://192.168.7.103:8000/v1",
       "uuid": "36babfc8-934a-404d-826a-3dd25bef139a",
-      "isHealthy": true,
-      "lastUsed": null,
-      "usageCount": 0,
-      "errorCount": 0,
-      "lastErrorTime": null,
-      "supportedModels": [
-        "/mnt/pve_models/Gemma-4-31B-Abliterated"
-      ],
-      "notSupportedModels": [],
-      "isDisabled": false,
-      "needsRefresh": false,
-      "refreshCount": 0,
-      "lastHealthCheckTime": "2026-04-18T17:16:39.444Z",
-      "lastHealthCheckModel": "/mnt/pve_models/Gemma-4-31B-Abliterated",
-      "lastErrorMessage": null,
-      "lastRefreshTime": 1776490377878,
-      "_lastSelectionSeq": 0
+      "isDisabled": false
     }
   ],
   "providerFallbackChain": [],
