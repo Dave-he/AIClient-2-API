@@ -28,6 +28,7 @@
 
 .gpu-charts-panel {
     grid-column: 1 / -1;
+    min-height: 400px;
 }
 
 .model-switch-panel {

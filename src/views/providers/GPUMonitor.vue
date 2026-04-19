@@ -803,9 +803,14 @@ const switchModel = async (modelName) => {
         window.$toast?.error(result.error?.message || `切换模型失败: ${modelName}`)
       }
       
-      await loadModelsStatus()
-      await loadAvailableModels()
-      await refreshGpuStatus()
+      // 清除缓存，确保获取最新数据
+      requestCache.modelsStatus.timestamp = 0
+      requestCache.availableModels.timestamp = 0
+      requestCache.gpuStatus.timestamp = 0
+      
+      debouncedLoadModelsStatus()
+      debouncedLoadAvailableModels()
+      debouncedRefreshGpuStatus()
     } else {
       const error = await response.json()
       window.$toast?.error(error.error?.message || `切换模型失败: ${modelName}`)
@@ -903,9 +908,14 @@ const stopModel = async (modelName) => {
       const result = await response.json()
       if (result.success) {
         window.$toast?.success(`已停止模型: ${modelName}`)
-        await loadModelsStatus()
-        await loadAvailableModels()
-        await refreshGpuStatus()
+        // 清除缓存，确保获取最新数据
+        requestCache.modelsStatus.timestamp = 0
+        requestCache.availableModels.timestamp = 0
+        requestCache.gpuStatus.timestamp = 0
+        
+        debouncedLoadModelsStatus()
+        debouncedLoadAvailableModels()
+        debouncedRefreshGpuStatus()
       } else {
         window.$toast?.error(result.error?.message || `停止模型失败: ${modelName}`)
       }
@@ -937,9 +947,9 @@ let pollingInterval = null
 
 const startPolling = () => {
   pollingInterval = setInterval(() => {
-    refreshGpuStatus()
-    loadModelsStatus()
-    loadQueueStatus()
+    debouncedRefreshGpuStatus()
+    debouncedLoadModelsStatus()
+    debouncedLoadQueueStatus()
     checkControllerConnection()
   }, 5000)
 }
@@ -956,10 +966,10 @@ onMounted(() => {
     createChart()
   })
   
-  refreshGpuStatus()
-  loadModelsStatus()
-  loadQueueStatus()
-  loadAvailableModels()
+  debouncedRefreshGpuStatus()
+  debouncedLoadModelsStatus()
+  debouncedLoadQueueStatus()
+  debouncedLoadAvailableModels()
   checkControllerConnection()
   startPolling()
 })

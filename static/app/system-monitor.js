@@ -1134,7 +1134,7 @@ export class SystemMonitor {
         ctx.setLineDash([]);
     }
 
-    drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, showTimeLabels) {
+    drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, showTimeLabels, isTemperature = false) {
         ctx.strokeStyle = '#9ca3af';
         ctx.lineWidth = 2;
 
@@ -1156,7 +1156,7 @@ export class SystemMonitor {
         for (let i = 0; i <= gridLines; i++) {
             const y = padding.top + (chartHeight / gridLines) * i;
             const value = maxValue - ((maxValue - minValue) / gridLines) * i;
-            ctx.fillText(Math.round(value) + (this.currentChartType === 'gpu' ? '°C' : '%'), padding.left - 8, y + 4);
+            ctx.fillText(Math.round(value) + (isTemperature ? '°C' : '%'), padding.left - 8, y + 4);
         }
 
         ctx.textAlign = 'center';
@@ -1348,32 +1348,34 @@ export class SystemMonitor {
         
         let rect = canvas.getBoundingClientRect();
         
-        if (rect.width === 0 || rect.height === 0) {
-            const container = canvas.parentElement;
-            if (container) {
-                const containerRect = container.getBoundingClientRect();
+        // 优先使用容器的尺寸
+        const container = canvas.parentElement;
+        if (container) {
+            const containerRect = container.getBoundingClientRect();
+            if (containerRect.width > 0 && containerRect.height > 0) {
                 rect = {
-                    width: Math.max(containerRect.width - 32, 300),
-                    height: Math.max(containerRect.height - 32, 200)
+                    width: containerRect.width - 32, // 减去内边距
+                    height: containerRect.height - 32 // 减去内边距
                 };
-            } else {
-                rect = { width: 400, height: 250 };
             }
         }
-
+        
+        // 确保尺寸有效
         if (rect.width <= 0 || rect.height <= 0) {
-            rect = { width: 400, height: 250 };
+            rect = { width: 400, height: 300 };
         }
 
+        // 设置canvas尺寸
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
         ctx.scale(dpr, dpr);
 
+        // 调整padding以确保图表内容不会被裁剪
         this.gpuChart = {
             ctx,
             width: rect.width,
             height: rect.height,
-            padding: { top: 15, right: 15, bottom: 28, left: 40 }
+            padding: { top: 20, right: 20, bottom: 35, left: 50 }
         };
     }
 
@@ -1388,11 +1390,13 @@ export class SystemMonitor {
         const chartWidth = width - padding.left - padding.right;
         const chartHeight = height - padding.top - padding.bottom;
 
+        // 清除画布
         ctx.clearRect(0, 0, width, height);
 
         let datasets = [];
         let dataLength = 0;
 
+        // 添加GPU使用率数据
         if (this.gpuHistoryData.length > 0) {
             datasets.push({
                 data: [...this.gpuHistoryData],
@@ -1402,6 +1406,7 @@ export class SystemMonitor {
             });
             dataLength = Math.max(dataLength, this.gpuHistoryData.length);
         }
+        // 添加GPU温度数据
         if (this.gpuTempHistoryData.length > 0) {
             datasets.push({
                 data: [...this.gpuTempHistoryData],
@@ -1413,22 +1418,32 @@ export class SystemMonitor {
             dataLength = Math.max(dataLength, this.gpuTempHistoryData.length);
         }
 
+        // 如果没有数据，显示空状态
         if (dataLength === 0) {
             this.renderGpuEmptyChart();
             return;
         }
 
+        // 计算数据范围
         let allValues = [];
         datasets.forEach(ds => allValues.push(...ds.data.filter(v => v > 0)));
         const minValue = allValues.length > 0 ? Math.min(...allValues) * 0.9 : 0;
         const maxValue = allValues.length > 0 ? Math.max(...allValues) * 1.1 : 100;
 
+        // 绘制网格
         this.drawGrid(ctx, chartWidth, chartHeight, padding, minValue, maxValue);
-        this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, false);
+        // 绘制坐标轴
+        // 检查是否有温度数据
+        const hasTemperatureData = datasets.some(ds => ds.isTemperature);
+        this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, false, hasTemperatureData);
+        // 绘制数据集
         datasets.forEach(ds => {
+            // 绘制面积图
             this.drawArea(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+            // 绘制折线
             this.drawLine(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
         });
+        // 绘制数据点
         datasets.forEach(ds => {
             this.drawPoint(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
         });
