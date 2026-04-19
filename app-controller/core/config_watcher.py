@@ -11,6 +11,7 @@ class ConfigWatcher:
         self._last_modified = None
         self._callbacks: List[Callable[[Dict], None]] = []
         self._watch_task = None
+        self._stop_event = asyncio.Event()
     
     def load_config(self) -> Dict:
         if os.path.exists(self.config_path):
@@ -32,7 +33,7 @@ class ConfigWatcher:
                 pass
     
     async def _watch_loop(self):
-        while True:
+        while not self._stop_event.is_set():
             try:
                 if os.path.exists(self.config_path):
                     current_modified = os.path.getmtime(self.config_path)
@@ -49,16 +50,21 @@ class ConfigWatcher:
             except Exception as e:
                 pass
             
-            await asyncio.sleep(5)
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                pass
     
     def start_watching(self):
         if self._watch_task is None:
             try:
-                self._watch_task = asyncio.create_task(self._watch_loop())
+                loop = asyncio.get_running_loop()
+                self._watch_task = loop.create_task(self._watch_loop())
             except RuntimeError:
                 pass
     
     def stop_watching(self):
         if self._watch_task is not None:
+            self._stop_event.set()
             self._watch_task.cancel()
             self._watch_task = None

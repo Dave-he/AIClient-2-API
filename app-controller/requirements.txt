@@ -1,4 +1,4 @@
-66# Core Framework
+# Core Framework
 fastapi>=0.110.0
 uvicorn>=0.29.0
 pydantic>=2.6.0
