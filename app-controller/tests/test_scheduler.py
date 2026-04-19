@@ -57,7 +57,43 @@ class TestScheduler:
 
     @pytest.fixture
     def scheduler(self, mock_gpu_monitor, mock_sys_controller):
-        return Scheduler(mock_gpu_monitor, mock_sys_controller)
+        scheduler = Scheduler(mock_gpu_monitor, mock_sys_controller)
+        scheduler.config = {
+            "models": {
+                "gemma-4-31b": {
+                    "service": "vllm-gemma",
+                    "port": 8000,
+                    "required_memory": "12GB",
+                    "preload": False,
+                    "keep_alive": True
+                },
+                "llama-3-8b": {
+                    "service": "vllm-llama",
+                    "port": 8001,
+                    "required_memory": "10GB",
+                    "preload": False,
+                    "keep_alive": True
+                },
+                "Gemma-4-31B-Abliterated": {
+                    "service": "vllm",
+                    "port": 8000,
+                    "required_memory": "40GB",
+                    "preload": True,
+                    "keep_alive": True,
+                    "model_path": "/mnt/pve_models/Gemma-4-31B-Abliterated"
+                }
+            },
+            "settings": {
+                "concurrency_limit": 4,
+                "min_available_memory": "2GB",
+                "preload_timeout": 120,
+                "idle_timeout": 300,
+                "memory_cleanup_delay": 3,
+                "gpu_memory_utilization": 0.9
+            }
+        }
+        scheduler.preloaded_models = set()
+        return scheduler
 
     def test_get_available_models(self, scheduler):
         models = scheduler.get_available_models()
@@ -149,3 +185,36 @@ class TestScheduler:
 
     def test_can_accept_request(self, scheduler):
         assert scheduler.can_accept_request("gemma-4-31b") is True
+
+    def test_model_name_fuzzy_matching(self, scheduler):
+        """测试模型名称模糊匹配功能"""
+        # 精确匹配
+        assert scheduler.is_model_available("gemma-4-31b") is True
+        assert scheduler.is_model_available("llama-3-8b") is True
+        
+        # 大小写不敏感匹配
+        assert scheduler.is_model_available("Gemma-4-31b") is True
+        assert scheduler.is_model_available("GEMMA-4-31B") is True
+        assert scheduler.is_model_available("Llama-3-8B") is True
+        
+        # 简写名称匹配
+        assert scheduler.is_model_available("gemma") is True
+        assert scheduler.is_model_available("llama") is True
+        
+        # 带后缀的模型名称匹配
+        assert scheduler.is_model_available("Gemma-4-31B-Abliterated") is True
+        assert scheduler.is_model_available("gemma-4-31b-abliterated") is True
+        assert scheduler.is_model_available("abliterated") is True
+        
+        # 获取配置测试
+        config = scheduler.get_model_config("gemma-4-31b")
+        assert config is not None
+        assert config.get("service") == "vllm-gemma"
+        
+        # 获取带后缀模型的配置
+        config = scheduler.get_model_config("Gemma-4-31B-Abliterated")
+        assert config is not None
+        assert config.get("service") == "vllm"
+        
+        # 未知模型
+        assert scheduler.is_model_available("unknown-model") is False

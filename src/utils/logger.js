@@ -404,6 +404,13 @@ class Logger {
       return false;
     }
   }
+
+  async cleanupOldLogs() {
+    if (isBrowser) {
+      return;
+    }
+    this._cleanupOldLogsSync();
+  }
 }
 
 const logger = new Logger();

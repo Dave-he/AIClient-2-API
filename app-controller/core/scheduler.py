@@ -91,11 +91,44 @@ class Scheduler:
     def get_available_models(self) -> List[str]:
         return list(self.config.get('models', {}).keys())
     
+    def _find_matching_model(self, model_name: str) -> Optional[str]:
+        """
+        根据输入的模型名称查找匹配的配置模型
+        支持模糊匹配：忽略大小写，支持简写名称匹配
+        """
+        models = self.config.get('models', {})
+        
+        # 精确匹配
+        if model_name in models:
+            return model_name
+        
+        # 大小写不敏感匹配
+        lower_input = model_name.lower()
+        for config_name in models:
+            if config_name.lower() == lower_input:
+                return config_name
+        
+        # 简写匹配：输入的简写名称是否是配置名称的一部分（忽略大小写）
+        for config_name in models:
+            if lower_input in config_name.lower() or config_name.lower() in lower_input:
+                return config_name
+        
+        # 尝试用输入名称查找最接近的匹配
+        for config_name in models:
+            config_lower = config_name.lower()
+            if lower_input.replace('-', '') in config_lower.replace('-', ''):
+                return config_name
+        
+        return None
+
     def is_model_available(self, model_name: str) -> bool:
-        return model_name in self.config.get('models', {})
+        return self._find_matching_model(model_name) is not None
     
     def get_model_config(self, model_name: str) -> Optional[Dict]:
-        return self.config.get('models', {}).get(model_name)
+        matched_name = self._find_matching_model(model_name)
+        if matched_name:
+            return self.config.get('models', {}).get(matched_name)
+        return None
     
     def get_model_path(self, model_name: str) -> Optional[str]:
         config = self.get_model_config(model_name)
@@ -114,6 +147,10 @@ class Scheduler:
     def get_model_supports_images(self, model_name: str) -> bool:
         config = self.get_model_config(model_name)
         return config.get('supports_images', False) if config else False
+    
+    def get_model_name(self, model_name: str) -> Optional[str]:
+        """获取配置中的实际模型名称"""
+        return self._find_matching_model(model_name)
 
     def get_min_available_memory(self) -> int:
         value = self.config.get('settings', {}).get('min_available_memory', '2GB')
