@@ -33,7 +33,11 @@ export class GPUMonitorModule {
 
     initGpuStatusElements() {
         const container = document.getElementById('gpuStatusContent');
-        if (!container) return;
+        if (!container) {
+            console.log('[GPUMonitor] gpuStatusContent not found');
+            return;
+        }
+        console.log('[GPUMonitor] gpuStatusContent found, initializing GPU status elements');
 
         const t = this.i18n.t.bind(this.i18n);
         container.innerHTML = `
@@ -912,7 +916,7 @@ export class GPUMonitorModule {
 
     renderModelControls(data, container) {
         const t = this.t.bind(this);
-        if (!data || data.length === 0) {
+        if (!data || Object.keys(data).length === 0) {
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-info-circle"></i>
@@ -922,22 +926,22 @@ export class GPUMonitorModule {
             return;
         }
 
-        const controls = data.map(model => `
+        const controls = Object.entries(data).map(([name, status]) => `
             <div class="control-item">
-                <span class="model-name">${model.name}</span>
+                <span class="model-name">${name}</span>
                 <div class="control-btn-group">
-                    ${model.running ? `
-                        <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${model.name}')">
+                    ${status.running ? `
+                        <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${name}')">
                             <i class="fas fa-stop"></i> ${t('gpuMonitor.stop')}
                         </button>
-                        <button class="btn btn-outline btn-sm" onclick="window.GPUMonitor.switchModel('${model.name}')">
+                        <button class="btn btn-outline btn-sm" onclick="window.GPUMonitor.switchModel('${name}')">
                             <i class="fas fa-exchange-alt"></i> ${t('gpuMonitor.switchAndTest')}
                         </button>
-                        <button class="btn btn-info btn-sm" onclick="window.GPUMonitor.runModelTest('${model.name}')">
+                        <button class="btn btn-info btn-sm" onclick="window.GPUMonitor.runModelTest('${name}')">
                             <i class="fas fa-flask"></i> ${t('gpuMonitor.test')}
                         </button>
                     ` : `
-                        <button class="btn btn-success btn-sm" onclick="window.GPUMonitor.startModel('${model.name}')">
+                        <button class="btn btn-success btn-sm" onclick="window.GPUMonitor.startModel('${name}')">
                             <i class="fas fa-play"></i> ${t('gpuMonitor.start')}
                         </button>
                     `}

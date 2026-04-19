@@ -1674,7 +1674,11 @@ export class SystemMonitor {
             }
 
             const data = await response.json();
-            this.modelsList = data?.models || [];
+            const modelsObj = data?.models || {};
+            this.modelsList = Object.entries(modelsObj).map(([name, status]) => ({
+                name,
+                ...status
+            }));
         } catch (error) {
             console.log('[SystemMonitor] Failed to load models list:', error.message);
             container.innerHTML = `
@@ -1806,11 +1810,15 @@ export class SystemMonitor {
         }
 
         try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
             const response = await fetch(`${API_BASE_URL}/models/${encodeURIComponent(modelName)}/switch`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers,
                 timeout: 120000
             });
 
@@ -1844,11 +1852,15 @@ export class SystemMonitor {
         }
 
         try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
             const response = await fetch(`${API_BASE_URL}/models/${encodeURIComponent(modelName)}/start`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers,
                 timeout: 120000
             });
 
@@ -1882,11 +1894,15 @@ export class SystemMonitor {
         }
 
         try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
             const response = await fetch(`${API_BASE_URL}/models/${encodeURIComponent(modelName)}/stop`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers,
                 timeout: 30000
             });
 

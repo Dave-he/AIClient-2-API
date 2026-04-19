@@ -2286,7 +2286,11 @@ async function loadModelsListForSwitch(modal) {
         }
 
         const data = await response.json();
-        const modelsList = data?.models || [];
+        const modelsObj = data?.models || {};
+        const modelsList = Object.entries(modelsObj).map(([name, status]) => ({
+            name,
+            ...status
+        }));
         
         // 获取当前运行的模型
         let currentModel = null;
@@ -2403,11 +2407,15 @@ async function switchModel(modelName) {
     }
 
     try {
+        const token = window.authManager ? window.authManager.getToken() : null;
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
         const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/switch`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers
         });
 
         if (!response.ok) {
@@ -2461,11 +2469,15 @@ async function startModel(modelName) {
     }
 
     try {
+        const token = window.authManager ? window.authManager.getToken() : null;
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
         const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/start`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers
         });
 
         if (!response.ok) {
@@ -2516,11 +2528,15 @@ async function stopModel(modelName) {
     }
 
     try {
+        const token = window.authManager ? window.authManager.getToken() : null;
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
         const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/stop`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers
         });
 
         if (!response.ok) {

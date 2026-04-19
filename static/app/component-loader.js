@@ -166,6 +166,15 @@ async function initializeComponents() {
             if (dashboardNav) {
                 dashboardNav.classList.add('active');
             }
+            
+            // 确保 GPU 监控菜单始终可见
+            const gpuNav = document.querySelector('.nav-item[data-section="gpu-monitor"]');
+            if (gpuNav) {
+                gpuNav.style.display = '';
+                console.log('[ComponentLoader] GPU monitor nav item made visible');
+            } else {
+                console.log('[ComponentLoader] GPU monitor nav item not found');
+            }
         }, 50);
         
         console.log('All components loaded successfully');
