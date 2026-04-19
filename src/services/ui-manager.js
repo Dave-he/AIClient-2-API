@@ -102,14 +102,6 @@ export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
 
         let content = readFileSync(filePath);
 
-        if (ext === '.html') {
-            const controllerBaseUrl = currentConfig.CONTROLLER_BASE_URL || 'http://localhost:5000';
-            content = content.toString().replace(
-                /window\.CONTROLLER_BASE_URL = window\.CONTROLLER_BASE_URL \|\|[\s\S]*?'http:\/\/localhost:5000';/,
-                `window.CONTROLLER_BASE_URL = '${controllerBaseUrl}';`
-            );
-        }
-
         res.writeHead(200, { 'Content-Type': contentType });
         res.end(content);
         return true;
@@ -525,6 +517,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
     // Get model status
     if (method === 'GET' && pathParam === '/api/python/models/status') {
         return await pythonControllerApi.handleGetModelStatus(req, res);
+    }
+
+    // Get model summary
+    if (method === 'GET' && pathParam === '/api/python/models/summary') {
+        return await pythonControllerApi.handleGetModelSummary(req, res);
     }
 
     // Start model

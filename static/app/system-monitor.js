@@ -1,6 +1,4 @@
-const CONTROLLER_BASE_URL = typeof window !== 'undefined' && window.CONTROLLER_BASE_URL
-    ? window.CONTROLLER_BASE_URL
-    : 'http://localhost:5000';
+const API_BASE_URL = '/api/python';
 
 let systemMonitorInstance = null;
 
@@ -791,7 +789,7 @@ export class SystemMonitor {
                     <i class="fas fa-exclamation-circle"></i>
                     <span>无法获取GPU状态</span>
                     <p class="error-hint">错误信息: ${error.message}</p>
-                    <p class="error-suggestion">请确保Python控制器服务已启动并运行在 ${CONTROLLER_BASE_URL}</p>
+                    <p class="error-suggestion">请确保Python控制器服务已启动</p>
                 </div>
                 <div class="node-env-info">
                     <div class="env-header">Node.js 环境信息</div>
@@ -1673,7 +1671,7 @@ export class SystemMonitor {
         if (!container) return;
 
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models`, {
+            const response = await fetch(`${API_BASE_URL}/models/status`, {
                 method: 'GET',
                 timeout: 10000
             });
@@ -1693,7 +1691,7 @@ export class SystemMonitor {
                     <i class="fas fa-exclamation-circle"></i>
                     <span>无法加载模型列表</span>
                     <p class="error-hint">错误信息: ${error.message}</p>
-                    <p class="error-suggestion">请确保Python控制器服务已启动并运行在 ${CONTROLLER_BASE_URL}</p>
+                    <p class="error-suggestion">请确保Python控制器服务已启动</p>
                     <button class="btn btn-primary btn-sm mt-2" onclick="window.systemMonitor.loadModelsList()">
                         <i class="fas fa-sync-alt"></i> 重试
                     </button>
@@ -1704,7 +1702,7 @@ export class SystemMonitor {
 
     async loadCurrentModel() {
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/summary`, {
+            const response = await fetch(`${API_BASE_URL}/models/summary`, {
                 method: 'GET',
                 timeout: 5000
             });
@@ -1807,7 +1805,7 @@ export class SystemMonitor {
         }
 
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/${encodeURIComponent(modelName)}/switch`, {
+            const response = await fetch(`${API_BASE_URL}/models/${encodeURIComponent(modelName)}/switch`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1845,7 +1843,7 @@ export class SystemMonitor {
         }
 
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/${encodeURIComponent(modelName)}/start`, {
+            const response = await fetch(`${API_BASE_URL}/models/${encodeURIComponent(modelName)}/start`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1883,7 +1881,7 @@ export class SystemMonitor {
         }
 
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/${encodeURIComponent(modelName)}/stop`, {
+            const response = await fetch(`${API_BASE_URL}/models/${encodeURIComponent(modelName)}/stop`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

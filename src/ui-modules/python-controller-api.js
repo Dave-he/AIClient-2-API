@@ -79,6 +79,22 @@ export async function handleGetModelStatus(req, res) {
     return true;
 }
 
+export async function handleGetModelSummary(req, res) {
+    try {
+        const headers = {};
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+        const data = await callPythonController('/manage/models/summary', 'GET', null, headers);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
 export async function handleStartModel(req, res, modelName) {
     try {
         const headers = {};

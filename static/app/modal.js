@@ -2276,7 +2276,7 @@ async function loadModelsListForSwitch(modal) {
     if (!container) return;
 
     try {
-        const response = await fetch(`${window.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000'}/manage/models`, {
+        const response = await fetch(`/api/python/models/status`, {
             method: 'GET',
             timeout: 10000
         });
@@ -2291,10 +2291,10 @@ async function loadModelsListForSwitch(modal) {
         // 获取当前运行的模型
         let currentModel = null;
         try {
-            const summaryResponse = await fetch(`${window.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000'}/manage/models/summary`, {
-                method: 'GET',
-                timeout: 5000
-            });
+            const summaryResponse = await fetch(`/api/python/models/summary`, {
+            method: 'GET',
+            timeout: 5000
+        });
             if (summaryResponse.ok) {
                 const summaryData = await summaryResponse.json();
                 currentModel = summaryData?.running_model;
@@ -2403,7 +2403,7 @@ async function switchModel(modelName) {
     }
 
     try {
-        const response = await fetch(`${window.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000'}/manage/models/${encodeURIComponent(modelName)}/switch`, {
+        const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/switch`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -2461,7 +2461,7 @@ async function startModel(modelName) {
     }
 
     try {
-        const response = await fetch(`${window.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000'}/manage/models/${encodeURIComponent(modelName)}/start`, {
+        const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -2516,7 +2516,7 @@ async function stopModel(modelName) {
     }
 
     try {
-        const response = await fetch(`${window.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000'}/manage/models/${encodeURIComponent(modelName)}/stop`, {
+        const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/stop`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
