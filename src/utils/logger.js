@@ -315,6 +315,30 @@ class Logger {
       console.error('Failed to cleanup old logs:', error.message);
     }
   }
+
+  async clearTodayLog() {
+    if (isBrowser) {
+      return false;
+    }
+    const fs = await import('fs');
+    
+    try {
+      const logFile = this.getLogFilePath();
+      if (!logFile) {
+        return false;
+      }
+      
+      if (fs.existsSync(logFile)) {
+        fs.writeFileSync(logFile, '');
+        this.currentLogSize = 0;
+        return true;
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to clear today log:', error.message);
+      return false;
+    }
+  }
 }
 
 const logger = new Logger();
