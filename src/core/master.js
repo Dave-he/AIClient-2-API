@@ -435,7 +435,7 @@ function getStatus() {
  * 创建主进程管理 HTTP 服务器
  */
 function createMasterServer() {
-    const server = http.createServer(async (req, res) => {
+    const server = http.createServer((req, res) => {
         const url = new URL(req.url, `http://${req.headers.host}`);
         const path = url.pathname;
         const method = req.method;
@@ -461,18 +461,28 @@ function createMasterServer() {
         // 重启端点
         if (method === 'POST' && path === '/master/restart') {
             logger.info('[Master] Restart requested via API');
-            const result = await restartWorker();
-            res.writeHead(result.success ? 200 : 500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(result));
+            restartWorker().then(result => {
+                res.writeHead(result.success ? 200 : 500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            }).catch(error => {
+                logger.error('[Master] Restart error:', error.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, message: 'Restart failed: ' + error.message }));
+            });
             return;
         }
 
         // 停止端点
         if (method === 'POST' && path === '/master/stop') {
             logger.info('[Master] Stop requested via API');
-            await stopWorker(true);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true, message: 'Worker stopped' }));
+            stopWorker(true).then(() => {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, message: 'Worker stopped' }));
+            }).catch(error => {
+                logger.error('[Master] Stop error:', error.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, message: 'Stop failed: ' + error.message }));
+            });
             return;
         }
 
