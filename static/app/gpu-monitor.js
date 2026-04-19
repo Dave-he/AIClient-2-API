@@ -14,9 +14,19 @@ export class GPUMonitorModule {
     }
 
     init() {
-        document.addEventListener('DOMContentLoaded', () => {
+        const initialize = () => {
             this.setupEventListeners();
             this.startPolling();
+            this.initGpuStatusElements();
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initialize);
+        } else {
+            initialize();
+        }
+
+        window.addEventListener('componentsLoaded', () => {
             this.initGpuStatusElements();
         });
     }
@@ -25,16 +35,17 @@ export class GPUMonitorModule {
         const container = document.getElementById('gpuStatusContent');
         if (!container) return;
 
+        const t = this.i18n.t.bind(this.i18n);
         container.innerHTML = `
             <div class="gpu-card glass-effect">
                 <div class="gpu-header">
                     <div class="gpu-name" id="gpuName">
                         <i class="fas fa-video-card"></i>
-                        <span>检测中...</span>
+                        <span>${t('gpuMonitor.detecting')}</span>
                     </div>
                     <div class="gpu-status-badge" id="gpuStatusBadge">
                         <span class="status-indicator"></span>
-                        <span>初始化</span>
+                        <span>${t('gpuMonitor.initializing')}</span>
                     </div>
                 </div>
                 
@@ -42,7 +53,7 @@ export class GPUMonitorModule {
                     <div class="metric-card">
                         <div class="metric-icon" id="memoryIcon"><i class="fas fa-memory"></i></div>
                         <div class="metric-info">
-                            <div class="metric-label">显存</div>
+                            <div class="metric-label">${t('gpuMonitor.memory')}</div>
                             <div class="metric-value" id="memoryValue">--</div>
                             <div class="metric-bar-container">
                                 <div class="metric-bar-bg">
@@ -56,7 +67,7 @@ export class GPUMonitorModule {
                     <div class="metric-card">
                         <div class="metric-icon" id="utilIcon"><i class="fas fa-cpu"></i></div>
                         <div class="metric-info">
-                            <div class="metric-label">GPU使用率</div>
+                            <div class="metric-label">${t('gpuMonitor.gpuUtilization')}</div>
                             <div class="metric-value" id="utilValue">--%</div>
                             <div class="metric-gauge">
                                 <svg viewBox="0 0 100 50">
@@ -70,7 +81,7 @@ export class GPUMonitorModule {
                     <div class="metric-card">
                         <div class="metric-icon" id="tempIcon"><i class="fas fa-thermometer-half"></i></div>
                         <div class="metric-info">
-                            <div class="metric-label">温度</div>
+                            <div class="metric-label">${t('gpuMonitor.temperature')}</div>
                             <div class="metric-value" id="tempValue">--°C</div>
                             <div class="metric-bar-container">
                                 <div class="metric-bar-bg">
@@ -84,7 +95,7 @@ export class GPUMonitorModule {
                     <div class="metric-card">
                         <div class="metric-icon" id="powerIcon"><i class="fas fa-bolt"></i></div>
                         <div class="metric-info">
-                            <div class="metric-label">功耗</div>
+                            <div class="metric-label">${t('gpuMonitor.power')}</div>
                             <div class="metric-value" id="powerValue">--W</div>
                             <div class="metric-bar-container">
                                 <div class="metric-bar-bg">
@@ -98,7 +109,7 @@ export class GPUMonitorModule {
                     <div class="metric-card compact">
                         <div class="metric-icon small" id="fanIcon"><i class="fas fa-wind"></i></div>
                         <div class="metric-info">
-                            <div class="metric-label">风扇转速</div>
+                            <div class="metric-label">${t('gpuMonitor.fanSpeed')}</div>
                             <div class="metric-value" id="fanValue">--%</div>
                         </div>
                     </div>
@@ -106,7 +117,7 @@ export class GPUMonitorModule {
                     <div class="metric-card compact">
                         <div class="metric-icon small" id="clockIcon"><i class="fas fa-gauge"></i></div>
                         <div class="metric-info">
-                            <div class="metric-label">核心频率</div>
+                            <div class="metric-label">${t('gpuMonitor.coreClock')}</div>
                             <div class="metric-value" id="clockValue">-- MHz</div>
                         </div>
                     </div>
@@ -216,7 +227,7 @@ export class GPUMonitorModule {
         const statusBadge = document.getElementById('gpuStatusBadge');
         const isActive = gpu.utilization > 10;
         statusBadge.className = `gpu-status-badge ${isActive ? 'active' : 'idle'}`;
-        statusBadge.innerHTML = `<span class="status-indicator"></span><span>${isActive ? '运行中' : '空闲'}</span>`;
+        statusBadge.innerHTML = `<span class="status-indicator"></span><span>${isActive ? this.t('gpuMonitor.running') : this.t('gpuMonitor.idle')}</span>`;
 
         this.lastGpuData = gpu;
     }
@@ -341,7 +352,7 @@ export class GPUMonitorModule {
         ctx.fillStyle = '#6b7280';
         ctx.font = '14px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('暂无数据', width / 2, height / 2);
+        ctx.fillText(this.t('gpuMonitor.noData'), width / 2, height / 2);
     }
 
     renderChart(progress = 1) {
@@ -373,11 +384,12 @@ export class GPUMonitorModule {
     getChartDatasets() {
         const datasets = [];
         
+        const t = this.t.bind(this);
         if (this.currentChartType === 'utilization' || this.currentChartType === 'all') {
             datasets.push({
                 data: this.gpuHistoryData.map(d => d.utilization),
                 color: '#3b82f6',
-                label: 'GPU使用率',
+                label: t('gpuMonitor.gpuUtilization'),
                 gradient: this.createGradient('#3b82f6', '#1d4ed8')
             });
         }
@@ -386,7 +398,7 @@ export class GPUMonitorModule {
             datasets.push({
                 data: this.gpuHistoryData.map(d => d.temperature),
                 color: '#ef4444',
-                label: '温度(°C)',
+                label: t('gpuMonitor.temperature') + '(°C)',
                 gradient: this.createGradient('#ef4444', '#dc2626')
             });
         }
@@ -395,7 +407,7 @@ export class GPUMonitorModule {
             datasets.push({
                 data: this.gpuHistoryData.map(d => d.memory_utilization),
                 color: '#f59e0b',
-                label: '显存使用率',
+                label: t('gpuMonitor.memoryUtilization'),
                 gradient: this.createGradient('#f59e0b', '#d97706')
             });
         }
@@ -404,7 +416,7 @@ export class GPUMonitorModule {
             datasets.push({
                 data: this.gpuHistoryData.map(d => d.power_percent || 0),
                 color: '#06b6d4',
-                label: '功耗(%)',
+                label: t('gpuMonitor.power') + '(%)',
                 gradient: this.createGradient('#06b6d4', '#0891b2')
             });
         }
@@ -467,7 +479,7 @@ export class GPUMonitorModule {
         }
         
         ctx.textAlign = 'center';
-        const timeLabels = ['-60s', '-45s', '-30s', '-15s', '现在'];
+        const timeLabels = ['-60s', '-45s', '-30s', '-15s', this.t('gpuMonitor.now')];
         for (let i = 0; i < 5; i++) {
             const x = padding.left + (chartWidth / 4) * i;
             ctx.fillText(timeLabels[i], x, padding.top + chartHeight + 25);
@@ -477,7 +489,7 @@ export class GPUMonitorModule {
         ctx.translate(20, height / 2);
         ctx.rotate(-Math.PI / 2);
         ctx.textAlign = 'center';
-        ctx.fillText('数值', 0, 0);
+        ctx.fillText(this.t('gpuMonitor.value'), 0, 0);
         ctx.restore();
     }
 
@@ -551,19 +563,20 @@ export class GPUMonitorModule {
     }
 
     drawLegend(ctx, width, padding) {
+        const t = this.t.bind(this);
         const legendItems = [];
         
         if (this.currentChartType === 'utilization' || this.currentChartType === 'all') {
-            legendItems.push({ color: '#3b82f6', label: 'GPU使用率' });
+            legendItems.push({ color: '#3b82f6', label: t('gpuMonitor.gpuUtilization') });
         }
         if (this.currentChartType === 'temperature' || this.currentChartType === 'all') {
-            legendItems.push({ color: '#ef4444', label: '温度(°C)' });
+            legendItems.push({ color: '#ef4444', label: t('gpuMonitor.temperature') + '(°C)' });
         }
         if (this.currentChartType === 'memory' || this.currentChartType === 'all') {
-            legendItems.push({ color: '#f59e0b', label: '显存使用率' });
+            legendItems.push({ color: '#f59e0b', label: t('gpuMonitor.memoryUtilization') });
         }
         if (this.currentChartType === 'power' || this.currentChartType === 'all') {
-            legendItems.push({ color: '#06b6d4', label: '功耗(%)' });
+            legendItems.push({ color: '#06b6d4', label: t('gpuMonitor.power') + '(%)' });
         }
         
         const legendWidth = legendItems.length * 120;
@@ -666,7 +679,7 @@ export class GPUMonitorModule {
         element.classList.add('status-transition');
         setTimeout(() => {
             element.className = `status-badge ${isOnline ? 'online' : 'offline'} status-transition`;
-            element.innerHTML = `<i class="fas fa-circle"></i> <span>${isOnline ? '已连接' : '未连接'}</span>`;
+            element.innerHTML = `<i class="fas fa-circle"></i> <span>${isOnline ? this.t('gpuMonitor.connected') : this.t('gpuMonitor.disconnected')}</span>`;
         }, 50);
     }
 
@@ -731,21 +744,23 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch models status: ${error.message}`);
+            const t = this.t.bind(this);
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
-                    <span>无法获取模型状态</span>
+                    <span>${t('gpuMonitor.cannotGetModelStatus')}</span>
                 </div>
             `;
         }
     }
 
     renderModelsStatus(data, container) {
+        const t = this.t.bind(this);
         if (!data || Object.keys(data).length === 0) {
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-info-circle"></i>
-                    <span>暂无配置的模型</span>
+                    <span>${t('gpuMonitor.noConfiguredModels')}</span>
                 </div>
             `;
             return;
@@ -756,12 +771,12 @@ export class GPUMonitorModule {
                 <div class="model-info">
                     <span class="model-name">${name}</span>
                     ${status.active_requests > 0 ? `
-                        <span class="model-requests">${status.active_requests} 请求中</span>
+                        <span class="model-requests">${status.active_requests} ${t('gpuMonitor.requesting')}</span>
                     ` : ''}
                 </div>
                 <div class="model-status">
                     <span class="status-indicator ${status.running ? 'running' : 'stopped'}"></span>
-                    <span>${status.running ? '运行中' : '已停止'}</span>
+                    <span>${status.running ? t('gpuMonitor.running') : t('gpuMonitor.stopped')}</span>
                 </div>
             </div>
         `).join('');
@@ -798,21 +813,23 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch queue status: ${error.message}`);
+            const t = this.t.bind(this);
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
-                    <span>无法获取队列状态</span>
+                    <span>${t('gpuMonitor.cannotGetQueueStatus')}</span>
                 </div>
             `;
         }
     }
 
     renderQueueStatus(data, container) {
+        const t = this.t.bind(this);
         if (!data || Object.keys(data).length === 0) {
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-info-circle"></i>
-                    <span>暂无队列信息</span>
+                    <span>${t('gpuMonitor.noQueueInfo')}</span>
                 </div>
             `;
             return;
@@ -833,22 +850,22 @@ export class GPUMonitorModule {
                 <div class="queue-card">
                     <div class="queue-icon"><i class="fas fa-tasks"></i></div>
                     <div class="queue-value">${totalActive}</div>
-                    <div class="queue-label">活跃请求</div>
+                    <div class="queue-label">${t('gpuMonitor.activeRequests')}</div>
                 </div>
                 <div class="queue-card">
                     <div class="queue-icon"><i class="fas fa-gauge"></i></div>
                     <div class="queue-value">${totalLimit}</div>
-                    <div class="queue-label">并发限制</div>
+                    <div class="queue-label">${t('gpuMonitor.concurrencyLimit')}</div>
                 </div>
                 <div class="queue-card">
                     <div class="queue-icon"><i class="fas fa-check-circle"></i></div>
-                    <div class="queue-value ${canAccept ? 'success' : 'danger'}">${canAccept ? '是' : '否'}</div>
-                    <div class="queue-label">可接受新请求</div>
+                    <div class="queue-value ${canAccept ? 'success' : 'danger'}">${canAccept ? t('gpuMonitor.yes') : t('gpuMonitor.no')}</div>
+                    <div class="queue-label">${t('gpuMonitor.canAcceptNew')}</div>
                 </div>
                 <div class="queue-card">
                     <div class="queue-icon"><i class="fas fa-chart-line"></i></div>
                     <div class="queue-value">${totalLimit - totalActive}</div>
-                    <div class="queue-label">剩余槽位</div>
+                    <div class="queue-label">${t('gpuMonitor.remainingSlots')}</div>
                 </div>
             </div>
         `;
@@ -883,43 +900,45 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch model controls: ${error.message}`);
+            const t = this.t.bind(this);
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
-                    <span>无法获取模型控制信息</span>
+                    <span>${t('gpuMonitor.cannotGetModelControl')}</span>
                 </div>
             `;
         }
     }
 
     renderModelControls(data, container) {
-        if (!data || Object.keys(data).length === 0) {
+        const t = this.t.bind(this);
+        if (!data || data.length === 0) {
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-info-circle"></i>
-                    <span>暂无可控制的模型</span>
+                    <span>${t('gpuMonitor.noControllableModels')}</span>
                 </div>
             `;
             return;
         }
 
-        const controls = Object.entries(data).map(([name, status]) => `
+        const controls = data.map(model => `
             <div class="control-item">
-                <span class="model-name">${name}</span>
+                <span class="model-name">${model.name}</span>
                 <div class="control-btn-group">
-                    ${status.running ? `
-                        <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${name}')">
-                            <i class="fas fa-stop"></i> 停止
+                    ${model.running ? `
+                        <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${model.name}')">
+                            <i class="fas fa-stop"></i> ${t('gpuMonitor.stop')}
                         </button>
-                        <button class="btn btn-outline btn-sm" onclick="window.GPUMonitor.switchModel('${name}')">
-                            <i class="fas fa-exchange-alt"></i> 切换并测试
+                        <button class="btn btn-outline btn-sm" onclick="window.GPUMonitor.switchModel('${model.name}')">
+                            <i class="fas fa-exchange-alt"></i> ${t('gpuMonitor.switchAndTest')}
                         </button>
-                        <button class="btn btn-info btn-sm" onclick="window.GPUMonitor.runModelTest('${name}')">
-                            <i class="fas fa-flask"></i> 测试
+                        <button class="btn btn-info btn-sm" onclick="window.GPUMonitor.runModelTest('${model.name}')">
+                            <i class="fas fa-flask"></i> ${t('gpuMonitor.test')}
                         </button>
                     ` : `
-                        <button class="btn btn-success btn-sm" onclick="window.GPUMonitor.startModel('${name}')">
-                            <i class="fas fa-play"></i> 启动
+                        <button class="btn btn-success btn-sm" onclick="window.GPUMonitor.startModel('${model.name}')">
+                            <i class="fas fa-play"></i> ${t('gpuMonitor.start')}
                         </button>
                     `}
                 </div>
@@ -951,7 +970,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to start model ${modelName}: ${error.message}`);
-            alert(`启动模型失败: ${error.message}`);
+            alert(`${this.t('gpuMonitor.startModelFailed')}: ${error.message}`);
         }
     }
 
@@ -977,7 +996,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to stop model ${modelName}: ${error.message}`);
-            alert(`停止模型失败: ${error.message}`);
+            alert(`${this.t('gpuMonitor.stopModelFailed')}: ${error.message}`);
         }
     }
 
@@ -1007,7 +1026,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to switch model ${modelName}: ${error.message}`);
-            alert(`切换模型失败: ${error.message}`);
+            alert(`${this.t('gpuMonitor.switchModelFailed')}: ${error.message}`);
         }
     }
 
@@ -1035,7 +1054,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to test model ${modelName}: ${error.message}`);
-            alert(`测试模型失败: ${error.message}`);
+            alert(`${this.t('gpuMonitor.testModelFailed')}: ${error.message}`);
         }
     }
 
@@ -1065,6 +1084,7 @@ export class GPUMonitorModule {
 
     generateReportHTML() {
         const report = this.testReport;
+        const t = this.t.bind(this);
         
         const getStatusClass = (status) => {
             switch (status) {
@@ -1077,28 +1097,28 @@ export class GPUMonitorModule {
 
         const getStatusText = (status) => {
             switch (status) {
-                case 'passed': return '全部通过';
-                case 'degraded': return '部分失败';
-                case 'failed': return '测试失败';
+                case 'passed': return t('gpuMonitor.allPassed');
+                case 'degraded': return t('gpuMonitor.partialFailed');
+                case 'failed': return t('gpuMonitor.testFailed');
                 default: return status;
             }
         };
 
         const getFeatureText = (feature) => {
             switch (feature) {
-                case 'image': return '图片处理';
-                case 'tools': return '工具调用';
-                case 'chat': return '聊天交互';
+                case 'image': return t('gpuMonitor.imageProcessing');
+                case 'tools': return t('gpuMonitor.toolCalls');
+                case 'chat': return t('gpuMonitor.chatInteraction');
                 default: return feature;
             }
         };
 
         const getTestName = (testName) => {
             switch (testName) {
-                case 'chat_basic': return '基础聊天测试';
-                case 'chat_streaming': return '流式响应测试';
-                case 'tool_integration': return '工具集成测试';
-                case 'image_processing': return '图片处理测试';
+                case 'chat_basic': return t('gpuMonitor.basicChatTest');
+                case 'chat_streaming': return t('gpuMonitor.streamingTest');
+                case 'tool_integration': return t('gpuMonitor.toolIntegrationTest');
+                case 'image_processing': return t('gpuMonitor.imageProcessingTest');
                 default: return testName;
             }
         };
@@ -1114,10 +1134,10 @@ export class GPUMonitorModule {
             <div class="test-result-item ${result.status}">
                 <div class="test-header">
                     <span class="test-name">${getTestName(result.test_name)}</span>
-                    <span class="result-badge ${result.status}">${result.status === 'passed' ? '通过' : result.status === 'failed' ? '失败' : '跳过'}</span>
+                    <span class="result-badge ${result.status}">${result.status === 'passed' ? t('gpuMonitor.passed') : result.status === 'failed' ? t('gpuMonitor.failed') : t('gpuMonitor.skipped')}</span>
                 </div>
                 <div class="test-details">
-                    <span class="test-duration">耗时: ${result.duration.toFixed(3)}s</span>
+                    <span class="test-duration">${t('gpuMonitor.duration')}: ${result.duration.toFixed(3)}s</span>
                     ${result.metrics.tps ? `<span class="test-tps">TPS: ${result.metrics.tps.toFixed(2)}</span>` : ''}
                 </div>
                 ${result.error ? `<div class="test-error"><i class="fas fa-exclamation-triangle"></i> ${result.error}</div>` : ''}
@@ -1136,7 +1156,7 @@ export class GPUMonitorModule {
         return `
             <div class="test-report-modal">
                 <div class="modal-header">
-                    <h3><i class="fas fa-file-report"></i> 模型测试报告</h3>
+                    <h3><i class="fas fa-file-report"></i> ${t('gpuMonitor.modelTestReport')}</h3>
                     <button class="modal-close"><i class="fas fa-times"></i></button>
                 </div>
                 <div class="modal-body">
@@ -1150,49 +1170,49 @@ export class GPUMonitorModule {
 
                     <div class="report-sections">
                         <div class="report-section">
-                            <h4><i class="fas fa-check-circle"></i> 功能支持</h4>
+                            <h4><i class="fas fa-check-circle"></i> ${t('gpuMonitor.featureSupport')}</h4>
                             <div class="feature-grid">${featureGrid}</div>
                         </div>
 
                         <div class="report-section">
-                            <h4><i class="fas fa-chart-line"></i> 性能指标</h4>
+                            <h4><i class="fas fa-chart-line"></i> ${t('gpuMonitor.performanceMetrics')}</h4>
                             <div class="metrics-grid">
                                 <div class="metric-item">
                                     <div class="metric-value">${report.performance_metrics?.overall?.avg_tps?.toFixed(2) || '0'}</div>
-                                    <div class="metric-label">平均 TPS</div>
+                                    <div class="metric-label">${t('gpuMonitor.avgTps')}</div>
                                 </div>
                                 <div class="metric-item">
                                     <div class="metric-value">${report.performance_metrics?.overall?.avg_latency?.toFixed(3) || '0'}s</div>
-                                    <div class="metric-label">平均延迟</div>
+                                    <div class="metric-label">${t('gpuMonitor.avgLatency')}</div>
                                 </div>
                                 <div class="metric-item">
                                     <div class="metric-value">${report.performance_metrics?.overall?.pass_rate?.toFixed(1) || '0'}%</div>
-                                    <div class="metric-label">通过率</div>
+                                    <div class="metric-label">${t('gpuMonitor.passRate')}</div>
                                 </div>
                             </div>
                         </div>
 
                         <div class="report-section">
-                            <h4><i class="fas fa-server"></i> 资源使用</h4>
+                            <h4><i class="fas fa-server"></i> ${t('gpuMonitor.resourceUsage')}</h4>
                             <div class="resource-grid">
                                 <div class="resource-item">
                                     <div class="resource-header">CPU</div>
                                     <div class="resource-info">
-                                        <span>平均: ${report.resource_utilization?.cpu?.avg_percent || '0'}%</span>
+                                        <span>${t('gpuMonitor.avg')}: ${report.resource_utilization?.cpu?.avg_percent || '0'}%</span>
                                     </div>
                                 </div>
                                 <div class="resource-item">
-                                    <div class="resource-header">内存</div>
+                                    <div class="resource-header">${t('gpuMonitor.memory')}</div>
                                     <div class="resource-info">
-                                        <span>变化: ${report.resource_utilization?.memory?.delta_mb > 0 ? '+' : ''}${report.resource_utilization?.memory?.delta_mb || '0'} MB</span>
+                                        <span>${t('gpuMonitor.change')}: ${report.resource_utilization?.memory?.delta_mb > 0 ? '+' : ''}${report.resource_utilization?.memory?.delta_mb || '0'} MB</span>
                                     </div>
                                 </div>
                                 ${report.resource_utilization?.gpu?.available ? `
                                 <div class="resource-item">
                                     <div class="resource-header">GPU</div>
                                     <div class="resource-info">
-                                        <span>使用率: ${report.resource_utilization?.gpu?.end_utilization || '0'}%</span>
-                                        <span>温度: ${report.resource_utilization?.gpu?.end_temperature || '0'}°C</span>
+                                        <span>${t('gpuMonitor.utilization')}: ${report.resource_utilization?.gpu?.end_utilization || '0'}%</span>
+                                        <span>${t('gpuMonitor.temperature')}: ${report.resource_utilization?.gpu?.end_temperature || '0'}°C</span>
                                     </div>
                                 </div>
                                 ` : ''}
@@ -1200,13 +1220,13 @@ export class GPUMonitorModule {
                         </div>
 
                         <div class="report-section">
-                            <h4><i class="fas fa-list-check"></i> 测试结果详情</h4>
+                            <h4><i class="fas fa-list-check"></i> ${t('gpuMonitor.testResultsDetail')}</h4>
                             <div class="test-results-list">${testResults}</div>
                         </div>
 
                         ${(errorsList || warningsList) ? `
                         <div class="report-section">
-                            <h4><i class="fas fa-alert-triangle"></i> 警告与错误</h4>
+                            <h4><i class="fas fa-alert-triangle"></i> ${t('gpuMonitor.warningsAndErrors')}</h4>
                             ${errorsList ? `<div class="errors-list">${errorsList}</div>` : ''}
                             ${warningsList ? `<div class="warnings-list">${warningsList}</div>` : ''}
                         </div>
@@ -1246,10 +1266,11 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch Python service status: ${error.message}`);
+            const t = this.t.bind(this);
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
-                    <span>无法获取服务状态</span>
+                    <span>${t('gpuMonitor.cannotGetServiceStatus')}</span>
                 </div>
             `;
             this.updateServiceButtons(false);
@@ -1257,6 +1278,7 @@ export class GPUMonitorModule {
     }
 
     renderPythonServiceStatus(data, container) {
+        const t = this.t.bind(this);
         const isRunning = data.running;
         const status = data.status || 'unknown';
         const serviceName = data.service || 'aiclient-python';
@@ -1265,22 +1287,22 @@ export class GPUMonitorModule {
         container.innerHTML = `
             <div class="service-info-grid">
                 <div class="service-info-card">
-                    <div class="service-info-label">服务名称</div>
+                    <div class="service-info-label">${t('gpuMonitor.serviceName')}</div>
                     <div class="service-info-value">${serviceName}</div>
                 </div>
                 <div class="service-info-card">
-                    <div class="service-info-label">运行状态</div>
+                    <div class="service-info-label">${t('gpuMonitor.runStatus')}</div>
                     <div class="service-info-value ${isRunning ? 'running' : 'stopped'}">
                         <i class="fas ${isRunning ? 'fa-check-circle' : 'fa-times-circle'}"></i>
-                        ${isRunning ? '运行中' : '已停止'}
+                        ${isRunning ? t('gpuMonitor.running') : t('gpuMonitor.stopped')}
                     </div>
                 </div>
                 <div class="service-info-card">
-                    <div class="service-info-label">systemd状态</div>
+                    <div class="service-info-label">systemd ${t('gpuMonitor.status')}</div>
                     <div class="service-info-value">${status}</div>
                 </div>
                 <div class="service-info-card">
-                    <div class="service-info-label">配置文件</div>
+                    <div class="service-info-label">${t('gpuMonitor.configFile')}</div>
                     <div class="service-info-value" style="font-size: 0.75rem; word-break: break-all;">${configFile}</div>
                 </div>
             </div>
@@ -1321,7 +1343,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to start Python service: ${error.message}`);
-            alert(`启动失败: ${error.message}`);
+            alert(`${this.t('gpuMonitor.startFailed')}: ${error.message}`);
         }
     }
 
@@ -1347,7 +1369,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to stop Python service: ${error.message}`);
-            alert(`停止失败: ${error.message}`);
+            alert(`${this.t('gpuMonitor.stopFailed')}: ${error.message}`);
         }
     }
 
@@ -1373,7 +1395,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to restart Python service: ${error.message}`);
-            alert(`重启失败: ${error.message}`);
+            alert(`${this.t('gpuMonitor.restartFailed')}: ${error.message}`);
         }
     }
 
@@ -1406,21 +1428,23 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch config: ${error.message}`);
+            const t = this.t.bind(this);
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
-                    <span>无法获取配置</span>
+                    <span>${t('gpuMonitor.cannotGetConfig')}</span>
                 </div>
             `;
         }
     }
 
     renderConfig(config, container) {
+        const t = this.t.bind(this);
         if (!config) {
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-info-circle"></i>
-                    <span>暂无配置</span>
+                    <span>${t('gpuMonitor.noConfig')}</span>
                 </div>
             `;
             return;
@@ -1430,17 +1454,17 @@ export class GPUMonitorModule {
 
         if (config.models) {
             html += `<div class="config-section">
-                <div class="config-section-header"><i class="fas fa-cubes"></i> 模型配置 (${Object.keys(config.models).length})</div>`;
+                <div class="config-section-header"><i class="fas fa-cubes"></i> ${t('gpuMonitor.modelConfig')} (${Object.keys(config.models).length})</div>`;
             Object.entries(config.models).forEach(([name, modelConfig]) => {
                 const isRunning = modelConfig.running !== undefined ? modelConfig.running : false;
                 const port = modelConfig.port || '-';
                 const memory = modelConfig.required_memory || '-';
-                const supportsImages = modelConfig.supports_images ? '是' : '否';
+                const supportsImages = modelConfig.supports_images ? t('gpuMonitor.yes') : t('gpuMonitor.no');
                 html += `
                     <div class="config-item">
                         <div>
                             <div class="config-item-label">${name}</div>
-                            <div style="font-size: 0.7rem; color: var(--text-muted);">端口: ${port} | 内存: ${memory} | 多模态: ${supportsImages}</div>
+                            <div style="font-size: 0.7rem; color: var(--text-muted);">${t('gpuMonitor.port')}: ${port} | ${t('gpuMonitor.memory')}: ${memory} | ${t('gpuMonitor.multimodal')}: ${supportsImages}</div>
                         </div>
                         <span class="status-indicator ${isRunning ? 'running' : 'stopped'}"></span>
                     </div>
@@ -1451,14 +1475,14 @@ export class GPUMonitorModule {
 
         if (config.settings) {
             html += `<div class="config-section">
-                <div class="config-section-header"><i class="fas fa-sliders-h"></i> 全局设置</div>`;
+                <div class="config-section-header"><i class="fas fa-sliders-h"></i> ${t('gpuMonitor.globalSettings')}</div>`;
             
             const settings = config.settings;
             const settingItems = [
-                { label: '并发限制', value: settings.concurrency_limit || '-' },
-                { label: '最大队列长度', value: settings.max_queue_length || '-' },
-                { label: '请求超时', value: settings.request_timeout || '-' },
-                { label: '预热模型', value: settings.warmup_model || '-' }
+                { label: t('gpuMonitor.concurrencyLimit'), value: settings.concurrency_limit || '-' },
+                { label: t('gpuMonitor.maxQueueLength'), value: settings.max_queue_length || '-' },
+                { label: t('gpuMonitor.requestTimeout'), value: settings.request_timeout || '-' },
+                { label: t('gpuMonitor.warmupModel'), value: settings.warmup_model || '-' }
             ];
             
             settingItems.forEach(item => {
@@ -1475,7 +1499,7 @@ export class GPUMonitorModule {
         container.innerHTML = html || `
             <div class="status-loading">
                 <i class="fas fa-info-circle"></i>
-                <span>暂无配置信息</span>
+                <span>${t('gpuMonitor.noConfigInfo')}</span>
             </div>
         `;
     }

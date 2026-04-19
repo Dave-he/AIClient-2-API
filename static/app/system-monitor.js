@@ -151,7 +151,7 @@ export class SystemMonitor {
 
         const refreshModelsListBtn = document.getElementById('refreshModelsListBtn');
         if (refreshModelsListBtn) {
-            refreshModelsListBtn.addEventListener('click', () => this.loadModelsList());
+            refreshModelsListBtn.addEventListener('click', () => this.loadModelsAndRender());
         }
 
         const timeRangeTabs = document.querySelectorAll('.time-range-tab');
@@ -173,8 +173,7 @@ export class SystemMonitor {
                 this.loadTokenUsageData();
                 this.loadGpuHistoryFromServer();
             } else if (event.detail.section === 'gpu-monitor') {
-                this.loadModelsList();
-                this.loadCurrentModel();
+                this.loadModelsAndRender();
                 this.refreshGpuStatus();
                 this.loadGpuHistoryFromServer();
                 this.ensureGpuChartInitialized();
@@ -1676,8 +1675,6 @@ export class SystemMonitor {
 
             const data = await response.json();
             this.modelsList = data?.models || [];
-            
-            this.renderQuickSwitchPanel();
         } catch (error) {
             console.log('[SystemMonitor] Failed to load models list:', error.message);
             container.innerHTML = `
@@ -1686,7 +1683,7 @@ export class SystemMonitor {
                     <span>无法加载模型列表</span>
                     <p class="error-hint">错误信息: ${error.message}</p>
                     <p class="error-suggestion">请确保Python控制器服务已启动</p>
-                    <button class="btn btn-primary btn-sm mt-2" onclick="window.systemMonitor.loadModelsList()">
+                    <button class="btn btn-primary btn-sm mt-2" onclick="window.systemMonitor.loadModelsAndRender()">
                         <i class="fas fa-sync-alt"></i> 重试
                     </button>
                 </div>
@@ -1711,10 +1708,20 @@ export class SystemMonitor {
             } else {
                 this.currentModel = null;
             }
-            
-            this.renderQuickSwitchPanel();
         } catch (error) {
             console.log('[SystemMonitor] Failed to load current model:', error.message);
+        }
+    }
+
+    async loadModelsAndRender() {
+        try {
+            await Promise.all([
+                this.loadModelsList(),
+                this.loadCurrentModel()
+            ]);
+            this.renderQuickSwitchPanel();
+        } catch (error) {
+            console.log('[SystemMonitor] Failed to load models:', error.message);
         }
     }
 

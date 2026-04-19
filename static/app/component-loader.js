@@ -156,6 +156,18 @@ async function initializeComponents() {
         
         await loadComponents(sectionComponents);
         
+        // 默认显示 dashboard 部分
+        setTimeout(() => {
+            const dashboardSection = document.getElementById('dashboard');
+            const dashboardNav = document.querySelector('.nav-item[data-section="dashboard"]');
+            if (dashboardSection) {
+                dashboardSection.classList.add('active');
+            }
+            if (dashboardNav) {
+                dashboardNav.classList.add('active');
+            }
+        }, 50);
+        
         console.log('All components loaded successfully');
         // 触发组件加载完成事件
         window.dispatchEvent(new CustomEvent('componentsLoaded'));
