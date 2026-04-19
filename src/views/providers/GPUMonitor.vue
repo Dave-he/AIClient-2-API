@@ -627,13 +627,39 @@ const addChartData = (utilization, temperature, memory, power) => {
   updateChart()
 }
 
+// 添加防抖函数
+const debounce = (func, delay) => {
+  let timeoutId
+  return (...args) => {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => func.apply(null, args), delay)
+  }
+}
+
+// 请求缓存
+const requestCache = {
+  gpuStatus: { timestamp: 0, data: null },
+  modelsStatus: { timestamp: 0, data: null },
+  queueStatus: { timestamp: 0, data: null },
+  availableModels: { timestamp: 0, data: null }
+}
+
+const CACHE_DURATION = 2000 // 缓存2秒
+
 const refreshGpuStatus = async () => {
+  const now = Date.now()
+  if (now - requestCache.gpuStatus.timestamp < CACHE_DURATION && requestCache.gpuStatus.data) {
+    gpuStatus.value = requestCache.gpuStatus.data
+    return
+  }
+  
   loading.value = true
   try {
     const response = await fetch('/api/python/gpu/status')
     const result = await response.json()
     if (result.success) {
       gpuStatus.value = result
+      requestCache.gpuStatus = { timestamp: now, data: result }
       addChartData(
         result.utilization || Math.floor(Math.random() * 30) + 10,
         result.temperature || Math.floor(Math.random() * 20) + 50,
@@ -662,6 +688,12 @@ const refreshGpuStatus = async () => {
 }
 
 const loadModelsStatus = async () => {
+  const now = Date.now()
+  if (now - requestCache.modelsStatus.timestamp < CACHE_DURATION && requestCache.modelsStatus.data) {
+    models.value = requestCache.modelsStatus.data
+    return
+  }
+  
   loadingModels.value = true
   try {
     const response = await fetch('/api/python/models/status', { timeout: 5000 })
@@ -669,6 +701,7 @@ const loadModelsStatus = async () => {
       const result = await response.json()
       if (result.success) {
         models.value = result.models || []
+        requestCache.modelsStatus = { timestamp: now, data: result.models || [] }
       }
     }
   } catch (error) {
@@ -683,6 +716,12 @@ const loadModelsStatus = async () => {
 }
 
 const loadQueueStatus = async () => {
+  const now = Date.now()
+  if (now - requestCache.queueStatus.timestamp < CACHE_DURATION && requestCache.queueStatus.data) {
+    queueStats.value = requestCache.queueStatus.data
+    return
+  }
+  
   loadingQueue.value = true
   try {
     const response = await fetch('/api/python/queue/status', { timeout: 5000 })
@@ -690,6 +729,7 @@ const loadQueueStatus = async () => {
       const result = await response.json()
       if (result.success) {
         queueStats.value = result.queue || {}
+        requestCache.queueStatus = { timestamp: now, data: result.queue || {} }
       }
     }
   } catch (error) {
@@ -706,6 +746,12 @@ const loadQueueStatus = async () => {
 }
 
 const loadAvailableModels = async () => {
+  const now = Date.now()
+  if (now - requestCache.availableModels.timestamp < CACHE_DURATION && requestCache.availableModels.data) {
+    availableModels.value = requestCache.availableModels.data
+    return
+  }
+  
   loadingControl.value = true
   try {
     const response = await fetch('/api/python/models/status', { timeout: 5000 })
@@ -714,6 +760,7 @@ const loadAvailableModels = async () => {
       if (result.success) {
         // 假设返回的models包含所有模型，我们将其作为可用模型
         availableModels.value = result.models || []
+        requestCache.availableModels = { timestamp: now, data: result.models || [] }
       }
     }
   } catch (error) {
@@ -728,6 +775,12 @@ const loadAvailableModels = async () => {
     loadingControl.value = false
   }
 }
+
+// 防抖处理
+const debouncedRefreshGpuStatus = debounce(refreshGpuStatus, 300)
+const debouncedLoadModelsStatus = debounce(loadModelsStatus, 300)
+const debouncedLoadQueueStatus = debounce(loadQueueStatus, 300)
+const debouncedLoadAvailableModels = debounce(loadAvailableModels, 300)
 
 const switchModel = async (modelName) => {
   try {

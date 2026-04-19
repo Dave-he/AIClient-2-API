@@ -1459,7 +1459,6 @@ if __name__ == "__main__":
     
     # Reinitialize logger with custom log directory if provided
     if args.log_dir:
-        global logger
         logger = setup_logger(log_dir=args.log_dir)
     
     logger.info(f"Starting AI Controller service on port {args.port}")
