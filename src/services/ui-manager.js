@@ -13,6 +13,7 @@ import * as systemApi from '../ui-modules/system-api.js';
 import * as updateApi from '../ui-modules/update-api.js';
 import * as oauthApi from '../ui-modules/oauth-api.js';
 import * as customModelsApi from '../ui-modules/custom-models-api.js';
+import * as pythonControllerApi from '../ui-modules/python-controller-api.js';
 import * as eventBroadcast from '../ui-modules/event-broadcast.js';
 
 // Re-export from event-broadcast module
@@ -515,7 +516,54 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await configApi.handleHotReloadInvalidateAdapter(req, res);
     }
 
-    // Python GPU status proxy endpoint
+    // Python Controller API - VLLM Models Management
+    // Get available VLLM models
+    if (method === 'GET' && pathParam === '/api/python/vllm/models') {
+        return await pythonControllerApi.handleGetVLLMModels(req, res);
+    }
+
+    // Get model status
+    if (method === 'GET' && pathParam === '/api/python/models/status') {
+        return await pythonControllerApi.handleGetModelStatus(req, res);
+    }
+
+    // Start model
+    const startModelMatch = pathParam.match(/^\/api\/python\/models\/([^\/]+)\/start$/);
+    if (method === 'POST' && startModelMatch) {
+        const modelName = decodeURIComponent(startModelMatch[1]);
+        return await pythonControllerApi.handleStartModel(req, res, modelName);
+    }
+
+    // Stop model
+    const stopModelMatch = pathParam.match(/^\/api\/python\/models\/([^\/]+)\/stop$/);
+    if (method === 'POST' && stopModelMatch) {
+        const modelName = decodeURIComponent(stopModelMatch[1]);
+        return await pythonControllerApi.handleStopModel(req, res, modelName);
+    }
+
+    // Switch model (one-click model switching)
+    const switchModelMatch = pathParam.match(/^\/api\/python\/models\/([^\/]+)\/switch$/);
+    if (method === 'POST' && switchModelMatch) {
+        const modelName = decodeURIComponent(switchModelMatch[1]);
+        return await pythonControllerApi.handleSwitchModel(req, res, modelName);
+    }
+
+    // Get GPU status via Python controller
+    if (method === 'GET' && pathParam === '/api/python/gpu/status') {
+        return await pythonControllerApi.handleGetGPUStatus(req, res);
+    }
+
+    // Get queue status
+    if (method === 'GET' && pathParam === '/api/python/queue/status') {
+        return await pythonControllerApi.handleGetQueueStatus(req, res);
+    }
+
+    // Get health status
+    if (method === 'GET' && pathParam === '/api/python/health') {
+        return await pythonControllerApi.handleGetHealthStatus(req, res);
+    }
+
+    // Python GPU status proxy endpoint (legacy - kept for backward compatibility)
     if (method === 'GET' && pathParam === '/api/python-gpu/status') {
         return await handlePythonGpuStatus(req, res, currentConfig);
     }

@@ -26,6 +26,18 @@ from core.metrics import MetricsCollector
 from core.prometheus_exporter import PrometheusExporter
 from core.structured_logger import StructuredLogger, RequestContext
 from core.redis_client import redis_client
+from core.vllm_manager import (
+    get_available_models,
+    get_current_model_info,
+    start_vllm_service,
+    stop_vllm_service,
+    restart_vllm_service,
+    get_vllm_service_status,
+    switch_vllm_model,
+    MODEL_BASE_PATH,
+    VLLM_SERVICE_NAME,
+    VLLM_DEFAULT_PORT
+)
 from middleware.error_handler import (
     http_exception_handler,
     generic_exception_handler,
@@ -600,80 +612,6 @@ async def get_queue_status():
         }
     return queue_info
 
-@app.get("/manage/preload")
-async def get_preload_status():
-    logger.info("Getting preload status")
-    return {
-        "preloaded_models": scheduler.get_preloaded_models(),
-        "all_models": scheduler.get_available_models()
-    }
-
-@app.post("/manage/preload/{model_name}")
-async def preload_model(model_name: str):
-    logger.info(f"Preloading model {model_name}")
-    if not scheduler.is_model_available(model_name):
-        raise ModelNotFoundException(model_name)
-
-    success = await scheduler.start_model(model_name)
-    if success:
-        return {"status": "preloaded", "model": model_name}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to preload model {model_name}")
-
-@app.post("/manage/models/{model_name}/start")
-async def start_model(model_name: str):
-    logger.info(f"Starting model {model_name}")
-    if not scheduler.is_model_available(model_name):
-        raise ModelNotFoundException(model_name)
-
-    if scheduler.is_model_running(model_name):
-        return {"status": "already_running", "model": model_name}
-
-    success = await scheduler.start_model(model_name)
-    if success:
-        return {"status": "starting", "model": model_name}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to start model {model_name}")
-
-@app.post("/manage/models/{model_name}/stop")
-async def stop_model(model_name: str):
-    logger.info(f"Stopping model {model_name}")
-    if not scheduler.is_model_available(model_name):
-        raise ModelNotFoundException(model_name)
-
-    if not scheduler.is_model_running(model_name):
-        return {"status": "already_stopped", "model": model_name}
-
-    success = await scheduler.stop_model(model_name)
-    if success:
-        return {"status": "stopped", "model": model_name}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to stop model {model_name}")
-
-@app.post("/manage/models/{model_name}/switch")
-async def switch_to_model(model_name: str):
-    logger.info(f"Switching to model {model_name}")
-    if not scheduler.is_model_available(model_name):
-        raise ModelNotFoundException(model_name)
-
-    success = await scheduler.switch_model(model_name)
-    if success:
-        return {"status": "switched", "model": model_name}
-    else:
-        raise HTTPException(status_code=503, detail=f"Failed to switch to model {model_name}, insufficient memory")
-
-@app.get("/manage/config")
-async def get_config():
-    logger.info("Getting current configuration")
-    return config_watcher.get_config()
-
-@app.post("/manage/config/reload")
-async def reload_config():
-    logger.info("Manual configuration reload requested")
-    new_config = config_watcher.load_config()
-    on_config_changed(new_config)
-    return {"status": "reloaded", "config": new_config}
-
 @app.get("/manage/metrics")
 async def get_metrics():
     logger.info("Getting metrics")
@@ -707,44 +645,6 @@ async def health_check_detailed():
         "gpu": gpu_status,
         "metrics": metrics.get_detailed_metrics()
     }
-
-@app.get("/manage/preload/status")
-async def get_preload_status():
-    logger.info("Getting preload status")
-    return scheduler.get_preload_status()
-
-@app.post("/manage/preload/{model_name}/enable")
-async def enable_preload(model_name: str):
-    logger.info(f"Enabling preload for model {model_name}")
-    if not scheduler.is_model_available(model_name):
-        raise ModelNotFoundException(model_name)
-
-    success = scheduler.schedule_preload(model_name)
-    if success:
-        return {"status": "preload_enabled", "model": model_name}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to enable preload for model {model_name}")
-
-@app.post("/manage/preload/{model_name}/disable")
-async def disable_preload(model_name: str):
-    logger.info(f"Disabling preload for model {model_name}")
-    if not scheduler.is_model_available(model_name):
-        raise ModelNotFoundException(model_name)
-
-    success = scheduler.cancel_preload(model_name)
-    if success:
-        return {"status": "preload_disabled", "model": model_name}
-    else:
-        return {"status": "already_disabled", "model": model_name}
-
-@app.post("/manage/preload/all")
-async def preload_all_models():
-    logger.info("Preloading all models")
-    results = {}
-    for model_name in scheduler.get_available_models():
-        success = scheduler.schedule_preload(model_name)
-        results[model_name] = {"status": "preloading" if success else "failed"}
-    return results
 
 @app.get("/manage/health/alert")
 async def check_alert_status():
@@ -869,6 +769,128 @@ async def configure_gpu_history(enabled: Optional[bool] = None, max_days: Option
 @app.get("/manage/websocket/connections")
 async def get_websocket_connections():
     return ws_manager.get_connection_stats()
+
+# ==========================================
+# vLLM 模型管理 API
+# ==========================================
+
+@app.get("/vllm/models")
+async def vllm_list_models():
+    """获取所有可用的 vLLM 模型"""
+    structured_logger.info("Listing available vLLM models", action="vllm_list_models")
+    try:
+        models = get_available_models()
+        current_model = get_current_model_info()
+        running_model = current_model.get("name") if current_model and current_model.get("running") else None
+
+        # 标记运行中的模型
+        for model in models:
+            if model["name"] == running_model:
+                model["running"] = True
+                model["status"] = "running"
+
+        return {
+            "success": True,
+            "models": models,
+            "current_model": running_model,
+            "model_base_path": MODEL_BASE_PATH,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to list vLLM models: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/vllm/model/status")
+async def vllm_model_status():
+    """获取 vLLM 模型和服务状态"""
+    structured_logger.info("Getting vLLM model status", action="vllm_status")
+    try:
+        service_status = get_vllm_service_status()
+        current_model = get_current_model_info()
+
+        return {
+            "success": True,
+            "service": service_status,
+            "current_model": current_model,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get vLLM status: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+class SwitchModelRequest(BaseModel):
+    model_name: str
+
+@app.post("/vllm/model/switch")
+async def vllm_switch_model(request: SwitchModelRequest):
+    """一键切换到指定模型"""
+    structured_logger.info(f"Switching to vLLM model: {request.model_name}", action="vllm_switch", model=request.model_name)
+    try:
+        result = switch_vllm_model(request.model_name)
+        if result.get("success"):
+            return result
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "Unknown error"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to switch vLLM model: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/vllm/service/start")
+async def vllm_start_service():
+    """启动 vLLM 服务"""
+    structured_logger.info("Starting vLLM service", action="vllm_start")
+    try:
+        success = start_vllm_service()
+        return {
+            "success": success,
+            "service": VLLM_SERVICE_NAME,
+            "status": "starting" if success else "failed"
+        }
+    except Exception as e:
+        logger.error(f"Failed to start vLLM service: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/vllm/service/stop")
+async def vllm_stop_service():
+    """停止 vLLM 服务"""
+    structured_logger.info("Stopping vLLM service", action="vllm_stop")
+    try:
+        success = stop_vllm_service()
+        return {
+            "success": success,
+            "service": VLLM_SERVICE_NAME,
+            "status": "stopped" if success else "failed"
+        }
+    except Exception as e:
+        logger.error(f"Failed to stop vLLM service: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/vllm/service/restart")
+async def vllm_restart_service():
+    """重启 vLLM 服务"""
+    structured_logger.info("Restarting vLLM service", action="vllm_restart")
+    try:
+        success = restart_vllm_service()
+        return {
+            "success": success,
+            "service": VLLM_SERVICE_NAME,
+            "status": "restarting" if success else "failed"
+        }
+    except Exception as e:
+        logger.error(f"Failed to restart vLLM service: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/vllm/service/status")
+async def vllm_service_status():
+    """获取 vLLM 服务状态"""
+    structured_logger.info("Getting vLLM service status", action="vllm_service_status")
+    try:
+        return get_vllm_service_status()
+    except Exception as e:
+        logger.error(f"Failed to get vLLM service status: {str(e)}")
+        return {"success": False, "error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

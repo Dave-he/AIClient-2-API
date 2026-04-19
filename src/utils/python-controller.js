@@ -12,18 +12,23 @@ export function getControllerUrl() {
     return controllerUrl;
 }
 
-export async function callPythonController(endpoint, method = 'GET', body = null, headers = {}) {
+async function callPythonController(endpoint, method = 'GET', body = null, headers = {}) {
     const url = `${controllerUrl}${endpoint}`;
     
     try {
-        const response = await fetch(url, {
+        const options = {
             method,
             headers: {
                 'Content-Type': 'application/json',
                 ...headers
-            },
-            body: body ? JSON.stringify(body) : null
-        });
+            }
+        };
+        
+        if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+            options.body = JSON.stringify(body);
+        }
+        
+        const response = await fetch(url, options);
         
         if (!response.ok) {
             const errorText = await response.text();
@@ -39,53 +44,73 @@ export async function callPythonController(endpoint, method = 'GET', body = null
     }
 }
 
-export async function getVLLMModels() {
+export async function getVLLMAvailableModels() {
     try {
-        const data = await callPythonController('/v1/models');
+        const data = await callPythonController('/vllm/models');
         return data;
     } catch (error) {
-        logger.error(`[Python Controller] Failed to get VLLM models: ${error.message}`);
-        return { object: 'list', data: [] };
+        logger.error(`[Python Controller] Failed to get vLLM available models: ${error.message}`);
+        return { success: false, error: error.message, models: [] };
     }
 }
 
-export async function getModelStatus() {
+export async function getVLLMModelStatus() {
     try {
-        const data = await callPythonController('/manage/models');
+        const data = await callPythonController('/vllm/model/status');
         return data;
     } catch (error) {
-        logger.error(`[Python Controller] Failed to get model status: ${error.message}`);
-        return {};
+        logger.error(`[Python Controller] Failed to get vLLM model status: ${error.message}`);
+        return { success: false, error: error.message };
     }
 }
 
-export async function startModel(modelName) {
+export async function switchVLLMModel(modelName) {
     try {
-        const data = await callPythonController(`/manage/models/${modelName}/start`, 'POST');
+        const data = await callPythonController('/vllm/model/switch', 'POST', { model_name: modelName });
         return data;
     } catch (error) {
-        logger.error(`[Python Controller] Failed to start model ${modelName}: ${error.message}`);
+        logger.error(`[Python Controller] Failed to switch vLLM model ${modelName}: ${error.message}`);
         throw error;
     }
 }
 
-export async function stopModel(modelName) {
+export async function startVLLMService() {
     try {
-        const data = await callPythonController(`/manage/models/${modelName}/stop`, 'POST');
+        const data = await callPythonController('/vllm/service/start', 'POST');
         return data;
     } catch (error) {
-        logger.error(`[Python Controller] Failed to stop model ${modelName}: ${error.message}`);
+        logger.error(`[Python Controller] Failed to start vLLM service: ${error.message}`);
         throw error;
     }
 }
 
-export async function switchModel(modelName) {
+export async function stopVLLMService() {
     try {
-        const data = await callPythonController(`/manage/models/${modelName}/switch`, 'POST');
+        const data = await callPythonController('/vllm/service/stop', 'POST');
         return data;
     } catch (error) {
-        logger.error(`[Python Controller] Failed to switch model ${modelName}: ${error.message}`);
+        logger.error(`[Python Controller] Failed to stop vLLM service: ${error.message}`);
         throw error;
+    }
+}
+
+export async function restartVLLMService() {
+    try {
+        const data = await callPythonController('/vllm/service/restart', 'POST');
+        return data;
+    } catch (error) {
+        logger.error(`[Python Controller] Failed to restart vLLM service: ${error.message}`);
+        throw error;
+    }
+}
+
+export async function getVLLMServiceStatus() {
+    try {
+        const data = await callPythonController('/vllm/service/status');
+        return data;
+    } catch (error) {
+        logger.error(`[Python Controller] Failed to get vLLM service status: ${error.message}`);
+        return { success: false, error: error.message };
     }
 }
 
