@@ -540,10 +540,16 @@ export class SystemMonitor {
                 const memoryTotalEl = document.getElementById('memoryTotal');
                 const cpuCoresEl = document.getElementById('cpuCores');
                 
+                const memoryUsageEl = document.getElementById('memoryUsage');
+                const cpuUsageEl = document.getElementById('cpuUsage');
+                
                 if (cpuValueEl) cpuValueEl.textContent = `${data.cpu.usage.toFixed(1)}%`;
                 if (memoryValueEl) memoryValueEl.textContent = `${parseFloat(data.memory.usagePercent).toFixed(1)}%`;
                 if (memoryTotalEl) memoryTotalEl.textContent = data.memory.total;
                 if (cpuCoresEl) cpuCoresEl.textContent = data.cpu.cores.toString();
+                
+                if (memoryUsageEl) memoryUsageEl.textContent = `${data.memory.used || '--'} / ${data.memory.total || '--'}`;
+                if (cpuUsageEl) cpuUsageEl.textContent = `${data.cpu.usage.toFixed(1)}%`;
 
                 if (data.cpu.history && data.cpu.history.length > 0) {
                     console.log('[SystemMonitor] Server CPU history length:', data.cpu.history.length);
@@ -597,9 +603,16 @@ export class SystemMonitor {
         const cpuEl = document.getElementById('cpuValue');
         const memEl = document.getElementById('memoryValue');
         const memTotalEl = document.getElementById('memoryTotal');
+        
+        const memoryUsageEl = document.getElementById('memoryUsage');
+        const cpuUsageEl = document.getElementById('cpuUsage');
+
         if (cpuEl) cpuEl.textContent = cpuUsage;
         if (memEl) memEl.textContent = memoryInfo.usagePercent;
         if (memTotalEl) memTotalEl.textContent = memoryInfo.total;
+        
+        if (memoryUsageEl) memoryUsageEl.textContent = `${memoryInfo.used} / ${memoryInfo.total}`;
+        if (cpuUsageEl) cpuUsageEl.textContent = cpuUsage;
 
         this.addToHistory(this.cpuHistoryData, parseFloat(cpuUsage));
         this.addToHistory(this.memoryHistoryData, parseFloat(memoryInfo.usagePercent));
@@ -786,6 +799,27 @@ export class SystemMonitor {
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
                     <span>${data?.message || '未检测到GPU'}</span>
+                </div>
+                <div class="node-env-info">
+                    <div class="env-header">Node.js 环境信息</div>
+                    <div class="env-details">
+                        <div class="env-item">
+                            <span class="env-label">Node.js 版本</span>
+                            <span class="env-value">${window.__nodeVersion || '--'}</span>
+                        </div>
+                        <div class="env-item">
+                            <span class="env-label">运行模式</span>
+                            <span class="env-value">${window.__serviceMode || '--'}</span>
+                        </div>
+                        <div class="env-item">
+                            <span class="env-label">进程 PID</span>
+                            <span class="env-value">${window.__processPid || '--'}</span>
+                        </div>
+                        <div class="env-item">
+                            <span class="env-label">平台</span>
+                            <span class="env-value">${window.__platform || '--'}</span>
+                        </div>
+                    </div>
                 </div>
             `;
             const gpuValElUnavail = document.getElementById('gpuValue');

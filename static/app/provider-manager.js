@@ -30,6 +30,8 @@ async function loadSystemInfo() {
         const nodeVersionEl = document.getElementById('nodeVersion');
         const serverTimeEl = document.getElementById('serverTime');
         const uptimeEl = document.getElementById('uptime');
+        const memoryUsageEl = document.getElementById('memoryUsage');
+        const cpuUsageEl = document.getElementById('cpuUsage');
 
         if (appVersionEl) appVersionEl.textContent = data.appVersion ? `v${data.appVersion}` : '--';
         
@@ -39,6 +41,9 @@ async function loadSystemInfo() {
         }
 
         if (nodeVersionEl) nodeVersionEl.textContent = data.nodeVersion || '--';
+        
+        // 保存Node.js版本到全局变量，供GPU不可用时显示
+        window.__nodeVersion = data.nodeVersion || '--';
         
         // 保存初始时间用于本地计算
         if (data.serverTime && data.uptime !== undefined) {
@@ -52,6 +57,10 @@ async function loadSystemInfo() {
             serverTimeEl.textContent = data.serverTime ? new Date(data.serverTime).toLocaleString(getCurrentLanguage()) : '--';
         }
         if (uptimeEl) uptimeEl.textContent = data.uptime ? formatUptime(data.uptime) : '--';
+
+        // 更新内存使用和CPU使用
+        if (memoryUsageEl) memoryUsageEl.textContent = data.memoryUsage || '--';
+        if (cpuUsageEl) cpuUsageEl.textContent = data.cpuUsage || '--';
 
         // 加载服务模式信息
         await loadServiceModeInfo();
@@ -102,6 +111,11 @@ async function loadServiceModeInfo() {
             };
             platformInfoEl.textContent = platformMap[data.platform] || data.platform || '--';
         }
+        
+        // 保存到全局变量，供GPU不可用时显示
+        window.__serviceMode = data.mode === 'worker' ? 'Worker 进程' : '独立运行';
+        window.__processPid = data.pid || '--';
+        window.__platform = data.platform ? (['win32', 'darwin', 'linux', 'freebsd'].includes(data.platform) ? {'win32': 'Windows', 'darwin': 'macOS', 'linux': 'Linux', 'freebsd': 'FreeBSD'}[data.platform] : data.platform) : '--';
         
     } catch (error) {
         console.error('Failed to load service mode info:', error);
