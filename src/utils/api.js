@@ -3,6 +3,7 @@ import { router } from '@/router/index.js';
 import { performanceMonitor } from '@/utils/performance.js';
 import { logger } from '@/utils/logger.js';
 import { cache, pendingRequests, isCacheable, requestConfig } from '@/utils/request-cache.js';
+import { errorHandler } from '@/utils/error-handler.js';
 
 const createApiInstance = (baseURL = window.location.origin) => {
   const token = localStorage.getItem('authToken');
@@ -41,10 +42,8 @@ const createApiInstance = (baseURL = window.location.origin) => {
         } else {
           window.location.href = '/vue/login';
         }
-      } else if (error.response?.status === 403) {
-        window.$toast?.error('权限不足');
-      } else if (error.response?.status === 500) {
-        window.$toast?.error('服务器内部错误');
+      } else {
+        errorHandler.handleApiError(error);
       }
       return Promise.reject(error);
     }

@@ -94,6 +94,23 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Quick Model Switch Panel -->
+        <div class="model-switch-panel">
+            <div class="panel-header">
+                <h3><i class="fas fa-exchange-alt"></i> <span data-i18n="gpuMonitor.quickSwitch">一键切换模型</span></h3>
+                <button id="refreshModelsListBtn" class="btn btn-outline btn-sm" data-i18n-title="common.refresh" title="刷新模型列表">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            
+            <div id="quickSwitchContent" class="quick-switch-content">
+                <div class="status-loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span data-i18n="common.loading">加载中...</span>
+                </div>
+            </div>
+        </div>
     </div>
     
     <!-- Python Controller Integration Area -->

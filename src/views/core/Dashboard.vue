@@ -267,16 +267,36 @@
         <h3><i class="fas fa-route"></i> 路径路由调用示例</h3>
         <p class="routing-desc">通过不同路径路由访问不同的AI模型提供商，支持灵活的模型切换</p>
         
+        <div class="routing-filter">
+          <div class="filter-tabs">
+            <button 
+              v-for="filter in providerFilters" 
+              :key="filter.id"
+              class="filter-tab"
+              :class="{ active: activeProviderFilter === filter.id }"
+              @click="activeProviderFilter = filter.id"
+            >
+              <i :class="['fas', filter.icon]"></i>
+              <span>{{ filter.label }}</span>
+            </button>
+          </div>
+        </div>
+        
         <div class="routing-grid">
           <div 
-            v-for="route in routingExamples" 
+            v-for="route in filteredRoutes" 
             :key="route.path"
             class="routing-item"
             @click="copyToClipboard(route.fullPath)"
           >
-            <i class="fas fa-link"></i>
-            <span class="route-path">{{ route.fullPath }}</span>
-            <span class="route-description">{{ route.description }}</span>
+            <div class="route-provider-badge" :class="route.provider">
+              <i :class="getProviderIcon(route.provider)"></i>
+            </div>
+            <div class="route-content">
+              <span class="route-path">{{ route.fullPath }}</span>
+              <span class="route-description">{{ route.description }}</span>
+            </div>
+            <i class="fas fa-copy copy-icon"></i>
           </div>
         </div>
 
@@ -290,7 +310,18 @@
         </div>
 
         <div class="models-area">
-          <h4 class="models-title"><i class="fas fa-cube"></i> 可用模型列表</h4>
+          <div class="models-header">
+            <h4 class="models-title"><i class="fas fa-cube"></i> 可用模型列表</h4>
+            <div class="model-search">
+              <i class="fas fa-search"></i>
+              <input 
+                type="text" 
+                v-model="modelSearchQuery" 
+                placeholder="搜索模型..."
+                class="search-input"
+              />
+            </div>
+          </div>
           <div class="models-desc">
             <div class="highlight-note">
               <i class="fas fa-info-circle"></i>
@@ -303,9 +334,13 @@
               <i class="fas fa-spinner fa-spin"></i>
               <span>加载中...</span>
             </div>
+            <div v-else-if="filteredModels.length === 0" class="no-results">
+              <i class="fas fa-search"></i>
+              <span>未找到匹配的模型</span>
+            </div>
             <div v-else class="models-list">
               <ModelTag 
-                v-for="model in availableModels" 
+                v-for="model in filteredModels" 
                 :key="model"
                 :model="model"
               />
@@ -318,7 +353,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useDashboard } from '@/composables/useDashboard.js';
 import StatCard from '@/components/StatCard.vue';
 import ProviderCard from '@/components/ProviderCard.vue';
@@ -373,5 +408,52 @@ const formatTokens = (tokens) => {
     return (tokens / 1000).toFixed(1) + 'K';
   }
   return tokens.toString();
+};
+
+const activeProviderFilter = ref('all');
+const providerFilters = [
+  { id: 'all', label: '全部', icon: 'fa-globe' },
+  { id: 'gemini', label: 'Gemini', icon: 'fa-google' },
+  { id: 'claude', label: 'Claude', icon: 'fa-robot' },
+  { id: 'openai', label: 'OpenAI', icon: 'fa-openid' },
+  { id: 'other', label: '其他', icon: 'fa-more' }
+];
+
+const filteredRoutes = computed(() => {
+  if (activeProviderFilter.value === 'all') {
+    return routingExamples.value;
+  }
+  if (activeProviderFilter.value === 'other') {
+    const mainProviders = ['gemini', 'claude', 'openai', 'default'];
+    return routingExamples.value.filter(r => !mainProviders.includes(r.provider));
+  }
+  return routingExamples.value.filter(r => r.provider === activeProviderFilter.value);
+});
+
+const modelSearchQuery = ref('');
+
+const filteredModels = computed(() => {
+  if (!modelSearchQuery.value.trim()) {
+    return availableModels.value;
+  }
+  const query = modelSearchQuery.value.toLowerCase();
+  return availableModels.value.filter(model => 
+    model.toLowerCase().includes(query)
+  );
+});
+
+const getProviderIcon = (provider) => {
+  const iconMap = {
+    'default': 'fa-circle-o',
+    'gemini': 'fa-google',
+    'claude': 'fa-robot',
+    'openai': 'fa-openid',
+    'codex': 'fa-code',
+    'qwen': 'fa-cloud',
+    'iflow': 'fa-flask',
+    'grok': 'fa-bolt',
+    'local': 'fa-server'
+  };
+  return iconMap[provider] || 'fa-circle-o';
 };
 </script>

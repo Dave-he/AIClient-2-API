@@ -42,4 +42,16 @@ export class LocalApiServiceAdapter extends ApiServiceAdapter {
     async stopModel(modelName) {
         return this.localApiService.stopModel(modelName);
     }
+
+    async getModelOptions() {
+        return this.localApiService.getModelOptions();
+    }
+
+    async getCurrentModel() {
+        return this.localApiService.getCurrentModel();
+    }
+
+    async switchModel(targetModelName, options = {}) {
+        return this.localApiService.switchModel(targetModelName, options);
+    }
 }

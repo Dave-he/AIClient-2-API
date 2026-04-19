@@ -65,24 +65,13 @@ const route = useRoute()
 }
 
 @media (max-width: 768px) {
-  .sidebar {
-    position: fixed;
-    left: -280px;
-    top: 60px;
-    bottom: 0;
-    z-index: 999;
-    transition: left 0.3s ease;
-    width: 260px;
-    border-radius: 0;
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .sidebar.sidebar-visible {
-    left: 0;
-  }
-
   #content-container {
     transition: opacity 0.3s ease;
+  }
+
+  #content-container.content-dimmed {
+    opacity: 0.5;
+    pointer-events: none;
   }
 }
 </style>

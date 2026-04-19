@@ -1,3 +1,5 @@
+import { logger } from './logger.js';
+
 class StorageManager {
   constructor() {
     this.storage = localStorage;
@@ -129,7 +131,7 @@ class StorageManager {
         try {
           callback({ key, oldValue, newValue });
         } catch (e) {
-          console.error('Storage callback error:', e);
+          logger.error('Storage callback error:', e);
         }
       });
     }

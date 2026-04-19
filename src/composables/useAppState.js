@@ -1,4 +1,5 @@
 import { ref, computed, watch } from 'vue';
+import { logger } from '@/utils/logger.js';
 
 const appState = ref({
   user: null,
@@ -98,7 +99,7 @@ export function useAppState() {
         const parsed = JSON.parse(saved);
         appState.value.settings = { ...appState.value.settings, ...parsed };
       } catch (e) {
-        console.error('Failed to load settings:', e);
+        logger.error('Failed to load settings:', e);
       }
     }
   };

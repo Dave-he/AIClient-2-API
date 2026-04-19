@@ -563,6 +563,47 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await pythonControllerApi.handleGetHealthStatus(req, res);
     }
 
+    // Test model endpoint
+    const testModelMatch = pathParam.match(/^\/api\/python\/test\/model\/([^\/]+)$/);
+    if (method === 'POST' && testModelMatch) {
+        const modelName = decodeURIComponent(testModelMatch[1]);
+        return await pythonControllerApi.handleTestModel(req, res, modelName);
+    }
+
+    // Get model test report
+    const testReportMatch = pathParam.match(/^\/api\/python\/test\/report\/([^\/]+)$/);
+    if (method === 'GET' && testReportMatch) {
+        const modelName = decodeURIComponent(testReportMatch[1]);
+        return await pythonControllerApi.handleGetModelTestReport(req, res, modelName);
+    }
+
+    // Get all test reports
+    if (method === 'GET' && pathParam === '/api/python/test/reports') {
+        return await pythonControllerApi.handleGetAllTestReports(req, res);
+    }
+
+    // Switch and test model endpoint
+    const switchAndTestMatch = pathParam.match(/^\/api\/python\/test\/model\/([^\/]+)\/switch-and-test$/);
+    if (method === 'POST' && switchAndTestMatch) {
+        const modelName = decodeURIComponent(switchAndTestMatch[1]);
+        return await pythonControllerApi.handleSwitchAndTestModel(req, res, modelName);
+    }
+
+    // Run comparative analysis
+    if (method === 'POST' && pathParam === '/api/python/test/comparative') {
+        return await pythonControllerApi.handleRunComparativeAnalysis(req, res);
+    }
+
+    // Clear test reports
+    if (method === 'DELETE' && pathParam === '/api/python/test/reports') {
+        return await pythonControllerApi.handleClearTestReports(req, res);
+    }
+
+    // Get test status
+    if (method === 'GET' && pathParam === '/api/python/test/status') {
+        return await pythonControllerApi.handleGetTestStatus(req, res);
+    }
+
     // Python GPU status proxy endpoint (legacy - kept for backward compatibility)
     if (method === 'GET' && pathParam === '/api/python-gpu/status') {
         return await handlePythonGpuStatus(req, res, currentConfig);

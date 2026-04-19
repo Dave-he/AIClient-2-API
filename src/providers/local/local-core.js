@@ -246,4 +246,218 @@ export class LocalApiService {
             throw error;
         }
     }
+
+    async getModelOptions() {
+        try {
+            const axiosConfig = {
+                method: 'get',
+                url: '/manage/models/summary'
+            };
+            this._applySidecar(axiosConfig);
+            const response = await this.axiosInstance.request(axiosConfig);
+            return response.data;
+        } catch (error) {
+            logger.error('Error getting model options:', error.message);
+            return { models: [], total: 0 };
+        }
+    }
+
+    async getCurrentModel() {
+        try {
+            const axiosConfig = {
+                method: 'get',
+                url: '/manage/models'
+            };
+            this._applySidecar(axiosConfig);
+            const response = await this.axiosInstance.request(axiosConfig);
+            const models = response.data;
+            for (const [name, status] of Object.entries(models)) {
+                if (status.running) {
+                    return name;
+                }
+            }
+            return null;
+        } catch (error) {
+            logger.error('Error getting current model:', error.message);
+            return null;
+        }
+    }
+
+    async _testModel(modelName, timeout = 30000) {
+        const startTime = Date.now();
+        const testRequestBody = {
+            model: modelName,
+            messages: [{ role: 'user', content: 'test' }],
+            max_tokens: 1,
+            stream: false
+        };
+
+        try {
+            const response = await Promise.race([
+                this.callApi('/v1/chat/completions', testRequestBody),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Test timeout')), timeout)
+                )
+            ]);
+
+            if (response && response.choices && response.choices.length > 0) {
+                logger.info(`Model ${modelName} test successful in ${Date.now() - startTime}ms`);
+                return { success: true, latency: Date.now() - startTime };
+            }
+            return { success: false, error: 'Invalid response' };
+        } catch (error) {
+            logger.error(`Model ${modelName} test failed:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async switchModel(targetModelName, options = {}) {
+        const { 
+            testAfterSwitch = true, 
+            rollbackOnFailure = true, 
+            testTimeout = 30000,
+            maxRetries = 2 
+        } = options;
+
+        const startTime = Date.now();
+        const currentModel = await this.getCurrentModel();
+        
+        logger.info(`Switching model from ${currentModel || 'none'} to ${targetModelName}`);
+
+        const result = {
+            success: false,
+            targetModel: targetModelName,
+            previousModel: currentModel,
+            steps: [],
+            testResult: null,
+            rollbackPerformed: false,
+            error: null,
+            duration: 0
+        };
+
+        let retries = 0;
+        let lastError = null;
+
+        while (retries <= maxRetries) {
+            try {
+                result.steps.push({ 
+                    step: 'switching', 
+                    message: `Attempting to switch to ${targetModelName} (attempt ${retries + 1}/${maxRetries + 1})` 
+                });
+
+                const switchResponse = await this.callApi(
+                    '/manage/models/switch', 
+                    { model: targetModelName },
+                    false,
+                    0
+                );
+
+                if (!switchResponse || switchResponse.status !== 'switched') {
+                    throw new Error(switchResponse?.error || 'Switch command failed');
+                }
+
+                result.steps.push({ step: 'switched', message: `Model switched to ${targetModelName}` });
+
+                if (testAfterSwitch) {
+                    result.steps.push({ step: 'testing', message: `Testing ${targetModelName}...` });
+
+                    const waitInterval = 2000;
+                    const maxWaitTime = 60000;
+                    let waited = 0;
+                    let testSuccess = false;
+
+                    while (waited < maxWaitTime) {
+                        const testResult = await this._testModel(targetModelName, testTimeout);
+                        
+                        if (testResult.success) {
+                            testSuccess = true;
+                            result.testResult = testResult;
+                            break;
+                        }
+
+                        if (waited >= maxWaitTime - waitInterval) {
+                            throw new Error(`Model test failed after ${maxWaitTime}ms: ${testResult.error}`);
+                        }
+
+                        await new Promise(resolve => setTimeout(resolve, waitInterval));
+                        waited += waitInterval;
+                    }
+
+                    if (!testSuccess) {
+                        throw new Error('Model test failed');
+                    }
+
+                    result.steps.push({ 
+                        step: 'test_passed', 
+                        message: `Model ${targetModelName} test passed in ${result.testResult.latency}ms` 
+                    });
+                }
+
+                result.success = true;
+                result.duration = Date.now() - startTime;
+                logger.info(`Successfully switched to ${targetModelName} in ${result.duration}ms`);
+                return result;
+
+            } catch (error) {
+                lastError = error;
+                result.error = error.message;
+                result.steps.push({ step: 'failed', message: error.message });
+
+                if (rollbackOnFailure && currentModel && currentModel !== targetModelName) {
+                    result.steps.push({ 
+                        step: 'rollback', 
+                        message: `Switch failed, rolling back to ${currentModel}` 
+                    });
+
+                    try {
+                        await this.callApi(
+                            '/manage/models/switch', 
+                            { model: currentModel },
+                            false,
+                            0
+                        );
+
+                        await new Promise(resolve => setTimeout(resolve, 3000));
+
+                        const rollbackTest = await this._testModel(currentModel, 15000);
+                        if (rollbackTest.success) {
+                            result.rollbackPerformed = true;
+                            result.steps.push({ 
+                                step: 'rollback_success', 
+                                message: `Successfully rolled back to ${currentModel}` 
+                            });
+                            logger.info(`Successfully rolled back to ${currentModel}`);
+                        } else {
+                            result.steps.push({ 
+                                step: 'rollback_failed', 
+                                message: `Rollback to ${currentModel} failed: ${rollbackTest.error}` 
+                            });
+                            logger.error(`Rollback to ${currentModel} failed:`, rollbackTest.error);
+                        }
+                    } catch (rollbackError) {
+                        result.steps.push({ 
+                            step: 'rollback_failed', 
+                            message: `Rollback to ${currentModel} failed: ${rollbackError.message}` 
+                        });
+                        logger.error(`Rollback to ${currentModel} failed:`, rollbackError.message);
+                    }
+                }
+
+                retries++;
+                if (retries <= maxRetries) {
+                    const delay = Math.pow(2, retries) * 1000;
+                    result.steps.push({ 
+                        step: 'retry', 
+                        message: `Retrying in ${delay}ms (attempt ${retries + 1})` 
+                    });
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        result.duration = Date.now() - startTime;
+        result.error = lastError?.message || 'Unknown error';
+        logger.error(`Failed to switch to ${targetModelName} after ${maxRetries + 1} attempts:`, result.error);
+        return result;
+    }
 }

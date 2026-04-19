@@ -12,6 +12,7 @@ export class GPUMonitorModule {
         this.gpuHistoryData = [];
         this.lastGpuData = null;
         this.animationFrame = null;
+        this.testReport = null;
         this.init();
     }
 

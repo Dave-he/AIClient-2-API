@@ -51,11 +51,17 @@ const checkServerStatus = async () => {
 
 const toggleMobileMenu = () => {
   mobileMenuOpen.value = !mobileMenuOpen.value;
-  const menu = document.getElementById('content-container');
+  const sidebar = document.querySelector('.sidebar');
   const toggle = document.getElementById('mobileMenuToggle');
-  if (menu && toggle) {
-    menu.classList.toggle('sidebar-visible', mobileMenuOpen.value);
+  const content = document.getElementById('content-container');
+  
+  if (sidebar && toggle) {
+    sidebar.classList.toggle('sidebar-visible', mobileMenuOpen.value);
     toggle.classList.toggle('active', mobileMenuOpen.value);
+  }
+  
+  if (content) {
+    content.classList.toggle('content-dimmed', mobileMenuOpen.value);
   }
 };
 
@@ -104,17 +110,24 @@ onMounted(() => {
   }
 
   // 点击内容区域关闭移动端菜单
-  document.addEventListener('click', (e) => {
-    if (mobileMenuOpen.value && !e.target.closest('.sidebar') && !e.target.closest('#mobileMenuToggle')) {
-      mobileMenuOpen.value = false;
-      const menu = document.getElementById('content-container');
-      const toggle = document.getElementById('mobileMenuToggle');
-      if (menu && toggle) {
-        menu.classList.remove('sidebar-visible');
-        toggle.classList.remove('active');
+    document.addEventListener('click', (e) => {
+      if (mobileMenuOpen.value && !e.target.closest('.sidebar') && !e.target.closest('#mobileMenuToggle')) {
+        mobileMenuOpen.value = false;
+        const sidebar = document.querySelector('.sidebar');
+        const toggle = document.getElementById('mobileMenuToggle');
+        const content = document.getElementById('content-container');
+        
+        if (sidebar) {
+          sidebar.classList.remove('sidebar-visible');
+        }
+        if (toggle) {
+          toggle.classList.remove('active');
+        }
+        if (content) {
+          content.classList.remove('content-dimmed');
+        }
       }
-    }
-  });
+    });
 });
 
 onUnmounted(() => {

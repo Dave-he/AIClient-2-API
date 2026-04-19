@@ -125,3 +125,101 @@ export async function handleGetHealthStatus(req, res) {
     }
     return true;
 }
+
+export async function handleTestModel(req, res, modelName) {
+    try {
+        const data = await callPythonController(`/v1/test/model/${encodeURIComponent(modelName)}`, 'POST');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleGetModelTestReport(req, res, modelName) {
+    try {
+        const data = await callPythonController(`/v1/test/report/${encodeURIComponent(modelName)}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleGetAllTestReports(req, res) {
+    try {
+        const data = await callPythonController('/v1/test/reports');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleSwitchAndTestModel(req, res, modelName) {
+    try {
+        const data = await callPythonController(`/v1/test/model/${encodeURIComponent(modelName)}/switch-and-test`, 'POST');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleRunComparativeAnalysis(req, res) {
+    try {
+        let body = null;
+        if (req.body) {
+            body = await new Promise((resolve) => {
+                let data = '';
+                req.on('data', (chunk) => { data += chunk; });
+                req.on('end', () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch {
+                        resolve(null);
+                    }
+                });
+            });
+        }
+        const data = await callPythonController('/v1/test/comparative', 'POST', body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleClearTestReports(req, res) {
+    try {
+        const data = await callPythonController('/v1/test/reports', 'DELETE');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleGetTestStatus(req, res) {
+    try {
+        const data = await callPythonController('/v1/test/status');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}

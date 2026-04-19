@@ -2,28 +2,45 @@ import { existsSync, readFileSync, createReadStream } from 'fs';
 import logger from '../utils/logger.js';
 import path from 'path';
 import { getCpuUsagePercent } from './system-monitor.js';
+import { getGPUStatus } from '../utils/python-controller.js';
 import os from 'os';
 
 let systemMonitorHistory = {
     cpu: [],
     memory: [],
+    gpu: [],
     timestamp: []
 };
 const MAX_HISTORY_POINTS = 60;
 
-function collectSystemMetrics() {
+async function collectSystemMetrics() {
     const cpuUsage = parseFloat(getCpuUsagePercent());
     const total = os.totalmem();
     const free = os.freemem();
     const memoryUsage = ((total - free) / total * 100);
 
+    let gpuUsage = 0;
+    try {
+        const gpuStatus = await getGPUStatus();
+        if (gpuStatus && gpuStatus.utilization !== undefined) {
+            gpuUsage = parseFloat(gpuStatus.utilization);
+        } else if (gpuStatus && gpuStatus.devices && gpuStatus.devices.length > 0) {
+            const firstDevice = gpuStatus.devices[0];
+            gpuUsage = parseFloat(firstDevice.utilization || firstDevice.util || 0);
+        }
+    } catch (error) {
+        gpuUsage = 0;
+    }
+
     systemMonitorHistory.cpu.push(cpuUsage);
     systemMonitorHistory.memory.push(memoryUsage);
+    systemMonitorHistory.gpu.push(gpuUsage);
     systemMonitorHistory.timestamp.push(Date.now());
 
     if (systemMonitorHistory.cpu.length > MAX_HISTORY_POINTS) {
         systemMonitorHistory.cpu.shift();
         systemMonitorHistory.memory.shift();
+        systemMonitorHistory.gpu.shift();
         systemMonitorHistory.timestamp.shift();
     }
 }
@@ -159,6 +176,30 @@ export async function handleGetSystemMonitor(req, res) {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
+    let gpuData = {
+        usage: 0,
+        temperature: 0,
+        history: systemMonitorHistory.gpu
+    };
+
+    try {
+        const gpuStatus = await getGPUStatus();
+        if (gpuStatus) {
+            if (gpuStatus.utilization !== undefined) {
+                gpuData.usage = parseFloat(gpuStatus.utilization);
+            } else if (gpuStatus.devices && gpuStatus.devices.length > 0) {
+                const firstDevice = gpuStatus.devices[0];
+                gpuData.usage = parseFloat(firstDevice.utilization || firstDevice.util || 0);
+                gpuData.temperature = parseFloat(firstDevice.temperature || 0);
+            }
+            if (gpuStatus.temperature !== undefined) {
+                gpuData.temperature = parseFloat(gpuStatus.temperature);
+            }
+        }
+    } catch (error) {
+        logger.warn('[UI API] Failed to get GPU status for system monitor:', error.message);
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
         cpu: {
@@ -173,6 +214,7 @@ export async function handleGetSystemMonitor(req, res) {
             usagePercent: parseFloat(((used / total) * 100).toFixed(1)),
             history: systemMonitorHistory.memory
         },
+        gpu: gpuData,
         timestamp: systemMonitorHistory.timestamp,
         platform: process.platform
     }));

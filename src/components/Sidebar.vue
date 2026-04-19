@@ -102,45 +102,57 @@ const isActive = (path) => {
 
 @media (max-width: 768px) {
   .sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--border-color);
-    position: relative;
-    top: 0;
+    width: 260px;
+    position: fixed;
+    left: -280px;
+    top: 60px;
+    bottom: 0;
+    z-index: 999;
+    transition: left 0.3s ease;
+    border-radius: 0;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    overflow-y: auto;
+  }
+
+  .sidebar.sidebar-visible {
+    left: 0;
   }
 
   .sidebar-nav {
-    flex-direction: row;
-    overflow-x: auto;
-    padding: 0 1rem;
+    flex-direction: column;
+    padding: 0.5rem;
     gap: 0.25rem;
   }
 
   .nav-item {
-    flex-direction: column;
-    padding: 0.5rem;
-    min-width: 60px;
-    text-align: center;
-    gap: 0.25rem;
+    flex-direction: row;
+    padding: 0.75rem 1rem;
+    min-width: auto;
+    text-align: left;
+    gap: 0.75rem;
   }
 
   .nav-item span {
-    font-size: 0.65rem;
+    font-size: 0.85rem;
   }
 }
 
 @media (max-width: 480px) {
-  .sidebar-nav {
-    gap: 0.125rem;
+  .sidebar {
+    width: 240px;
+    left: -260px;
+  }
+
+  .sidebar.sidebar-visible {
+    left: 0;
   }
 
   .nav-item {
-    min-width: 50px;
-    padding: 0.35rem;
+    padding: 0.6rem 0.75rem;
   }
 
-  .nav-item i {
-    font-size: 0.9em;
+  .nav-item span {
+    font-size: 0.8rem;
   }
 }
 </style>

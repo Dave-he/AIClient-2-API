@@ -88,8 +88,24 @@
                 <div class="node-name">
                   <span class="status-indicator" :class="{ healthy: node.healthy }"></span>
                   <span>{{ node.name }}</span>
+                  <span v-if="node.disabled" class="disabled-badge">已禁用</span>
                 </div>
                 <div class="node-actions">
+                  <button 
+                    v-if="needsOAuth(provider.type)"
+                    class="action-btn oauth-btn" 
+                    @click="generateOAuth(provider.type, node)" 
+                    title="生成OAuth授权"
+                  >
+                    <i class="fas fa-key"></i>
+                  </button>
+                  <button 
+                    class="action-btn health-btn" 
+                    @click="checkHealth(provider.type, node.uuid)" 
+                    title="健康检查"
+                  >
+                    <i class="fas fa-heartbeat"></i>
+                  </button>
                   <button class="action-btn" @click="editNode(provider.type, node)" title="编辑">
                     <i class="fas fa-edit"></i>
                   </button>
@@ -104,6 +120,10 @@
                   <span class="info-label">UUID</span>
                   <span class="info-value">{{ node.uuid }}</span>
                 </div>
+                <div class="info-row" v-if="node.oauthCredsFilePath">
+                  <span class="info-label">凭据路径</span>
+                  <span class="info-value">{{ node.oauthCredsFilePath }}</span>
+                </div>
                 <div class="info-row" v-if="node.apiKey">
                   <span class="info-label">API Key</span>
                   <span class="info-value masked">{{ maskApiKey(node.apiKey) }}</span>
@@ -115,6 +135,14 @@
                 <div class="info-row" v-if="node.accessToken">
                   <span class="info-label">Token</span>
                   <span class="info-value masked">{{ maskToken(node.accessToken) }}</span>
+                </div>
+                <div class="info-row" v-if="node.checkModel">
+                  <span class="info-label">检查模型</span>
+                  <span class="info-value">{{ node.checkModel }}</span>
+                </div>
+                <div class="info-row" v-if="node.requestCount !== undefined">
+                  <span class="info-label">请求次数</span>
+                  <span class="info-value">{{ node.requestCount }}</span>
                 </div>
               </div>
               
@@ -195,6 +223,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useProviders } from '@/composables/useProviders.js'
 import ProviderNode from '@/components/ProviderNode.vue'
 import { logger } from '@/utils/logger.js'
+import { apiClient } from '@/utils/api.js'
 
 const showModal = ref(false)
 const isEditing = ref(false)
@@ -248,6 +277,30 @@ const needsEmail = (type) => {
 
 const needsAccessToken = (type) => {
   return ['gemini-cli-oauth', 'gemini-antigravity', 'claude-kiro-oauth'].includes(type)
+}
+
+const needsOAuth = (type) => {
+  return [
+    'gemini-cli-oauth', 
+    'gemini-antigravity', 
+    'claude-kiro-oauth',
+    'openai-qwen-oauth',
+    'openai-codex-oauth',
+    'openai-iflow'
+  ].includes(type)
+}
+
+const generateOAuth = async (providerType, node) => {
+  try {
+    const response = await apiClient.post(`/api/providers/${providerType}/${node.uuid}/oauth`);
+    if (response.data.url) {
+      window.open(response.data.url, '_blank');
+      window.$toast?.success('已打开 OAuth 授权页面，请完成登录授权');
+    }
+  } catch (error) {
+    window.$toast?.error('生成 OAuth 授权失败: ' + error.message);
+    logger.error('OAuth generation failed', error);
+  }
 }
 
 const openAddModal = () => {
@@ -517,6 +570,15 @@ onMounted(() => {
   gap: 0.5rem;
 }
 
+.disabled-badge {
+  font-size: 0.65rem;
+  padding: 0.125rem 0.375rem;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border-radius: var(--radius-full);
+  font-weight: 500;
+}
+
 .status-indicator {
   width: 8px;
   height: 8px;
@@ -551,6 +613,16 @@ onMounted(() => {
 .action-btn:hover {
   background: var(--bg-tertiary);
   color: var(--primary-color);
+}
+
+.action-btn.oauth-btn:hover {
+  background: var(--primary-10);
+  color: var(--primary-color);
+}
+
+.action-btn.health-btn:hover {
+  background: var(--success-10);
+  color: var(--success-color);
 }
 
 .node-info {

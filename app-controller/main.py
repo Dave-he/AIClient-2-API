@@ -26,6 +26,7 @@ from core.metrics import MetricsCollector
 from core.prometheus_exporter import PrometheusExporter
 from core.structured_logger import StructuredLogger, RequestContext
 from core.redis_client import redis_client
+from core.model_testing import ModelTestingFramework
 from core.vllm_manager import (
     get_available_models,
     get_current_model_info,
@@ -128,6 +129,7 @@ scheduler = Scheduler(gpu_monitor, sys_controller)
 ws_manager = WebSocketManager()
 metrics = MetricsCollector()
 prometheus = PrometheusExporter()
+model_tester = ModelTestingFramework(scheduler, gpu_monitor)
 
 config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
 config_watcher = ConfigWatcher(config_path)
@@ -1133,6 +1135,211 @@ async def models_summary():
             "port": scheduler.get_model_port(model)
         })
     return {"models": summary, "total": len(summary)}
+
+class TestRequest(BaseModel):
+    model_name: str
+
+class TestResponse(BaseModel):
+    status: str
+    message: str
+    report: Optional[Dict[str, Any]] = None
+
+class ComparativeAnalysisRequest(BaseModel):
+    model_names: Optional[List[str]] = None
+
+@app.post("/v1/test/model/{model_name}", response_model=TestResponse)
+async def test_model(model_name: str):
+    """测试单个模型的功能和性能"""
+    logger.info(f"Starting model test for: {model_name}")
+    
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+    
+    try:
+        report = await model_tester.run_tests(model_name)
+        
+        report_dict = {
+            "model_name": report.model_name,
+            "test_timestamp": report.test_timestamp,
+            "overall_status": report.overall_status,
+            "feature_support": report.feature_support,
+            "performance_metrics": report.performance_metrics,
+            "resource_utilization": report.resource_utilization,
+            "test_results": [
+                {
+                    "test_name": r.test_name,
+                    "feature_type": r.feature_type.value,
+                    "status": r.status.value,
+                    "duration": r.duration,
+                    "metrics": r.metrics,
+                    "error": r.error,
+                    "details": r.details
+                } for r in report.test_results
+            ],
+            "errors": report.errors,
+            "warnings": report.warnings
+        }
+        
+        return {
+            "status": "completed",
+            "message": f"Tests completed for {model_name}",
+            "report": report_dict
+        }
+    except Exception as e:
+        logger.error(f"Error testing model {model_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Test failed: {str(e)}")
+
+@app.get("/v1/test/report/{model_name}")
+async def get_model_test_report(model_name: str):
+    """获取指定模型的测试报告"""
+    report = model_tester.get_previous_report(model_name)
+    
+    if not report:
+        return {"status": "not_found", "message": f"No test report found for {model_name}"}
+    
+    return {
+        "status": "found",
+        "report": {
+            "model_name": report.model_name,
+            "test_timestamp": report.test_timestamp,
+            "overall_status": report.overall_status,
+            "feature_support": report.feature_support,
+            "performance_metrics": report.performance_metrics,
+            "resource_utilization": report.resource_utilization,
+            "test_results": [
+                {
+                    "test_name": r.test_name,
+                    "feature_type": r.feature_type.value,
+                    "status": r.status.value,
+                    "duration": r.duration,
+                    "metrics": r.metrics,
+                    "error": r.error,
+                    "details": r.details
+                } for r in report.test_results
+            ],
+            "errors": report.errors,
+            "warnings": report.warnings
+        }
+    }
+
+@app.get("/v1/test/reports")
+async def get_all_test_reports():
+    """获取所有模型的测试报告"""
+    reports = model_tester.get_all_reports()
+    
+    if not reports:
+        return {"status": "no_reports", "message": "No test reports available"}
+    
+    result = {}
+    for model_name, report in reports.items():
+        result[model_name] = {
+            "model_name": report.model_name,
+            "test_timestamp": report.test_timestamp,
+            "overall_status": report.overall_status,
+            "feature_support": report.feature_support,
+            "performance_metrics": report.performance_metrics,
+            "resource_utilization": report.resource_utilization,
+            "test_results": [
+                {
+                    "test_name": r.test_name,
+                    "feature_type": r.feature_type.value,
+                    "status": r.status.value,
+                    "duration": r.duration,
+                    "metrics": r.metrics,
+                    "error": r.error,
+                    "details": r.details
+                } for r in report.test_results
+            ],
+            "errors": report.errors,
+            "warnings": report.warnings
+        }
+    
+    return {"status": "success", "reports": result}
+
+@app.post("/v1/test/comparative")
+async def run_comparative_analysis(request: ComparativeAnalysisRequest):
+    """运行多模型对比分析测试"""
+    logger.info(f"Starting comparative analysis for models: {request.model_names}")
+    
+    try:
+        analysis = await model_tester.run_comparative_analysis(request.model_names)
+        return {
+            "status": "completed",
+            "message": "Comparative analysis completed",
+            "analysis": analysis
+        }
+    except Exception as e:
+        logger.error(f"Error running comparative analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Comparative analysis failed: {str(e)}")
+
+@app.delete("/v1/test/reports")
+async def clear_test_reports():
+    """清除所有测试报告"""
+    model_tester.clear_reports()
+    return {"status": "success", "message": "All test reports cleared"}
+
+@app.get("/v1/test/status")
+async def get_test_status():
+    """获取测试框架状态"""
+    reports = model_tester.get_all_reports()
+    return {
+        "status": "ready",
+        "models_tested_count": len(reports),
+        "models_tested": list(reports.keys()),
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.post("/v1/test/model/{model_name}/switch-and-test")
+async def switch_and_test_model(model_name: str):
+    """切换到指定模型并自动运行测试"""
+    logger.info(f"Switching to model {model_name} and running tests")
+    
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+    
+    try:
+        switch_result = await scheduler.switch_model(model_name)
+        if not switch_result:
+            return {
+                "status": "failed",
+                "message": f"Failed to switch to model {model_name}",
+                "report": None
+            }
+        
+        await asyncio.sleep(5)
+        
+        report = await model_tester.run_tests(model_name)
+        
+        report_dict = {
+            "model_name": report.model_name,
+            "test_timestamp": report.test_timestamp,
+            "overall_status": report.overall_status,
+            "feature_support": report.feature_support,
+            "performance_metrics": report.performance_metrics,
+            "resource_utilization": report.resource_utilization,
+            "test_results": [
+                {
+                    "test_name": r.test_name,
+                    "feature_type": r.feature_type.value,
+                    "status": r.status.value,
+                    "duration": r.duration,
+                    "metrics": r.metrics,
+                    "error": r.error,
+                    "details": r.details
+                } for r in report.test_results
+            ],
+            "errors": report.errors,
+            "warnings": report.warnings
+        }
+        
+        return {
+            "status": "completed",
+            "message": f"Successfully switched to {model_name} and completed tests",
+            "report": report_dict
+        }
+    except Exception as e:
+        logger.error(f"Error switching and testing model {model_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Switch and test failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

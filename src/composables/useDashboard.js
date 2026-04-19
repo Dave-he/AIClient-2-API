@@ -43,10 +43,17 @@ export function useDashboard() {
   const latestVersion = ref('');
 
   const routingExamples = ref([
-    { path: '/api/v1/chat/completions', description: '默认提供商', fullPath: '/api/v1/chat/completions' },
-    { path: '/gemini-cli-oauth/v1/chat/completions', description: 'Gemini CLI OAuth', fullPath: '/gemini-cli-oauth/v1/chat/completions' },
-    { path: '/claude-custom/v1/chat/completions', description: 'Claude Custom', fullPath: '/claude-custom/v1/chat/completions' },
-    { path: '/openai-custom/v1/chat/completions', description: 'OpenAI Custom', fullPath: '/openai-custom/v1/chat/completions' }
+    { path: '/api/v1/chat/completions', description: '默认提供商', fullPath: '/api/v1/chat/completions', provider: 'default' },
+    { path: '/gemini-cli-oauth/v1/chat/completions', description: 'Gemini CLI OAuth', fullPath: '/gemini-cli-oauth/v1/chat/completions', provider: 'gemini' },
+    { path: '/gemini-antigravity/v1/chat/completions', description: 'Gemini Antigravity', fullPath: '/gemini-antigravity/v1/chat/completions', provider: 'gemini' },
+    { path: '/claude-custom/v1/chat/completions', description: 'Claude Custom', fullPath: '/claude-custom/v1/chat/completions', provider: 'claude' },
+    { path: '/claude-kiro-oauth/v1/chat/completions', description: 'Claude Kiro OAuth', fullPath: '/claude-kiro-oauth/v1/chat/completions', provider: 'claude' },
+    { path: '/openai-custom/v1/chat/completions', description: 'OpenAI Custom', fullPath: '/openai-custom/v1/chat/completions', provider: 'openai' },
+    { path: '/openai-codex-oauth/v1/chat/completions', description: 'Codex OAuth', fullPath: '/openai-codex-oauth/v1/chat/completions', provider: 'codex' },
+    { path: '/openai-qwen-oauth/v1/chat/completions', description: 'Qwen OAuth', fullPath: '/openai-qwen-oauth/v1/chat/completions', provider: 'qwen' },
+    { path: '/openai-iflow/v1/chat/completions', description: 'iFlow OAuth', fullPath: '/openai-iflow/v1/chat/completions', provider: 'iflow' },
+    { path: '/grok-custom/v1/chat/completions', description: 'Grok Custom', fullPath: '/grok-custom/v1/chat/completions', provider: 'grok' },
+    { path: '/local-model/v1/chat/completions', description: '本地模型', fullPath: '/local-model/v1/chat/completions', provider: 'local' }
   ]);
 
   // 图表实例

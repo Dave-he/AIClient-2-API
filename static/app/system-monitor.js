@@ -1,6 +1,6 @@
 const CONTROLLER_BASE_URL = typeof window !== 'undefined' && window.CONTROLLER_BASE_URL
     ? window.CONTROLLER_BASE_URL
-    : 'http://192.168.7.103:5000';
+    : 'http://localhost:5000';
 
 let systemMonitorInstance = null;
 
@@ -32,6 +32,9 @@ export class SystemMonitor {
         this.currentTokenTimeRange = 'hour';
         this.tokenChartData = {};
         this.tokenDataPollingInterval = null;
+        
+        this.modelsList = [];
+        this.currentModel = null;
         
         this.initializeDefaultData();
         console.log('[SystemMonitor] Constructor finished, initial data:', {
@@ -141,6 +144,11 @@ export class SystemMonitor {
             refreshProviderBtn.addEventListener('click', () => {
                 window.providerManager?.loadProviders(true);
             });
+        }
+
+        const refreshModelsListBtn = document.getElementById('refreshModelsListBtn');
+        if (refreshModelsListBtn) {
+            refreshModelsListBtn.addEventListener('click', () => this.loadModelsList());
         }
 
         const timeRangeTabs = document.querySelectorAll('.time-range-tab');
@@ -1416,7 +1424,269 @@ export class SystemMonitor {
         }
         return value.toString();
     }
+
+    async loadModelsList() {
+        const container = document.getElementById('quickSwitchContent');
+        if (!container) return;
+
+        try {
+            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models`, {
+                method: 'GET',
+                timeout: 10000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            this.modelsList = data || [];
+            
+            this.renderQuickSwitchPanel();
+        } catch (error) {
+            console.log('[SystemMonitor] Failed to load models list:', error.message);
+            container.innerHTML = `
+                <div class="status-loading">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>无法加载模型列表</span>
+                </div>
+            `;
+        }
+    }
+
+    async loadCurrentModel() {
+        try {
+            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/summary`, {
+                method: 'GET',
+                timeout: 5000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (data && data.running_model) {
+                this.currentModel = data.running_model;
+            } else {
+                this.currentModel = null;
+            }
+            
+            this.renderQuickSwitchPanel();
+        } catch (error) {
+            console.log('[SystemMonitor] Failed to load current model:', error.message);
+        }
+    }
+
+    renderQuickSwitchPanel() {
+        const container = document.getElementById('quickSwitchContent');
+        if (!container) return;
+
+        if (this.modelsList.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-cube"></i>
+                    <p>暂无可用模型</p>
+                    <p class="hint">请在 Python Controller 中配置模型</p>
+                </div>
+            `;
+            return;
+        }
+
+        const currentModelName = this.currentModel?.name || this.currentModel;
+        
+        let html = `
+            <div class="current-model-info">
+                <div class="current-model-label">当前运行模型</div>
+                <div class="current-model-value">
+                    ${currentModelName ? `<span class="model-name">${currentModelName}</span>` : '<span class="no-model">-</span>'}
+                </div>
+            </div>
+            <div class="models-switch-list">
+        `;
+
+        this.modelsList.forEach(model => {
+            const isRunning = model.name === currentModelName;
+            const statusClass = isRunning ? 'status-running' : model.running ? 'status-running' : 'status-stopped';
+            const statusText = isRunning ? '当前运行' : model.running ? '运行中' : '已停止';
+            
+            html += `
+                <div class="model-switch-item" data-model="${model.name}">
+                    <div class="model-switch-header">
+                        <div class="model-switch-info">
+                            <div class="model-switch-name">${model.name}</div>
+                            <div class="model-switch-details">
+                                <span class="model-switch-port">端口: ${model.port || '-'}</span>
+                                <span class="model-switch-memory">${model.required_memory || '-'}</span>
+                            </div>
+                        </div>
+                        <span class="model-switch-status ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="model-switch-actions">
+                        ${isRunning ? `
+                            <button class="btn btn-danger btn-sm" onclick="window.systemMonitor.stopModel('${model.name}')">
+                                <i class="fas fa-stop"></i> 停止
+                            </button>
+                        ` : model.running ? `
+                            <button class="btn btn-primary btn-sm" onclick="window.systemMonitor.switchModel('${model.name}')">
+                                <i class="fas fa-exchange-alt"></i> 切换到此
+                            </button>
+                        ` : `
+                            <button class="btn btn-success btn-sm" onclick="window.systemMonitor.startModel('${model.name}')">
+                                <i class="fas fa-play"></i> 启动
+                            </button>
+                        `}
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+        container.innerHTML = html;
+    }
+
+    async switchModel(modelName) {
+        const container = document.getElementById('quickSwitchContent');
+        if (!container) return;
+
+        const modelItem = container.querySelector(`[data-model="${modelName}"]`);
+        if (modelItem) {
+            modelItem.querySelector('.model-switch-actions').innerHTML = `
+                <button class="btn btn-primary btn-sm disabled" disabled>
+                    <i class="fas fa-spinner fa-spin"></i> 切换中...
+                </button>
+            `;
+        }
+
+        try {
+            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/${encodeURIComponent(modelName)}/switch`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: 120000
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            this.currentModel = { name: modelName, ...data };
+            this.renderQuickSwitchPanel();
+            this.showToast('模型切换成功', 'success');
+        } catch (error) {
+            console.error('[SystemMonitor] Failed to switch model:', error.message);
+            this.renderQuickSwitchPanel();
+            this.showToast(`切换失败: ${error.message}`, 'error');
+        }
+    }
+
+    async startModel(modelName) {
+        const container = document.getElementById('quickSwitchContent');
+        if (!container) return;
+
+        const modelItem = container.querySelector(`[data-model="${modelName}"]`);
+        if (modelItem) {
+            modelItem.querySelector('.model-switch-actions').innerHTML = `
+                <button class="btn btn-success btn-sm disabled" disabled>
+                    <i class="fas fa-spinner fa-spin"></i> 启动中...
+                </button>
+            `;
+        }
+
+        try {
+            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/${encodeURIComponent(modelName)}/start`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: 120000
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            this.currentModel = { name: modelName, ...data };
+            this.renderQuickSwitchPanel();
+            this.showToast('模型启动成功', 'success');
+        } catch (error) {
+            console.error('[SystemMonitor] Failed to start model:', error.message);
+            this.renderQuickSwitchPanel();
+            this.showToast(`启动失败: ${error.message}`, 'error');
+        }
+    }
+
+    async stopModel(modelName) {
+        const container = document.getElementById('quickSwitchContent');
+        if (!container) return;
+
+        const modelItem = container.querySelector(`[data-model="${modelName}"]`);
+        if (modelItem) {
+            modelItem.querySelector('.model-switch-actions').innerHTML = `
+                <button class="btn btn-danger btn-sm disabled" disabled>
+                    <i class="fas fa-spinner fa-spin"></i> 停止中...
+                </button>
+            `;
+        }
+
+        try {
+            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/${encodeURIComponent(modelName)}/stop`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            await response.json();
+            this.currentModel = null;
+            this.renderQuickSwitchPanel();
+            this.showToast('模型已停止', 'success');
+        } catch (error) {
+            console.error('[SystemMonitor] Failed to stop model:', error.message);
+            this.renderQuickSwitchPanel();
+            this.showToast(`停止失败: ${error.message}`, 'error');
+        }
+    }
+
+    showToast(message, type = 'info') {
+        const toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) return;
+
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        
+        let iconClass = 'fa-info-circle';
+        if (type === 'success') iconClass = 'fa-check-circle';
+        else if (type === 'error') iconClass = 'fa-exclamation-circle';
+        else if (type === 'warning') iconClass = 'fa-warning';
+
+        toast.innerHTML = `
+            <i class="fas ${iconClass}"></i>
+            <span>${message}</span>
+        `;
+
+        toastContainer.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.add('toast-fade-out');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }, 3000);
+    }
 }
 
 const systemMonitor = new SystemMonitor();
+window.systemMonitor = systemMonitor;
 export default systemMonitor;

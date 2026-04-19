@@ -345,6 +345,211 @@
         </div>
     </div>
 
+    <!-- Local Provider 配置 -->
+    <div class="tutorial-panel">
+        <h3><i class="fas fa-desktop"></i> <span data-i18n="tutorial.local.title">Local Provider 本地模型配置</span></h3>
+        <div class="tutorial-content">
+            <p data-i18n="tutorial.local.desc">Local Provider 用于连接本地部署的大语言模型（如 vLLM、Ollama 等），实现私有化部署和离线推理。</p>
+            
+            <div class="config-section">
+                <h4 data-i18n="tutorial.local.config.title">配置参数</h4>
+                <div class="config-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th data-i18n="tutorial.main.table.param">参数</th>
+                                <th data-i18n="tutorial.main.table.type">类型</th>
+                                <th data-i18n="tutorial.main.table.desc">说明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>LOCAL_API_KEY</code></td>
+                                <td>string</td>
+                                <td data-i18n="tutorial.local.config.apiKey">本地模型服务的 API Key（可选，用于认证）</td>
+                            </tr>
+                            <tr>
+                                <td><code>LOCAL_BASE_URL</code></td>
+                                <td>string</td>
+                                <td data-i18n="tutorial.local.config.baseUrl">本地模型服务的基础 URL（如 http://localhost:8000）</td>
+                            </tr>
+                            <tr>
+                                <td><code>USE_SYSTEM_PROXY_LOCAL</code></td>
+                                <td>boolean</td>
+                                <td data-i18n="tutorial.local.config.proxy">是否为 Local Provider 使用系统代理（默认 false）</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="config-section">
+                <h4 data-i18n="tutorial.local.example.title">配置示例</h4>
+                <pre><code>{
+    "MODEL_PROVIDER": "local-model",
+    "LOCAL_API_KEY": "local-dev-key",
+    "LOCAL_BASE_URL": "http://localhost:5000",
+    "USE_SYSTEM_PROXY_LOCAL": false
+}</code></pre>
+            </div>
+
+            <div class="config-section">
+                <h4 data-i18n="tutorial.local.providerPool.title">提供商池配置</h4>
+                <p data-i18n="tutorial.local.providerPool.desc">在 provider_pools.json 中添加 local-model 节点：</p>
+                <pre><code>{
+    "local-model": [
+        {
+            "uuid": "local-model-1",
+            "name": "本地模型服务",
+            "checkHealth": true,
+            "checkModel": "gemma-2-9b"
+        }
+    ]
+}</code></pre>
+            </div>
+
+            <div class="tutorial-note">
+                <i class="fas fa-lightbulb"></i>
+                <span data-i18n="tutorial.local.note">建议配合 AI Controller Python 服务使用，实现智能模型调度和 GPU 资源管理。</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Python Controller 使用方法 -->
+    <div class="tutorial-panel">
+        <h3><i class="fas fa-python"></i> <span data-i18n="tutorial.python.title">Python Controller 服务</span></h3>
+        <div class="tutorial-content">
+            <p data-i18n="tutorial.python.desc">Python Controller 是一个基于 FastAPI 的控制层服务，用于管理本地大语言模型，提供 GPU 资源监控、智能调度和队列管理功能。</p>
+            
+            <div class="config-section">
+                <h4 data-i18n="tutorial.python.install.title">安装部署</h4>
+                <pre><code># 进入控制器目录
+cd app-controller
+
+# 一键安装
+./setup.sh
+
+# 或者手动安装
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt</code></pre>
+            </div>
+
+            <div class="config-section">
+                <h4 data-i18n="tutorial.python.config.title">配置模型</h4>
+                <p data-i18n="tutorial.python.config.desc">编辑 <code>config.yaml</code> 配置模型：</p>
+                <pre><code>models:
+  gemma-2-9b:
+    service: vllm-gemma
+    port: 8000
+    required_memory: 12GB
+    preload: false
+    keep_alive: true
+    model_path: /path/to/model
+    supports_images: false
+    description: "Gemma 2 9B 模型"
+
+settings:
+  concurrency_limit: 4
+  min_available_memory: 2GB
+  request_timeout: 120
+  model_start_timeout: 120
+  gpu_memory_utilization: 0.92</code></pre>
+            </div>
+
+            <div class="config-section">
+                <h4 data-i18n="tutorial.python.start.title">启动服务</h4>
+                <pre><code># 方式一：使用启动脚本
+./start.sh
+
+# 方式二：使用 Makefile
+make run
+
+# 方式三：直接运行
+python main.py
+
+# 使用 systemd 部署
+sudo cp systemd/ai-controller.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable ai-controller
+sudo systemctl start ai-controller</code></pre>
+                <p data-i18n="tutorial.python.start.note">服务将在 <code>http://localhost:5000</code> 启动</p>
+            </div>
+
+            <div class="config-section">
+                <h4 data-i18n="tutorial.python.api.title">API 接口</h4>
+                <div class="config-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>接口</th>
+                                <th>方法</th>
+                                <th data-i18n="tutorial.main.table.desc">说明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>/v1/chat/completions</code></td>
+                                <td>POST</td>
+                                <td data-i18n="tutorial.python.api.chat">聊天补全（支持流式和图像）</td>
+                            </tr>
+                            <tr>
+                                <td><code>/v1/models</code></td>
+                                <td>GET</td>
+                                <td data-i18n="tutorial.python.api.models">获取可用模型列表</td>
+                            </tr>
+                            <tr>
+                                <td><code>/manage/gpu</code></td>
+                                <td>GET</td>
+                                <td data-i18n="tutorial.python.api.gpu">GPU 详细状态</td>
+                            </tr>
+                            <tr>
+                                <td><code>/manage/models/{name}/start</code></td>
+                                <td>POST</td>
+                                <td data-i18n="tutorial.python.api.start">启动模型</td>
+                            </tr>
+                            <tr>
+                                <td><code>/manage/models/{name}/stop</code></td>
+                                <td>POST</td>
+                                <td data-i18n="tutorial.python.api.stop">停止模型</td>
+                            </tr>
+                            <tr>
+                                <td><code>/manage/models/{name}/switch</code></td>
+                                <td>POST</td>
+                                <td data-i18n="tutorial.python.api.switch">切换模型（自动管理显存）</td>
+                            </tr>
+                            <tr>
+                                <td><code>/manage/queue</code></td>
+                                <td>GET</td>
+                                <td data-i18n="tutorial.python.api.queue">队列状态</td>
+                            </tr>
+                            <tr>
+                                <td><code>/health</code></td>
+                                <td>GET</td>
+                                <td data-i18n="tutorial.python.api.health">健康检查</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="config-section">
+                <h4 data-i18n="tutorial.python.make.title">Makefile 命令</h4>
+                <pre><code>make install      # 安装依赖
+make run          # 运行服务
+make dev          # 开发模式
+make test         # 运行测试
+make status       # 检查服务状态
+make gpu          # 获取 GPU 状态
+make models       # 获取模型状态
+make health       # 健康检查
+make logs         # 查看日志
+make restart      # 重启服务
+make preload-all  # 预加载所有模型</code></pre>
+            </div>
+        </div>
+    </div>
+
     <!-- OAuth 授权路径 -->
     <div class="tutorial-panel">
         <h3><i class="fas fa-key"></i> <span data-i18n="tutorial.oauth.title">OAuth 授权路径</span></h3>
