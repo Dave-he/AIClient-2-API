@@ -1,11 +1,1 @@
-[
-  {
-    "id": "/mnt/pve/AAAA/models/Gemma-4-31B-Abliterated",
-    "name": "/mnt/pve/AAAA/models/Gemma-4-31B-Abliterated",
-    "alias": "",
-    "provider": "local-model",
-    "actualProvider": "openai-custom",
-    "actualModel": "/mnt/pve/AAAA/models/Gemma-4-31B-Abliterated",
-    "description": ""
-  }
-]
+[]

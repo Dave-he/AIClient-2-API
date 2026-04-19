@@ -433,6 +433,9 @@ function showProviderManagerModal(data, initialSearchTerm = '') {
                         <button class="btn btn-success" onclick="window.showAddProviderForm('${providerType}')">
                             <i class="fas fa-plus"></i> <span data-i18n="modal.provider.add">添加新提供商</span>
                         </button>
+                        <button class="btn btn-primary" onclick="window.showModelSwitchModal()" id="modelSwitchBtn" title="一键切换本地模型">
+                            <i class="fas fa-exchange-alt"></i> <span data-i18n="modal.provider.switchModel">切换模型</span>
+                        </button>
                         <button class="btn btn-warning" onclick="window.resetAllProvidersHealth('${providerType}')" data-i18n="modal.provider.resetHealth" title="将所有节点的健康状态重置为健康">
                             <i class="fas fa-heartbeat"></i> 重置为健康
                         </button>
@@ -2222,6 +2225,333 @@ function renderNotSupportedModelsSelector(uuid, models, notSupportedModels = [])
     container.innerHTML = html;
 }
 
+/**
+ * 显示一键切换模型模态框
+ */
+async function showModelSwitchModal() {
+    // 移除已存在的模态框
+    const existingModal = document.querySelector('.model-switch-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // 创建模态框
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay model-switch-modal';
+    modal.style.display = 'flex';
+    
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-exchange-alt"></i> <span data-i18n="modal.provider.switchModel">一键切换模型</span></h3>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="modelSwitchContent" class="model-switch-content">
+                    <div class="status-loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span data-i18n="common.loading">加载中...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-cancel" onclick="this.closest('.modal-overlay').remove()" data-i18n="modal.provider.cancel">取消</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // 加载模型列表
+    await loadModelsListForSwitch(modal);
+}
+
+/**
+ * 加载模型列表供切换
+ */
+async function loadModelsListForSwitch(modal) {
+    const container = modal.querySelector('#modelSwitchContent');
+    if (!container) return;
+
+    try {
+        const response = await fetch(`${window.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000'}/manage/models`, {
+            method: 'GET',
+            timeout: 10000
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const modelsList = data || [];
+        
+        // 获取当前运行的模型
+        let currentModel = null;
+        try {
+            const summaryResponse = await fetch(`${window.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000'}/manage/models/summary`, {
+                method: 'GET',
+                timeout: 5000
+            });
+            if (summaryResponse.ok) {
+                const summaryData = await summaryResponse.json();
+                currentModel = summaryData?.running_model;
+            }
+        } catch (e) {
+            console.log('[ModelSwitch] Failed to load current model:', e.message);
+        }
+
+        renderModelSwitchPanel(container, modelsList, currentModel);
+    } catch (error) {
+        console.log('[ModelSwitch] Failed to load models list:', error.message);
+        container.innerHTML = `
+            <div class="status-loading">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>无法加载模型列表</span>
+                <p class="hint">请确保 Python Controller 服务已启动</p>
+            </div>
+        `;
+    }
+}
+
+/**
+ * 渲染模型切换面板
+ */
+function renderModelSwitchPanel(container, modelsList, currentModel) {
+    if (modelsList.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-cube"></i>
+                <p>暂无可用模型</p>
+                <p class="hint">请在 Python Controller 中配置模型</p>
+            </div>
+        `;
+        return;
+    }
+
+    const currentModelName = typeof currentModel === 'object' ? currentModel.name : currentModel;
+    
+    let html = `
+        <div class="current-model-info" style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+            <div class="current-model-label" style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 8px;">当前运行模型</div>
+            <div class="current-model-value" style="font-size: 18px; font-weight: 600;">
+                ${currentModelName ? `<span class="model-name">${currentModelName}</span>` : '<span class="no-model">- 无 -</span>'}
+            </div>
+        </div>
+        <div class="models-switch-list">
+    `;
+
+    modelsList.forEach(model => {
+        const isRunning = model.name === currentModelName;
+        const statusClass = isRunning ? 'status-running' : model.running ? 'status-running' : 'status-stopped';
+        const statusText = isRunning ? '当前运行' : model.running ? '运行中' : '已停止';
+        
+        html += `
+            <div class="model-switch-item" data-model="${model.name}" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color);">
+                <div class="model-switch-info" style="flex: 1;">
+                    <div class="model-switch-name" style="font-weight: 600;">${model.name}</div>
+                    <div class="model-switch-details" style="font-size: 12px; color: var(--text-tertiary);">
+                        <span class="model-switch-port">端口: ${model.port || '-'}</span>
+                        <span style="margin: 0 8px;">|</span>
+                        <span class="model-switch-memory">显存需求: ${model.required_memory || '-'}</span>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span class="model-switch-status ${statusClass}" style="font-size: 12px; padding: 4px 10px; border-radius: 4px;">${statusText}</span>
+                    <div class="model-switch-actions">
+                        ${isRunning ? `
+                            <button class="btn btn-danger btn-sm" onclick="window.stopModel('${model.name}')">
+                                <i class="fas fa-stop"></i> 停止
+                            </button>
+                        ` : model.running ? `
+                            <button class="btn btn-primary btn-sm" onclick="window.switchModel('${model.name}')">
+                                <i class="fas fa-exchange-alt"></i> 切换到此
+                            </button>
+                        ` : `
+                            <button class="btn btn-success btn-sm" onclick="window.startModel('${model.name}')">
+                                <i class="fas fa-play"></i> 启动
+                            </button>
+                        `}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+/**
+ * 切换模型
+ */
+async function switchModel(modelName) {
+    const modal = document.querySelector('.model-switch-modal');
+    const modelItem = modal?.querySelector(`[data-model="${modelName}"]`);
+    
+    if (modelItem) {
+        const actionsEl = modelItem.querySelector('.model-switch-actions');
+        if (actionsEl) {
+            actionsEl.innerHTML = `
+                <button class="btn btn-primary btn-sm disabled" disabled>
+                    <i class="fas fa-spinner fa-spin"></i> 切换中...
+                </button>
+            `;
+        }
+    }
+
+    try {
+        const response = await fetch(`${window.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000'}/manage/models/${encodeURIComponent(modelName)}/switch`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('成功', `已切换到模型: ${modelName}`, 'success');
+            if (modal) modal.remove();
+            // 刷新提供商列表
+            if (window.providerManager?.loadProviders) {
+                window.providerManager.loadProviders();
+            }
+        } else {
+            throw new Error(data.error?.message || '切换失败');
+        }
+    } catch (error) {
+        console.error('Failed to switch model:', error);
+        showToast('错误', '切换模型失败: ' + error.message, 'error');
+        if (modelItem) {
+            const actionsEl = modelItem.querySelector('.model-switch-actions');
+            if (actionsEl) {
+                actionsEl.innerHTML = `
+                    <button class="btn btn-primary btn-sm" onclick="window.switchModel('${modelName}')">
+                        <i class="fas fa-exchange-alt"></i> 切换到此
+                    </button>
+                `;
+            }
+        }
+    }
+}
+
+/**
+ * 启动模型
+ */
+async function startModel(modelName) {
+    const modal = document.querySelector('.model-switch-modal');
+    const modelItem = modal?.querySelector(`[data-model="${modelName}"]`);
+    
+    if (modelItem) {
+        const actionsEl = modelItem.querySelector('.model-switch-actions');
+        if (actionsEl) {
+            actionsEl.innerHTML = `
+                <button class="btn btn-success btn-sm disabled" disabled>
+                    <i class="fas fa-spinner fa-spin"></i> 启动中...
+                </button>
+            `;
+        }
+    }
+
+    try {
+        const response = await fetch(`${window.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000'}/manage/models/${encodeURIComponent(modelName)}/start`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('成功', `模型 ${modelName} 已启动`, 'success');
+            // 刷新模型列表
+            await loadModelsListForSwitch(modal);
+        } else {
+            throw new Error(data.error?.message || '启动失败');
+        }
+    } catch (error) {
+        console.error('Failed to start model:', error);
+        showToast('错误', '启动模型失败: ' + error.message, 'error');
+        if (modelItem) {
+            const actionsEl = modelItem.querySelector('.model-switch-actions');
+            if (actionsEl) {
+                actionsEl.innerHTML = `
+                    <button class="btn btn-success btn-sm" onclick="window.startModel('${modelName}')">
+                        <i class="fas fa-play"></i> 启动
+                    </button>
+                `;
+            }
+        }
+    }
+}
+
+/**
+ * 停止模型
+ */
+async function stopModel(modelName) {
+    const modal = document.querySelector('.model-switch-modal');
+    const modelItem = modal?.querySelector(`[data-model="${modelName}"]`);
+    
+    if (modelItem) {
+        const actionsEl = modelItem.querySelector('.model-switch-actions');
+        if (actionsEl) {
+            actionsEl.innerHTML = `
+                <button class="btn btn-danger btn-sm disabled" disabled>
+                    <i class="fas fa-spinner fa-spin"></i> 停止中...
+                </button>
+            `;
+        }
+    }
+
+    try {
+        const response = await fetch(`${window.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000'}/manage/models/${encodeURIComponent(modelName)}/stop`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('成功', `模型 ${modelName} 已停止`, 'success');
+            // 刷新模型列表
+            await loadModelsListForSwitch(modal);
+        } else {
+            throw new Error(data.error?.message || '停止失败');
+        }
+    } catch (error) {
+        console.error('Failed to stop model:', error);
+        showToast('错误', '停止模型失败: ' + error.message, 'error');
+        if (modelItem) {
+            const actionsEl = modelItem.querySelector('.model-switch-actions');
+            if (actionsEl) {
+                actionsEl.innerHTML = `
+                    <button class="btn btn-danger btn-sm" onclick="window.stopModel('${modelName}')">
+                        <i class="fas fa-stop"></i> 停止
+                    </button>
+                `;
+            }
+        }
+    }
+}
+
 // 导出所有函数，并挂载到window对象供HTML调用
 export {
     showProviderManagerModal,
@@ -2244,7 +2574,11 @@ export {
     renderNotSupportedModelsSelector,
     goToProviderPage,
     performSingleHealthCheck,
-    refreshProviderUuid
+    refreshProviderUuid,
+    showModelSwitchModal,
+    switchModel,
+    startModel,
+    stopModel
 };
 
 // 将函数挂载到window对象

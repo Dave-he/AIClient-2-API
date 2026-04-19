@@ -34,6 +34,7 @@ const translations = {
         'nav.usage': '用量查询',
         'nav.logs': '实时日志',
         'nav.plugins': '插件管理',
+        'nav.gpuMonitor': 'GPU监控',
         'nav.models': '可用模型',
         'nav.customModels': '自定义模型',
         

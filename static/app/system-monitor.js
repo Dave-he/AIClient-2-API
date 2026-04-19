@@ -169,6 +169,11 @@ export class SystemMonitor {
                 this.ensureTokenChartInitialized();
                 this.loadTokenUsageData();
                 this.loadGpuHistoryFromServer();
+            } else if (event.detail.section === 'gpu-monitor') {
+                this.loadModelsList();
+                this.loadCurrentModel();
+                this.refreshGpuStatus();
+                this.loadGpuHistoryFromServer();
             }
         });
 

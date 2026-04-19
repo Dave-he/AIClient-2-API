@@ -495,5 +495,10 @@
     "apiKeyPlaceholder": "maki_xxxxxxxx...",
     "login": "登录",
     "logout": "退出登录"
+  },
+  "modal": {
+    "provider": {
+      "switchModel": "切换模型"
+    }
   }
 }

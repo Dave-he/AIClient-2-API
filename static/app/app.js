@@ -53,7 +53,11 @@ import {
 
 import {
     showProviderManagerModal,
-    refreshProviderConfig
+    refreshProviderConfig,
+    showModelSwitchModal,
+    switchModel,
+    startModel,
+    stopModel
 } from './modal.js';
 
 import {
@@ -91,6 +95,8 @@ import {
 import {
     CustomModelsManager
 } from './custom-models-manager.js';
+
+import { SystemMonitor } from './system-monitor.js';
 
 /**
  * 加载初始数据
@@ -246,6 +252,10 @@ window.showAuthModal = showAuthModal;
 window.executeGenerateAuthUrl = executeGenerateAuthUrl;
 window.handleGenerateAuthUrl = handleGenerateAuthUrl;
 window.showAddProviderGroupModal = showAddProviderGroupModal;
+window.showModelSwitchModal = showModelSwitchModal;
+window.switchModel = switchModel;
+window.startModel = startModel;
+window.stopModel = stopModel;
 
 // 配置管理相关全局函数
 window.viewConfig = viewConfig;
