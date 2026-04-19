@@ -881,7 +881,10 @@ export class GPUMonitorModule {
                             <i class="fas fa-stop"></i> 停止
                         </button>
                         <button class="btn btn-outline btn-sm" onclick="GPUMonitor.switchModel('${name}')">
-                            <i class="fas fa-exchange-alt"></i> 切换
+                            <i class="fas fa-exchange-alt"></i> 切换并测试
+                        </button>
+                        <button class="btn btn-info btn-sm" onclick="GPUMonitor.runModelTest('${name}')">
+                            <i class="fas fa-flask"></i> 测试
                         </button>
                     ` : `
                         <button class="btn btn-success btn-sm" onclick="GPUMonitor.startModel('${name}')">
@@ -937,7 +940,7 @@ export class GPUMonitorModule {
 
     async switchModel(modelName) {
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/${encodeURIComponent(modelName)}/switch`, {
+            const response = await fetch(`${CONTROLLER_BASE_URL}/v1/test/model/${encodeURIComponent(modelName)}/switch-and-test`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -945,6 +948,10 @@ export class GPUMonitorModule {
             const data = await response.json();
             if (response.ok) {
                 logger.info(`Switched to model ${modelName} successfully`);
+                if (data.status === 'completed' && data.report) {
+                    this.testReport = data.report;
+                    this.showTestReport();
+                }
                 await this.refreshAllStatus();
             } else {
                 throw new Error(data.detail || 'Failed to switch model');
@@ -953,6 +960,206 @@ export class GPUMonitorModule {
             logger.error(`Failed to switch model ${modelName}: ${error.message}`);
             alert(`切换模型失败: ${error.message}`);
         }
+    }
+
+    async runModelTest(modelName) {
+        try {
+            const response = await fetch(`${CONTROLLER_BASE_URL}/v1/test/model/${encodeURIComponent(modelName)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                if (data.status === 'completed' && data.report) {
+                    this.testReport = data.report;
+                    this.showTestReport();
+                }
+            } else {
+                throw new Error(data.detail || 'Failed to test model');
+            }
+        } catch (error) {
+            logger.error(`Failed to test model ${modelName}: ${error.message}`);
+            alert(`测试模型失败: ${error.message}`);
+        }
+    }
+
+    showTestReport() {
+        if (!this.testReport) return;
+
+        const reportHTML = this.generateReportHTML();
+        
+        const modal = document.createElement('div');
+        modal.className = 'test-report-modal-overlay';
+        modal.innerHTML = reportHTML;
+        document.body.appendChild(modal);
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal || e.target.classList.contains('modal-close')) {
+                document.body.removeChild(modal);
+            }
+        });
+
+        document.addEventListener('keydown', function closeModal(e) {
+            if (e.key === 'Escape') {
+                document.body.removeChild(modal);
+                document.removeEventListener('keydown', closeModal);
+            }
+        });
+    }
+
+    generateReportHTML() {
+        const report = this.testReport;
+        
+        const getStatusClass = (status) => {
+            switch (status) {
+                case 'passed': return 'success';
+                case 'degraded': return 'warning';
+                case 'failed': return 'error';
+                default: return 'info';
+            }
+        };
+
+        const getStatusText = (status) => {
+            switch (status) {
+                case 'passed': return '全部通过';
+                case 'degraded': return '部分失败';
+                case 'failed': return '测试失败';
+                default: return status;
+            }
+        };
+
+        const getFeatureText = (feature) => {
+            switch (feature) {
+                case 'image': return '图片处理';
+                case 'tools': return '工具调用';
+                case 'chat': return '聊天交互';
+                default: return feature;
+            }
+        };
+
+        const getTestName = (testName) => {
+            switch (testName) {
+                case 'chat_basic': return '基础聊天测试';
+                case 'chat_streaming': return '流式响应测试';
+                case 'tool_integration': return '工具集成测试';
+                case 'image_processing': return '图片处理测试';
+                default: return testName;
+            }
+        };
+
+        const featureGrid = Object.entries(report.feature_support).map(([feature, supported]) => `
+            <div class="feature-item ${supported ? 'supported' : 'not-supported'}">
+                <i class="fas ${supported ? 'fa-check' : 'fa-times'}"></i>
+                <span>${getFeatureText(feature)}</span>
+            </div>
+        `).join('');
+
+        const testResults = report.test_results.map(result => `
+            <div class="test-result-item ${result.status}">
+                <div class="test-header">
+                    <span class="test-name">${getTestName(result.test_name)}</span>
+                    <span class="result-badge ${result.status}">${result.status === 'passed' ? '通过' : result.status === 'failed' ? '失败' : '跳过'}</span>
+                </div>
+                <div class="test-details">
+                    <span class="test-duration">耗时: ${result.duration.toFixed(3)}s</span>
+                    ${result.metrics.tps ? `<span class="test-tps">TPS: ${result.metrics.tps.toFixed(2)}</span>` : ''}
+                </div>
+                ${result.error ? `<div class="test-error"><i class="fas fa-exclamation-triangle"></i> ${result.error}</div>` : ''}
+                ${result.details ? `<div class="test-details-text">${result.details}</div>` : ''}
+            </div>
+        `).join('');
+
+        const errorsList = report.errors.map((error, index) => `
+            <div class="error-item"><i class="fas fa-times-circle"></i> ${error}</div>
+        `).join('');
+
+        const warningsList = report.warnings.map((warning, index) => `
+            <div class="warning-item"><i class="fas fa-exclamation-circle"></i> ${warning}</div>
+        `).join('');
+
+        return `
+            <div class="test-report-modal">
+                <div class="modal-header">
+                    <h3><i class="fas fa-file-report"></i> 模型测试报告</h3>
+                    <button class="modal-close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <div class="report-header">
+                        <div class="model-info">
+                            <span class="model-name">${report.model_name}</span>
+                            <span class="test-time">${report.test_timestamp}</span>
+                        </div>
+                        <span class="status-badge ${getStatusClass(report.overall_status)}">${getStatusText(report.overall_status)}</span>
+                    </div>
+
+                    <div class="report-sections">
+                        <div class="report-section">
+                            <h4><i class="fas fa-check-circle"></i> 功能支持</h4>
+                            <div class="feature-grid">${featureGrid}</div>
+                        </div>
+
+                        <div class="report-section">
+                            <h4><i class="fas fa-chart-line"></i> 性能指标</h4>
+                            <div class="metrics-grid">
+                                <div class="metric-item">
+                                    <div class="metric-value">${report.performance_metrics.overall.avg_tps.toFixed(2)}</div>
+                                    <div class="metric-label">平均 TPS</div>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-value">${report.performance_metrics.overall.avg_latency.toFixed(3)}s</div>
+                                    <div class="metric-label">平均延迟</div>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-value">${report.performance_metrics.overall.pass_rate.toFixed(1)}%</div>
+                                    <div class="metric-label">通过率</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="report-section">
+                            <h4><i class="fas fa-server"></i> 资源使用</h4>
+                            <div class="resource-grid">
+                                <div class="resource-item">
+                                    <div class="resource-header">CPU</div>
+                                    <div class="resource-info">
+                                        <span>平均: ${report.resource_utilization.cpu.avg_percent}%</span>
+                                    </div>
+                                </div>
+                                <div class="resource-item">
+                                    <div class="resource-header">内存</div>
+                                    <div class="resource-info">
+                                        <span>变化: ${report.resource_utilization.memory.delta_mb > 0 ? '+' : ''}${report.resource_utilization.memory.delta_mb} MB</span>
+                                    </div>
+                                </div>
+                                ${report.resource_utilization.gpu.available ? `
+                                <div class="resource-item">
+                                    <div class="resource-header">GPU</div>
+                                    <div class="resource-info">
+                                        <span>使用率: ${report.resource_utilization.gpu.end_utilization}%</span>
+                                        <span>温度: ${report.resource_utilization.gpu.end_temperature}°C</span>
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <div class="report-section">
+                            <h4><i class="fas fa-list-check"></i> 测试结果详情</h4>
+                            <div class="test-results-list">${testResults}</div>
+                        </div>
+
+                        ${(errorsList || warningsList) ? `
+                        <div class="report-section">
+                            <h4><i class="fas fa-alert-triangle"></i> 警告与错误</h4>
+                            ${errorsList ? `<div class="errors-list">${errorsList}</div>` : ''}
+                            ${warningsList ? `<div class="warnings-list">${warningsList}</div>` : ''}
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
     }
 }
 

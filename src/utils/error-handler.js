@@ -154,6 +154,167 @@ class ErrorHandler {
 
 export const errorHandler = new ErrorHandler();
 
+export const ERROR_CODES = {
+    AUTH_ERROR: 'auth_error',
+    PERMISSION_ERROR: 'permission_error',
+    RATE_LIMIT_ERROR: 'rate_limit_error',
+    MODEL_NOT_FOUND: 'model_not_found',
+    VALIDATION_ERROR: 'validation_error',
+    NETWORK_ERROR: 'network_error',
+    TIMEOUT_ERROR: 'timeout_error',
+    SERVER_ERROR: 'server_error',
+    CONFIG_ERROR: 'config_error',
+    PROVIDER_UNAVAILABLE: 'provider_unavailable'
+};
+
+export class APIError extends Error {
+    constructor(message, options = {}) {
+        super(message);
+        this.name = 'APIError';
+        this.code = options.code || ERROR_CODES.SERVER_ERROR;
+        this.status = options.status || 500;
+        this.details = options.details;
+    }
+}
+
+export class AuthError extends APIError {
+    constructor(message, options = {}) {
+        super(message, { ...options, code: ERROR_CODES.AUTH_ERROR, status: options.status || 401 });
+        this.name = 'AuthError';
+    }
+}
+
+export class PermissionError extends APIError {
+    constructor(message, options = {}) {
+        super(message, { ...options, code: ERROR_CODES.PERMISSION_ERROR, status: options.status || 403 });
+        this.name = 'PermissionError';
+    }
+}
+
+export class RateLimitError extends APIError {
+    constructor(message, options = {}) {
+        super(message, { ...options, code: ERROR_CODES.RATE_LIMIT_ERROR, status: options.status || 429 });
+        this.name = 'RateLimitError';
+        this.retryAfter = options.retryAfter;
+    }
+}
+
+export class ModelNotFoundError extends APIError {
+    constructor(message, options = {}) {
+        super(message, { ...options, code: ERROR_CODES.MODEL_NOT_FOUND, status: options.status || 404 });
+        this.name = 'ModelNotFoundError';
+    }
+}
+
+export class ValidationError extends APIError {
+    constructor(message, options = {}) {
+        super(message, { ...options, code: ERROR_CODES.VALIDATION_ERROR, status: options.status || 400 });
+        this.name = 'ValidationError';
+    }
+}
+
+export class NetworkError extends APIError {
+    constructor(message, options = {}) {
+        super(message, { ...options, code: ERROR_CODES.NETWORK_ERROR, status: options.status || 503 });
+        this.name = 'NetworkError';
+    }
+}
+
+export class TimeoutError extends APIError {
+    constructor(message, options = {}) {
+        super(message, { ...options, code: ERROR_CODES.TIMEOUT_ERROR, status: options.status || 504 });
+        this.name = 'TimeoutError';
+    }
+}
+
+export class ServerError extends APIError {
+    constructor(message, options = {}) {
+        super(message, { ...options, code: ERROR_CODES.SERVER_ERROR, status: options.status || 500 });
+        this.name = 'ServerError';
+    }
+}
+
+export class ConfigError extends APIError {
+    constructor(message, options = {}) {
+        super(message, { ...options, code: ERROR_CODES.CONFIG_ERROR, status: options.status || 500 });
+        this.name = 'ConfigError';
+    }
+}
+
+export class ProviderUnavailableError extends APIError {
+    constructor(message, options = {}) {
+        super(message, { ...options, code: ERROR_CODES.PROVIDER_UNAVAILABLE, status: options.status || 503 });
+        this.name = 'ProviderUnavailableError';
+    }
+}
+
+export function wrapError(error, options = {}) {
+    if (error instanceof APIError) {
+        return error;
+    }
+    return new ServerError(error.message || 'Unknown error', options);
+}
+
+export function handleError(res, error, providerType, fromProvider, req) {
+    const status = error.status || error.response?.status || 500;
+    const message = error.message || 'Internal Server Error';
+    
+    const protocol = getProtocolPrefix(providerType);
+    let errorResponse;
+    
+    if (protocol === 'openai' || protocol === 'codex') {
+        errorResponse = {
+            error: {
+                message: message,
+                type: 'server_error',
+                param: null,
+                code: status
+            }
+        };
+    } else if (protocol === 'claude') {
+        errorResponse = {
+            type: 'error',
+            error: {
+                type: 'server_error',
+                message: message
+            }
+        };
+    } else if (protocol === 'gemini') {
+        errorResponse = {
+            error: {
+                code: status,
+                message: message,
+                status: status >= 500 ? 'INTERNAL' : 'INVALID_ARGUMENT'
+            }
+        };
+    } else {
+        errorResponse = { error: message };
+    }
+    
+    if (!res.headersSent) {
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+    }
+    res.end(JSON.stringify(errorResponse));
+}
+
+function getProtocolPrefix(provider) {
+    if (!provider) return 'openai';
+    
+    if (provider === 'openai-codex-oauth') {
+        return 'codex';
+    }
+    
+    if (provider === 'local-model') {
+        return 'openai';
+    }
+
+    const hyphenIndex = provider.indexOf('-');
+    if (hyphenIndex !== -1) {
+        return provider.substring(0, hyphenIndex);
+    }
+    return provider;
+}
+
 export function useErrorHandler() {
   return {
     captureError: (error, context) => errorHandler.captureError(error, context),
