@@ -120,14 +120,18 @@ async function readTokenStore() {
     try {
         if (existsSync(TOKEN_STORE_FILE)) {
             const content = await fs.readFile(TOKEN_STORE_FILE, 'utf8');
+            if (!content.trim()) {
+                await writeTokenStore({ tokens: {} });
+                return { tokens: {} };
+            }
             return JSON.parse(content);
         } else {
-            // 如果文件不存在，创建一个默认的token store
             await writeTokenStore({ tokens: {} });
             return { tokens: {} };
         }
     } catch (error) {
         logger.error('[Token Store] Failed to read token store file:', error);
+        await writeTokenStore({ tokens: {} });
         return { tokens: {} };
     }
 }
@@ -137,7 +141,10 @@ async function readTokenStore() {
  */
 async function writeTokenStore(tokenStore) {
     try {
-        await fs.writeFile(TOKEN_STORE_FILE, JSON.stringify(tokenStore, null, 2), 'utf8');
+        const tempFile = TOKEN_STORE_FILE + '.tmp';
+        const content = JSON.stringify(tokenStore, null, 2);
+        await fs.writeFile(tempFile, content, 'utf8');
+        await fs.rename(tempFile, TOKEN_STORE_FILE);
     } catch (error) {
         logger.error('[Token Store] Failed to write token store file:', error);
     }

@@ -52,6 +52,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { logger } from '@/utils/logger.js'
 
 const logs = ref([])
 const logLevelFilter = ref('all')
@@ -91,7 +92,7 @@ const addLog = (data) => {
       logsContainer.value.scrollTop = logsContainer.value.scrollHeight
     }
   } catch (e) {
-    console.error('Failed to parse log:', e)
+    logger.error('Failed to parse log:', e)
   }
 }
 
@@ -131,7 +132,7 @@ const fetchLogs = async () => {
       }))
     }
   } catch (error) {
-    console.error('Failed to fetch logs:', error)
+    logger.error('Failed to fetch logs:', error)
   }
 }
 

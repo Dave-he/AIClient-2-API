@@ -97,6 +97,12 @@ class Scheduler:
     def get_model_config(self, model_name: str) -> Optional[Dict]:
         return self.config.get('models', {}).get(model_name)
     
+    def get_model_path(self, model_name: str) -> Optional[str]:
+        config = self.get_model_config(model_name)
+        if config:
+            return config.get('model_path', model_name)
+        return None
+    
     def get_model_port(self, model_name: str) -> Optional[int]:
         config = self.get_model_config(model_name)
         return config.get('port') if config else None

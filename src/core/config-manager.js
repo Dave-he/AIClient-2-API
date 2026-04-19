@@ -371,7 +371,7 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
     let currentConfig = { ...defaultConfig };
 
     try {
-        const configData = fs.readFileSync(configFilePath, 'utf8');
+        const configData = await pfs.readFile(configFilePath, 'utf8');
         const loadedConfig = JSON.parse(configData);
         Object.assign(currentConfig, loadedConfig);
         logger.info('[Config] Loaded configuration from configs/config.json');
@@ -470,8 +470,9 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         currentConfig.CUSTOM_MODELS_FILE_PATH = 'configs/custom_models.json';
     }
     try {
-        if (fs.existsSync(currentConfig.CUSTOM_MODELS_FILE_PATH)) {
-            const customModelsData = fs.readFileSync(currentConfig.CUSTOM_MODELS_FILE_PATH, 'utf8');
+        const customModelsExists = await pfs.access(currentConfig.CUSTOM_MODELS_FILE_PATH, pfs.constants.F_OK).then(() => true).catch(() => false);
+        if (customModelsExists) {
+            const customModelsData = await pfs.readFile(currentConfig.CUSTOM_MODELS_FILE_PATH, 'utf8');
             currentConfig.customModels = JSON.parse(customModelsData);
             logger.info(`[Config] Loaded custom models from ${currentConfig.CUSTOM_MODELS_FILE_PATH}`);
         } else {

@@ -152,6 +152,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
+import { logger } from '@/utils/logger.js'
 
 const selectedRange = ref('today')
 
@@ -184,7 +185,7 @@ const fetchUsageStats = async () => {
 
     updateCharts(data.hourlyData || [], data.modelDistribution || []);
   } catch (error) {
-    console.error('获取用量统计失败:', error);
+    logger.error('获取用量统计失败:', error);
   }
 }
 

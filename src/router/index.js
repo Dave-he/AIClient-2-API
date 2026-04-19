@@ -1,105 +1,129 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
+const loadView = (view) => {
+  return () => import(/* webpackChunkName: "view-[request]" */ `@/views/${view}.vue`);
+};
+
+const loadLayout = (layout) => {
+  return () => import(/* webpackChunkName: "layout-[request]" */ `@/components/${layout}.vue`);
+};
+
 const routes = [
   {
     path: '/',
     name: 'Layout',
-    component: () => import('@/components/Layout.vue'),
+    component: loadLayout('Layout'),
     meta: { requiresAuth: true },
     children: [
       {
         path: '',
         name: 'Dashboard',
-        component: () => import('@/views/core/Dashboard.vue')
+        component: loadView('core/Dashboard'),
+        meta: { prefetch: true }
       },
       {
         path: 'guide',
         name: 'Guide',
-        component: () => import('@/views/guide/Guide.vue')
+        component: loadView('guide/Guide'),
+        meta: { prefetch: true }
       },
       {
         path: 'tutorial',
         name: 'Tutorial',
-        component: () => import('@/views/guide/Tutorial.vue')
+        component: loadView('guide/Tutorial')
       },
       {
         path: 'config',
         name: 'Config',
-        component: () => import('@/views/config/Config.vue')
+        component: loadView('config/Config'),
+        meta: { prefetch: true }
       },
       {
         path: 'providers',
         name: 'Providers',
-        component: () => import('@/views/providers/Providers.vue')
+        component: loadView('providers/Providers'),
+        meta: { prefetch: true }
       },
       {
         path: 'custom-models',
         name: 'CustomModels',
-        component: () => import('@/views/config/CustomModels.vue')
+        component: loadView('config/CustomModels')
       },
       {
         path: 'upload-config',
         name: 'UploadConfig',
-        component: () => import('@/views/config/UploadConfig.vue')
+        component: loadView('config/UploadConfig')
       },
       {
         path: 'usage',
         name: 'Usage',
-        component: () => import('@/views/stats/Usage.vue')
+        component: loadView('stats/Usage')
       },
       {
         path: 'plugins',
         name: 'Plugins',
-        component: () => import('@/views/tools/Plugins.vue')
+        component: loadView('tools/Plugins')
       },
       {
         path: 'logs',
         name: 'Logs',
-        component: () => import('@/views/tools/Logs.vue')
+        component: loadView('tools/Logs')
       },
       {
         path: 'gpu-monitor',
         name: 'GPUMonitor',
-        component: () => import('@/views/providers/GPUMonitor.vue')
+        component: loadView('providers/GPUMonitor')
       },
       {
         path: 'test-api',
         name: 'TestAPI',
-        component: () => import('@/views/tools/TestAPI.vue')
+        component: loadView('tools/TestAPI')
       },
       {
         path: 'model-usage-stats',
         name: 'ModelUsageStats',
-        component: () => import('@/views/stats/ModelUsageStats.vue')
+        component: loadView('stats/ModelUsageStats')
       },
       {
         path: 'potluck',
         name: 'Potluck',
-        component: () => import('@/views/plugins/Potluck.vue')
+        component: loadView('plugins/Potluck')
       },
       {
         path: 'potluck-user',
         name: 'PotluckUser',
-        component: () => import('@/views/plugins/PotluckUser.vue')
+        component: loadView('plugins/PotluckUser')
       }
     ]
   },
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/core/Login.vue')
+    component: loadView('core/Login')
   },
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    component: () => import('@/views/core/NotFound.vue')
+    component: loadView('core/NotFound')
   }
-]
+];
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
-})
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition;
+    } else if (to.hash) {
+      return {
+        el: to.hash,
+        behavior: 'smooth'
+      };
+    } else {
+      return { top: 0, behavior: 'smooth' };
+    }
+  }
+});
 
 router.beforeEach((to, from, next) => {
   const isAuthenticated = localStorage.getItem('authToken');
@@ -110,6 +134,12 @@ router.beforeEach((to, from, next) => {
     next('/');
   } else {
     next();
+  }
+});
+
+router.afterEach((to) => {
+  if (to.meta.prefetch) {
+    document.dispatchEvent(new CustomEvent('route-prefetch', { detail: to.name }));
   }
 });
 

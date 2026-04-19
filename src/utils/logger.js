@@ -1,3 +1,6 @@
+import { AsyncLocalStorage } from 'async_hooks';
+import { createWriteStream, existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
+
 const isBrowser = typeof window !== 'undefined';
 
 const LOG_LEVELS = {
@@ -22,6 +25,8 @@ const LOG_COLORS = isBrowser ? {
   RESET: '\x1b[0m'
 };
 
+const requestContextStorage = isBrowser ? null : new AsyncLocalStorage();
+
 class Logger {
   constructor() {
     this.level = LOG_LEVELS.INFO;
@@ -30,7 +35,6 @@ class Logger {
     this.logBuffer = [];
     this.maxBufferSize = 100;
     this.enabled = true;
-    this.requestId = null;
 
     this.logDir = 'logs';
     this.maxFileSize = 10485760;
@@ -40,6 +44,11 @@ class Logger {
     this.includeTimestamp = true;
     this.currentLogFile = null;
     this.currentLogSize = 0;
+    
+    this._writeStream = null;
+    this._writeQueue = [];
+    this._isFlushing = false;
+    this._logDirEnsured = false;
   }
 
   initialize(options = {}) {
@@ -90,49 +99,102 @@ class Logger {
     return `${this.logDir}/aiclient-${dateStr}.log`;
   }
 
-  async ensureLogDir() {
-    if (isBrowser) {
+  ensureLogDirSync() {
+    if (isBrowser || this._logDirEnsured) {
       return;
     }
-    const fs = await import('fs');
     try {
-      if (!fs.existsSync(this.logDir)) {
-        fs.mkdirSync(this.logDir, { recursive: true });
+      if (!existsSync(this.logDir)) {
+        mkdirSync(this.logDir, { recursive: true });
       }
+      this._logDirEnsured = true;
     } catch (error) {
       console.error('Failed to create log directory:', error.message);
     }
   }
 
-  async writeToFile(message) {
-    if (isBrowser || this.outputMode === 'console' || this.outputMode === 'browser') {
-      return;
-    }
-
-    await this.ensureLogDir();
-
+  _rotateStreamIfNeeded() {
     const logFile = this.getLogFilePath();
-    if (!logFile || logFile === this.currentLogFile && this.currentLogSize >= this.maxFileSize) {
-      await this.rotateLogFile();
+    if (!logFile) {
+      return false;
     }
+    if (this.currentLogFile && logFile !== this.currentLogFile) {
+      this._closeStream();
+      return true;
+    }
+    if (this.currentLogFile && this.currentLogSize >= this.maxFileSize) {
+      this._closeStream();
+      this._cleanupOldLogsSync();
+      return true;
+    }
+    return false;
+  }
 
-    const fs = await import('fs');
-    try {
-      fs.appendFileSync(logFile, message + '\n');
-      this.currentLogFile = logFile;
-      this.currentLogSize += Buffer.byteLength(message, 'utf8') + 1;
-    } catch (error) {
-      console.error('Failed to write to log file:', error.message);
+  _closeStream() {
+    if (this._writeStream) {
+      this._writeStream.end();
+      this._writeStream = null;
+    }
+    this.currentLogFile = null;
+    this.currentLogSize = 0;
+  }
+
+  _enqueueLog(message) {
+    this._writeQueue.push(message);
+    if (!this._isFlushing) {
+      this._flushQueue();
     }
   }
 
-  async rotateLogFile() {
-    if (isBrowser) {
+  async _flushQueue() {
+    if (this._isFlushing || this._writeQueue.length === 0) {
       return;
     }
-    await this.cleanupOldLogs();
-    this.currentLogFile = null;
-    this.currentLogSize = 0;
+    this._isFlushing = true;
+
+    try {
+      this.ensureLogDirSync();
+      this._rotateStreamIfNeeded();
+
+      const logFile = this.getLogFilePath();
+      if (!logFile) {
+        this._writeQueue = [];
+        this._isFlushing = false;
+        return;
+      }
+
+      if (!this._writeStream) {
+        this._writeStream = createWriteStream(logFile, { flags: 'a' });
+        this._writeStream.on('error', (err) => {
+          console.error('Log stream error:', err.message);
+          this._writeStream = null;
+        });
+        this.currentLogFile = logFile;
+        if (existsSync(logFile)) {
+          this.currentLogSize = statSync(logFile).size;
+        }
+      }
+
+      const batch = this._writeQueue.splice(0, 50);
+      const content = batch.join('\n') + '\n';
+      this._writeStream.write(content);
+      this.currentLogSize += Buffer.byteLength(content, 'utf8');
+    } catch (error) {
+      console.error('Failed to flush log queue:', error.message);
+    } finally {
+      this._isFlushing = false;
+      if (this._writeQueue.length > 0) {
+        this._flushQueue();
+      }
+    }
+  }
+
+  getCurrentRequestId() {
+    if (isBrowser) {
+      return null;
+    }
+    const store = requestContextStorage.getStore();
+    return store ? store.requestId : null;
   }
 
   formatMessage(level, message, ...args) {
@@ -155,8 +217,9 @@ class Logger {
 
     parts.push(message);
 
-    if (this.includeRequestId && this.requestId) {
-      parts.push(`[req:${this.requestId}]`);
+    const requestId = this.getCurrentRequestId();
+    if (this.includeRequestId && requestId) {
+      parts.push(`[req:${requestId}]`);
     }
 
     if (args.length > 0) {
@@ -213,9 +276,7 @@ class Logger {
     }
 
     if (this.outputMode !== 'console' && this.outputMode !== 'browser') {
-      this.writeToFile(fileMsg).catch(err => {
-        console.error('Async writeToFile failed:', err.message);
-      });
+      this._enqueueLog(fileMsg);
     }
   }
 
@@ -267,49 +328,52 @@ class Logger {
   }
 
   runWithContext(requestId, fn) {
-    const previousRequestId = this.requestId;
-    this.requestId = requestId;
-    try {
+    if (isBrowser) {
       return fn();
-    } finally {
-      this.requestId = previousRequestId;
     }
+    return requestContextStorage.run({ requestId }, fn);
   }
 
   getRequestId() {
-    return this.requestId;
+    return this.getCurrentRequestId();
   }
 
   clearRequestContext(requestId = null) {
-    if (requestId && this.requestId !== requestId) {
-      return;
-    }
-    this.requestId = null;
-  }
-
-  async cleanupOldLogs() {
     if (isBrowser) {
       return;
     }
-    const fs = await import('fs');
-    const path = await import('path');
+    const store = requestContextStorage.getStore();
+    if (store) {
+      if (!requestId || store.requestId === requestId) {
+        store.requestId = null;
+      }
+    }
+  }
 
+  async flush() {
+    await this._flushQueue();
+  }
+
+  _cleanupOldLogsSync() {
+    if (isBrowser) {
+      return;
+    }
     try {
-      if (!fs.existsSync(this.logDir)) {
+      if (!existsSync(this.logDir)) {
         return;
       }
-      const files = fs.readdirSync(this.logDir).filter(f => f.endsWith('.log'));
+      const files = readdirSync(this.logDir).filter(f => f.endsWith('.log'));
       if (files.length <= this.maxFiles) {
         return;
       }
       const fileStats = files.map(f => ({
         name: f,
-        mtime: fs.statSync(path.join(this.logDir, f)).mtime.getTime()
+        mtime: statSync(`${this.logDir}/${f}`).mtime.getTime()
       }));
       fileStats.sort((a, b) => a.mtime - b.mtime);
       const toDelete = fileStats.slice(0, fileStats.length - this.maxFiles);
       for (const file of toDelete) {
-        fs.unlinkSync(path.join(this.logDir, file.name));
+        unlinkSync(`${this.logDir}/${file.name}`);
       }
     } catch (error) {
       console.error('Failed to cleanup old logs:', error.message);
@@ -320,7 +384,6 @@ class Logger {
     if (isBrowser) {
       return false;
     }
-    const fs = await import('fs');
     
     try {
       const logFile = this.getLogFilePath();
@@ -328,8 +391,10 @@ class Logger {
         return false;
       }
       
-      if (fs.existsSync(logFile)) {
-        fs.writeFileSync(logFile, '');
+      this._closeStream();
+      
+      if (existsSync(logFile)) {
+        writeFileSync(logFile, '');
         this.currentLogSize = 0;
         return true;
       }

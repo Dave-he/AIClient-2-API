@@ -167,9 +167,14 @@ export class ProviderPoolManager {
                 // 排除禁用的节点（不健康节点也应允许尝试刷新以恢复健康）
                 if (config.isDisabled) continue;
 
-                if (configPath && fs.existsSync(configPath)) {
+                if (configPath) {
                     try {
-                        const fileContent = fs.readFileSync(configPath, 'utf-8');
+                        const fileExists = await fs.promises.access(configPath, fs.constants.F_OK).then(() => true).catch(() => false);
+                        if (!fileExists) {
+                            this._log('debug', `Node ${providerStatus.uuid} (${providerType}) config file does not exist.`);
+                            continue;
+                        }
+                        const fileContent = await fs.promises.readFile(configPath, 'utf-8');
                         const credData = JSON.parse(fileContent);
                         const rawExpiryTime = credData.expiry_date ?? credData.expiry ?? credData.expires_at ?? credData.expiresAt;
                         let expiryTime = null;

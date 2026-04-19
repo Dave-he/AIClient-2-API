@@ -41,6 +41,41 @@ class ModelServiceUnavailableException(ControllerException):
             msg += f": {reason}"
         super().__init__(msg, code=503)
 
+class ServiceStartTimeoutException(ControllerException):
+    def __init__(self, service_name: str, timeout: int = 120):
+        super().__init__(
+            f"Service {service_name} failed to start within {timeout}s",
+            code=504,
+            details={"service": service_name, "timeout": timeout}
+        )
+
+class GPUResourceExhaustedException(ControllerException):
+    def __init__(self, gpu_id: int = 0, details: dict = None):
+        msg = f"GPU {gpu_id} resources exhausted"
+        super().__init__(msg, code=503, details=details or {})
+
+class ConfigurationException(ControllerException):
+    def __init__(self, message: str, config_key: str = ""):
+        details = {"config_key": config_key} if config_key else {}
+        super().__init__(message, code=500, details=details)
+
+class RedisConnectionException(ControllerException):
+    def __init__(self, host: str = "", port: int = 0):
+        msg = "Redis connection failed"
+        details = {}
+        if host:
+            details["host"] = host
+            details["port"] = port
+        super().__init__(msg, code=503, details=details)
+
+class RateLimitExceededException(ControllerException):
+    def __init__(self, limit: int, window: int, retry_after: int):
+        super().__init__(
+            f"Rate limit exceeded: {limit} requests per {window}s",
+            code=429,
+            details={"limit": limit, "window": window, "retry_after": retry_after}
+        )
+
 async def http_exception_handler(request: Request, exc: HTTPException):
     logger.error(f"HTTP error {exc.status_code} at {request.url}: {exc.detail}")
     return JSONResponse(

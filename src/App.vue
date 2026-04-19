@@ -1,10 +1,12 @@
 <template>
   <div id="app">
-    <router-view v-slot="{ Component }">
-      <Transition name="fade" mode="out-in">
-        <component :is="Component" />
-      </Transition>
-    </router-view>
+    <ErrorBoundary>
+      <router-view v-slot="{ Component }">
+        <Transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </Transition>
+      </router-view>
+    </ErrorBoundary>
     <Toast ref="toastRef" />
   </div>
 </template>
@@ -12,6 +14,7 @@
 <script setup>
 import { ref } from 'vue';
 import Toast from '@/components/Toast.vue';
+import ErrorBoundary from '@/components/ErrorBoundary.vue';
 
 const toastRef = ref(null);
 

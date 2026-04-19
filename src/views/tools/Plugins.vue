@@ -60,6 +60,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { logger } from '@/utils/logger.js'
 
 const plugins = ref([
   {
@@ -138,9 +139,9 @@ const plugins = ref([
 
 const togglePlugin = (plugin) => {
   if (plugin.enabled) {
-    console.log(`Enabling plugin: ${plugin.name}`)
+    logger.info(`Enabling plugin: ${plugin.name}`)
   } else {
-    console.log(`Disabling plugin: ${plugin.name}`)
+    logger.info(`Disabling plugin: ${plugin.name}`)
   }
 }
 </script>

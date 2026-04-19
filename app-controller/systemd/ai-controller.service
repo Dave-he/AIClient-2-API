@@ -1,18 +1,28 @@
 [Unit]
-Description=AI Controller Service
-After=network.target redis.service
+Description=AI Controller Python Service
+After=network.target redis-server.service
 
 [Service]
 Type=simple
 User=root
-Group=root
-WorkingDirectory=/root/ai-os/app-controller
-ExecStart=/usr/local/bin/python /root/ai-os/app-controller/main.py
+WorkingDirectory=/root/AIClient-2-API/app-controller
+Environment=PATH=/root/AIClient-2-API/app-controller/.venv/bin
+ExecStart=/root/AIClient-2-API/app-controller/.venv/bin/python main.py
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
-RestartSec=5
-Environment="PYTHONPATH=/root/ai-os/app-controller"
-Environment="REDIS_URL=redis://localhost:6379"
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aiclient-python
+
+# Resource limits
 LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security settings
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/root/AIClient-2-API/app-controller/logs
 
 [Install]
 WantedBy=multi-user.target

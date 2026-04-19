@@ -192,6 +192,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { logger } from '@/utils/logger.js'
 
 const API_BASE = '/api/model-usage-stats'
 const STORAGE_KEY = 'model_usage_stats_auth'
@@ -488,7 +489,7 @@ const connectAndLoad = async () => {
     statusType.value = 'success'
     statusMessage.value = `已加载 ${rows.value.length} 条模型统计。`
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     authConnected.value = false
     statusType.value = 'error'
     statusMessage.value = error.message
@@ -505,7 +506,7 @@ const resetData = async () => {
     statusType.value = 'success'
     statusMessage.value = '统计数据已重置。'
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     statusType.value = 'error'
     statusMessage.value = error.message
   }
@@ -521,7 +522,7 @@ const resetTokenData = async () => {
     statusType.value = 'success'
     statusMessage.value = '模型 Token 统计已重置。'
   } catch (error) {
-    console.error(error)
+    logger.error(error)
     statusType.value = 'error'
     statusMessage.value = error.message
   }

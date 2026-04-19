@@ -2,6 +2,7 @@ import axios from 'axios';
 import { router } from '@/router/index.js';
 import { performanceMonitor } from '@/utils/performance.js';
 import { logger } from '@/utils/logger.js';
+import { cache, pendingRequests, isCacheable, requestConfig } from '@/utils/request-cache.js';
 
 const createApiInstance = (baseURL = window.location.origin) => {
   const token = localStorage.getItem('authToken');
@@ -84,11 +85,59 @@ const withPerformance = async (fn, method, url) => {
 
 export const apiClient = {
   get: async (url, config = {}) => {
-    return withPerformance(
+    const cacheKey = `GET:${url}:${JSON.stringify(config.params || {})}`;
+    
+    // Check cache first for GET requests
+    if (isCacheable({ method: 'get', url })) {
+      const cachedData = cache.get(cacheKey);
+      if (cachedData) {
+        logger.debug(`Cache hit for ${url}`);
+        return cachedData;
+      }
+    }
+
+    // Deduplicate pending requests
+    if (requestConfig.enableDeduplication) {
+      const pendingKey = pendingRequests.getKey({ method: 'get', url, params: config.params });
+      if (pendingRequests.has(pendingKey)) {
+        logger.debug(`Deduplicating request for ${url}`);
+        return pendingRequests.get(pendingKey);
+      }
+    }
+
+    const requestPromise = withPerformance(
       () => requestWithRetry(() => api.get(url, config)),
       'GET',
       url
-    );
+    ).then(response => {
+      // Cache the response
+      if (isCacheable({ method: 'get', url })) {
+        cache.set(cacheKey, response);
+      }
+      
+      // Remove from pending
+      if (requestConfig.enableDeduplication) {
+        const pendingKey = pendingRequests.getKey({ method: 'get', url, params: config.params });
+        pendingRequests.remove(pendingKey);
+      }
+      
+      return response;
+    }).catch(error => {
+      // Remove from pending on error
+      if (requestConfig.enableDeduplication) {
+        const pendingKey = pendingRequests.getKey({ method: 'get', url, params: config.params });
+        pendingRequests.remove(pendingKey);
+      }
+      throw error;
+    });
+
+    // Add to pending requests
+    if (requestConfig.enableDeduplication) {
+      const pendingKey = pendingRequests.getKey({ method: 'get', url, params: config.params });
+      pendingRequests.add(pendingKey, requestPromise);
+    }
+
+    return requestPromise;
   },
 
   post: async (url, data = {}, config = {}) => {

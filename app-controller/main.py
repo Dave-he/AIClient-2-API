@@ -265,6 +265,30 @@ class ChatCompletionChunk(BaseModel):
     model: str
     choices: List[Dict[str, Any]]
 
+class ImageGenerationRequest(BaseModel):
+    model: str = Field(default="dall-e-3")
+    prompt: str = Field(min_length=1, max_length=4000)
+    n: Optional[int] = Field(default=1, ge=1, le=10)
+    size: Optional[str] = Field(default="1024x1024", pattern=r'^\d+x\d+$')
+    quality: Optional[str] = Field(default="standard", pattern=r'^(standard|hd)$')
+    style: Optional[str] = Field(default="vivid", pattern=r'^(vivid|natural)$')
+    response_format: Optional[str] = Field(default="url", pattern=r'^(url|b64_json)$')
+
+class ImageData(BaseModel):
+    b64_json: Optional[str] = None
+    url: Optional[str] = None
+    revised_prompt: Optional[str] = None
+
+class ImageGenerationResponse(BaseModel):
+    created: int
+    data: List[ImageData]
+
+class EmbeddingRequest(BaseModel):
+    model: str
+    input: Union[str, List[str]]
+    encoding_format: Optional[str] = "float"
+    dimensions: Optional[int] = None
+
 @app.get("/v1/models")
 async def list_models():
     logger.info("Listing available models")
@@ -556,6 +580,120 @@ async def get_image_info():
         }
     }
 
+@app.post("/v1/images/generations", response_model=ImageGenerationResponse)
+async def generate_image(request: ImageGenerationRequest):
+    """OpenAI 兼容的图像生成接口"""
+    start_time = datetime.now()
+    logger.info(f"Received image generation request: model={request.model}, prompt={request.prompt[:50]}...")
+    
+    if not scheduler.is_model_available(request.model):
+        raise ModelNotFoundException(request.model)
+    
+    if not scheduler.is_model_running(request.model):
+        success = await scheduler.start_model(request.model)
+        if not success:
+            raise ModelServiceUnavailableException(request.model, "Failed to start model")
+        await asyncio.sleep(5)
+    
+    vllm_port = scheduler.get_model_port(request.model)
+    vllm_url = f"http://localhost:{vllm_port}/v1/images/generations"
+    
+    try:
+        request_data = {
+            "prompt": request.prompt,
+            "n": request.n,
+            "size": request.size,
+            "response_format": request.response_format
+        }
+        
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(vllm_url, json=request_data, timeout=120)
+            response.raise_for_status()
+            result = response.json()
+        
+        duration = (datetime.now() - start_time).total_seconds()
+        metrics.record_request(
+            endpoint="/v1/images/generations",
+            status_code=200,
+            response_time=duration,
+            model_name=request.model
+        )
+        
+        return result
+    except httpx.HTTPError as e:
+        logger.error(f"Image generation failed for {request.model}: {str(e)}")
+        metrics.record_request(
+            endpoint="/v1/images/generations",
+            status_code=503,
+            response_time=(datetime.now() - start_time).total_seconds(),
+            model_name=request.model
+        )
+        raise ModelServiceUnavailableException(request.model, str(e))
+
+@app.post("/v1/embeddings")
+async def create_embeddings(request: EmbeddingRequest):
+    """OpenAI 兼容的 Embedding 接口"""
+    start_time = datetime.now()
+    model_name = request.model
+    logger.info(f"Received embedding request for model: {model_name}")
+    
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+    
+    if not scheduler.is_model_running(model_name):
+        success = await scheduler.start_model(model_name)
+        if not success:
+            raise ModelServiceUnavailableException(model_name, "Failed to start model")
+        await asyncio.sleep(5)
+    
+    vllm_port = scheduler.get_model_port(model_name)
+    vllm_url = f"http://localhost:{vllm_port}/v1/embeddings"
+    
+    slot_acquired = False
+    try:
+        if not scheduler.acquire_request(model_name):
+            raise TooManyRequestsException(
+                scheduler.get_active_requests(model_name),
+                scheduler.get_concurrency_limit(),
+                scheduler.get_queue_length(model_name)
+            )
+        slot_acquired = True
+        
+        request_data = {
+            "model": scheduler.get_model_path(model_name) or model_name,
+            "input": request.input,
+            "encoding_format": request.encoding_format
+        }
+        if request.dimensions:
+            request_data["dimensions"] = request.dimensions
+        
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(vllm_url, json=request_data, timeout=60)
+            response.raise_for_status()
+            result = response.json()
+        
+        duration = (datetime.now() - start_time).total_seconds()
+        metrics.record_request(
+            endpoint="/v1/embeddings",
+            status_code=200,
+            response_time=duration,
+            model_name=model_name
+        )
+        
+        return result
+    except httpx.HTTPError as e:
+        logger.error(f"Embedding failed for {model_name}: {str(e)}")
+        metrics.record_request(
+            endpoint="/v1/embeddings",
+            status_code=503,
+            response_time=(datetime.now() - start_time).total_seconds(),
+            model_name=model_name
+        )
+        raise ModelServiceUnavailableException(model_name, str(e))
+    finally:
+        if slot_acquired:
+            scheduler.release_request(model_name)
+
 @app.websocket("/ws/monitor")
 async def websocket_monitor(websocket: WebSocket):
     await ws_manager.connect(websocket, channel="monitor")
@@ -611,6 +749,68 @@ async def get_queue_status():
             "can_accept": scheduler.can_accept_request(model)
         }
     return queue_info
+
+@app.get("/manage/preload")
+async def get_preload():
+    logger.info("Getting preload status")
+    return {
+        "preloaded_models": scheduler.get_preloaded_models(),
+        "all_models": scheduler.get_available_models()
+    }
+
+@app.post("/manage/preload/{model_name}")
+async def preload_model(model_name: str):
+    logger.info(f"Preloading model {model_name}")
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+
+    success = await scheduler.start_model(model_name)
+    if success:
+        return {"status": "preloaded", "model": model_name}
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to preload model {model_name}")
+
+@app.post("/manage/models/{model_name}/start")
+async def start_model(model_name: str):
+    logger.info(f"Starting model {model_name}")
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+
+    if scheduler.is_model_running(model_name):
+        return {"status": "already_running", "model": model_name}
+
+    success = await scheduler.start_model(model_name)
+    if success:
+        return {"status": "starting", "model": model_name}
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to start model {model_name}")
+
+@app.post("/manage/models/{model_name}/stop")
+async def stop_model(model_name: str):
+    logger.info(f"Stopping model {model_name}")
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+
+    if not scheduler.is_model_running(model_name):
+        return {"status": "already_stopped", "model": model_name}
+
+    success = await scheduler.stop_model(model_name)
+    if success:
+        return {"status": "stopped", "model": model_name}
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to stop model {model_name}")
+
+@app.post("/manage/models/{model_name}/switch")
+async def switch_to_model(model_name: str):
+    logger.info(f"Switching to model {model_name}")
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+
+    success = await scheduler.switch_model(model_name)
+    if success:
+        return {"status": "switched", "model": model_name}
+    else:
+        raise HTTPException(status_code=503, detail=f"Failed to switch to model {model_name}, insufficient memory")
 
 @app.get("/manage/metrics")
 async def get_metrics():
@@ -821,7 +1021,7 @@ async def disable_preload(model_name: str):
     else:
         return {"status": "already_disabled", "model": model_name}
 
-@app.post("/manage/preload/all")
+@app.get("/manage/preload/all")
 async def preload_all_models():
     logger.info("Preloading all models")
     results = {}
@@ -829,6 +1029,110 @@ async def preload_all_models():
         success = scheduler.schedule_preload(model_name)
         results[model_name] = {"status": "preloading" if success else "failed"}
     return results
+
+@app.get("/api/v1/status")
+async def node_integration_status():
+    """Node.js 集成状态检查接口，供 AIClient-2-API 调用"""
+    gpu_status = gpu_monitor.get_gpu_status()
+    models = scheduler.get_available_models()
+    model_statuses = {}
+    for model in models:
+        model_statuses[model] = {
+            "available": scheduler.is_model_available(model),
+            "running": scheduler.is_model_running(model),
+            "preloaded": scheduler.is_model_preloaded(model),
+            "port": scheduler.get_model_port(model),
+            "supports_images": scheduler.get_model_supports_images(model),
+            "active_requests": scheduler.get_active_requests(model),
+            "can_accept": scheduler.can_accept_request(model)
+        }
+    
+    return {
+        "service": "ai-controller",
+        "status": "healthy" if gpu_status else "degraded",
+        "timestamp": datetime.now().isoformat(),
+        "gpu": {
+            "available": gpu_status is not None,
+            "memory_mb": gpu_status.get("total_memory", 0) // (1024**2) if gpu_status else 0,
+            "used_mb": gpu_status.get("used_memory", 0) // (1024**2) if gpu_status else 0,
+            "utilization_percent": gpu_status.get("utilization", 0) if gpu_status else 0
+        } if gpu_status else {"available": False},
+        "models": model_statuses,
+        "queue": {
+            "concurrency_limit": scheduler.get_concurrency_limit()
+        }
+    }
+
+@app.get("/api/v1/models/{model_name}/info")
+async def model_info(model_name: str):
+    """获取单个模型详细信息"""
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+    
+    config = scheduler.get_model_config(model_name)
+    return {
+        "name": model_name,
+        "available": True,
+        "running": scheduler.is_model_running(model_name),
+        "preloaded": scheduler.is_model_preloaded(model_name),
+        "port": scheduler.get_model_port(model_name),
+        "model_path": scheduler.get_model_path(model_name),
+        "service": scheduler.get_model_service(model_name),
+        "supports_images": scheduler.get_model_supports_images(model_name),
+        "description": config.get("description", "") if config else "",
+        "required_memory": config.get("required_memory", "") if config else "",
+        "active_requests": scheduler.get_active_requests(model_name),
+        "can_accept": scheduler.can_accept_request(model_name),
+        "last_used": scheduler.get_model_last_used(model_name).isoformat() if scheduler.get_model_last_used(model_name) else None
+    }
+
+@app.get("/manage/system/status")
+async def system_status():
+    """获取系统级状态（CPU、内存、磁盘）"""
+    import psutil
+    
+    cpu_percent = psutil.cpu_percent(interval=1)
+    memory = psutil.virtual_memory()
+    disk = psutil.disk_usage('/')
+    
+    return {
+        "cpu": {
+            "percent": cpu_percent,
+            "cores": psutil.cpu_count(),
+            "cores_physical": psutil.cpu_count(logical=False)
+        },
+        "memory": {
+            "total_mb": memory.total // (1024**2),
+            "available_mb": memory.available // (1024**2),
+            "used_mb": memory.used // (1024**2),
+            "percent": memory.percent
+        },
+        "disk": {
+            "total_gb": disk.total // (1024**3),
+            "used_gb": disk.used // (1024**3),
+            "free_gb": disk.free // (1024**3),
+            "percent": disk.percent
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/manage/models/summary")
+async def models_summary():
+    """获取模型汇总信息（适合前端列表展示）"""
+    models = scheduler.get_available_models()
+    summary = []
+    for model in models:
+        config = scheduler.get_model_config(model)
+        summary.append({
+            "name": model,
+            "running": scheduler.is_model_running(model),
+            "preloaded": scheduler.is_model_preloaded(model),
+            "supports_images": scheduler.get_model_supports_images(model),
+            "description": config.get("description", "") if config else "",
+            "required_memory": config.get("required_memory", "") if config else "",
+            "port": scheduler.get_model_port(model)
+        })
+    return {"models": summary, "total": len(summary)}
 
 if __name__ == "__main__":
     import uvicorn

@@ -226,34 +226,24 @@ function setupSignalHandlers() {
     });
 
     process.on('uncaughtException', (error) => {
-        // 添加更详细的错误信息记录
-        const errorDetails = {
-            type: typeof error,
-            isObject: error instanceof Object,
-            message: error?.message || 'No message',
-            code: error?.code || 'No code',
-            stack: error?.stack || 'No stack',
-            errorString: String(error),
-            keys: error instanceof Object ? Object.keys(error) : 'Not an object'
-        };
+        logger.error('[Server] Uncaught Exception:', error);
         
-        logger.error('[Server] Uncaught exception:', errorDetails);
+        const isRecoverable = error && (
+            error.code === 'ECONNRESET' ||
+            error.code === 'EPIPE' ||
+            error.code === 'ENOTFOUND' ||
+            error.code === 'ETIMEDOUT' ||
+            error.code === 'ECONNREFUSED' ||
+            (error instanceof Error && error.message.includes('socket hang up')) ||
+            (error instanceof Error && error.message.includes('read ECONNRESET'))
+        );
         
-        // 检查是否为可重试的网络错误
-        if (isRetryableNetworkError(error)) {
-            logger.warn('[Server] Network error detected, continuing operation...');
-            return; // 不退出程序，继续运行
+        if (isRecoverable) {
+            logger.warn(`[Server] Recoverable error detected: ${error.code || error.message}, continuing`);
+        } else {
+            logger.error('[Server] Fatal uncaught exception detected, triggering graceful shutdown');
+            gracefulShutdown();
         }
-        
-        // 对于空异常对象，不关闭服务，记录警告
-        if (typeof error === 'object' && error !== null && Object.keys(error).length === 0) {
-            logger.warn('[Server] Empty exception object detected, continuing operation...');
-            return;
-        }
-        
-        // 对于其他严重错误，执行优雅关闭
-        logger.error('[Server] Fatal error detected, initiating shutdown...');
-        gracefulShutdown();
     });
 
     const unhandledRejectionCounter = { count: 0, lastTime: 0 };
@@ -261,24 +251,10 @@ function setupSignalHandlers() {
     process.on('unhandledRejection', (reason, promise) => {
         const now = Date.now();
         
-        const reasonDetails = {
-            type: typeof reason,
-            isObject: reason instanceof Object,
-            message: reason?.message || 'No message',
-            code: reason?.code || 'No code',
-            stack: reason?.stack || 'No stack',
-            reasonString: String(reason),
-            keys: reason instanceof Object ? Object.keys(reason) : 'Not an object'
-        };
-        
-        if (reason && isRetryableNetworkError(reason)) {
-            logger.warn('[Server] Network error in promise rejection, continuing operation...');
-            return;
-        }
-        
-        if (typeof reason === 'object' && reason !== null && Object.keys(reason).length === 0) {
-            logger.warn('[Server] Empty rejection reason detected, continuing operation...');
-            return;
+        if (reason instanceof Error) {
+            logger.error('[Server] Unhandled Promise Rejection:', reason);
+        } else {
+            logger.error('[Server] Unhandled Promise Rejection (non-Error):', reason);
         }
         
         unhandledRejectionCounter.count++;
@@ -289,10 +265,8 @@ function setupSignalHandlers() {
             unhandledRejectionCounter.lastTime = now;
         }
         
-        logger.error('[Server] Unhandled rejection:', reasonDetails);
-        
         if (unhandledRejectionCounter.count >= 5) {
-            logger.error('[Server] Too many unhandled rejections, initiating shutdown...');
+            logger.error('[Server] Too many unhandled rejections in 60s, triggering graceful shutdown');
             unhandledRejectionCounter.count = 0;
             gracefulShutdown();
         } else {
@@ -358,6 +332,27 @@ async function startServer() {
         headersTimeout: 60000, // 头部超时 60 秒
         keepAliveTimeout: 65000 // Keep-alive 超时
     }, requestHandlerInstance);
+
+    serverInstance.on('request', (req, res) => {
+        const isStreaming = req.url && (req.url.includes('stream') || req.url.includes('/v1/chat/completions'));
+        
+        if (!isStreaming) {
+            res.setTimeout(300000, () => {
+                if (!res.headersSent) {
+                    logger.warn(`[Server] Request timeout: ${req.method} ${req.url} (5min limit)`);
+                    res.writeHead(504, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        error: {
+                            message: 'Request timeout: the request took too long to process',
+                            type: 'timeout_error',
+                            code: 'request_timeout'
+                        }
+                    }));
+                }
+                req.destroy();
+            });
+        }
+    });
 
     // 设置服务器的最大连接数
     serverInstance.maxConnections = 1000;

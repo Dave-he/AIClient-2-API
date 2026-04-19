@@ -558,9 +558,12 @@ export async function getProviderStatus(config, options = {}) {
     try {
         if (providerPoolManager && providerPoolManager.providerPools) {
             providerPools = providerPoolManager.providerPools;
-        } else if (filePath && fs.existsSync(filePath)) {
-            const poolsData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-            providerPools = poolsData;
+        } else if (filePath) {
+            const fileExists = await fs.promises.access(filePath, fs.constants.F_OK).then(() => true).catch(() => false);
+            if (fileExists) {
+                const poolsData = await fs.promises.readFile(filePath, 'utf-8');
+                providerPools = JSON.parse(poolsData);
+            }
         }
     } catch (error) {
         logger.warn('[API Service] Failed to load provider pools:', error.message);
