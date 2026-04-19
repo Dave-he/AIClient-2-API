@@ -111,6 +111,128 @@ function loadInitialData() {
 }
 
 /**
+ * 初始化Provider切换器
+ */
+function initProviderSwitcher() {
+    const providerSwitchBtn = document.getElementById('providerSwitchBtn');
+    const providerDropdown = document.getElementById('providerDropdown');
+    const providerList = document.getElementById('providerList');
+    const currentProviderEl = document.getElementById('currentProvider');
+    
+    if (!providerSwitchBtn || !providerDropdown || !providerList) {
+        console.log('Provider switcher elements not found');
+        return;
+    }
+    
+    // 切换下拉菜单显示/隐藏
+    providerSwitchBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        providerDropdown.classList.toggle('show');
+    });
+    
+    // 点击页面其他地方关闭下拉菜单
+    document.addEventListener('click', (e) => {
+        if (!providerSwitchBtn.contains(e.target) && !providerDropdown.contains(e.target)) {
+            providerDropdown.classList.remove('show');
+        }
+    });
+    
+    // 加载提供商列表
+    async function loadProviderList() {
+        try {
+            providerList.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> <span data-i18n="common.loading">加载中...</span></div>';
+            
+            const data = await window.apiClient.get('/api/providers/dynamic');
+            if (!data || !data.providers) return;
+            
+            const providers = data.providers;
+            const providerTypes = Object.keys(providers);
+            
+            if (providerTypes.length === 0) {
+                providerList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-secondary);">暂无可用的Provider</div>';
+                return;
+            }
+            
+            // 加载提供商配置以获取显示名称
+            const staticData = await window.apiClient.get('/api/providers/static');
+            const providerConfigs = staticData?.supportedProviders || [];
+            const configMap = providerConfigs.reduce((map, config) => {
+                map[config.id] = config;
+                return map;
+            }, {});
+            
+            providerList.innerHTML = '';
+            
+            providerTypes.forEach(providerType => {
+                const accounts = providers[providerType] || [];
+                const healthyCount = accounts.filter(acc => acc.isHealthy && !acc.isDisabled).length;
+                const totalCount = accounts.length;
+                const isHealthy = healthyCount > 0;
+                
+                const providerItem = document.createElement('div');
+                providerItem.className = 'provider-item';
+                providerItem.dataset.providerType = providerType;
+                
+                const displayName = configMap[providerType]?.name || providerType;
+                
+                providerItem.innerHTML = `
+                    <span class="provider-name">${displayName}</span>
+                    <span class="provider-status ${isHealthy ? 'status-healthy' : 'status-unhealthy'}">
+                        ${healthyCount}/${totalCount}
+                    </span>
+                `;
+                
+                providerItem.addEventListener('click', async () => {
+                    try {
+                        // 切换默认提供商
+                        const configData = await window.apiClient.get('/api/config');
+                        const newConfig = {
+                            ...configData,
+                            MODEL_PROVIDER: providerType
+                        };
+                        
+                        await window.apiClient.put('/api/config', newConfig);
+                        
+                        // 更新当前显示
+                        currentProviderEl.textContent = displayName;
+                        providerDropdown.classList.remove('show');
+                        
+                        // 显示成功消息
+                        showToast(t('common.success'), `已切换到 ${displayName}`, 'success');
+                        
+                        // 重新加载配置和提供商数据
+                        loadConfiguration();
+                        loadProviders(true);
+                    } catch (error) {
+                        console.error('Failed to switch provider:', error);
+                        showToast(t('common.error'), '切换Provider失败', 'error');
+                    }
+                });
+                
+                providerList.appendChild(providerItem);
+            });
+        } catch (error) {
+            console.error('Failed to load provider list:', error);
+            providerList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--danger-color);">加载Provider列表失败</div>';
+        }
+    }
+    
+    // 初始加载
+    loadProviderList();
+    
+    // 定期刷新提供商列表
+    setInterval(loadProviderList, REFRESH_INTERVALS.SYSTEM_INFO);
+    
+    // 点击按钮时刷新列表
+    providerSwitchBtn.addEventListener('click', () => {
+        if (providerDropdown.classList.contains('show')) {
+            loadProviderList();
+        }
+    });
+}
+
+/**
  * 初始化应用
  */
 function initApp() {
@@ -137,9 +259,13 @@ function initApp() {
     initImageZoom(); // 初始化图片放大功能
     initPluginManager(); // 初始化插件管理功能
     initTutorialManager(); // 初始化教程管理功能
+    initProviderSwitcher(); // 初始化Provider切换器
     
     // 初始化自定义模型管理
     window.customModelsManager = new CustomModelsManager();
+    
+    // 初始化系统监控
+    window.systemMonitor = new SystemMonitor();
     
     initMobileMenu(); // 初始化移动端菜单
     loadInitialData();
