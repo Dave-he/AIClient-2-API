@@ -1,5 +1,6 @@
 import logger from '../utils/logger.js';
 import { CONFIG } from '../core/config-manager.js';
+import { pendingRequests } from '../utils/request-cache.js';
 
 const CONTROLLER_BASE_URL = CONFIG.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
 
@@ -13,6 +14,7 @@ export class GPUMonitorModule {
         this.lastGpuData = null;
         this.animationFrame = null;
         this.testReport = null;
+        this._isRefreshing = false;
         this.init();
     }
 
@@ -637,7 +639,7 @@ export class GPUMonitorModule {
                 this.refreshAllStatus();
                 this.checkControllerConnection();
             }
-        }, 3000);
+        }, 10000);
     }
 
     stopPolling() {
@@ -653,12 +655,20 @@ export class GPUMonitorModule {
     }
 
     async refreshAllStatus() {
-        await Promise.all([
-            this.refreshGpuStatus(),
-            this.refreshModelsStatus(),
-            this.refreshQueueStatus(),
-            this.refreshModelControls()
-        ]);
+        if (this._isRefreshing) {
+            return;
+        }
+        this._isRefreshing = true;
+        try {
+            await Promise.all([
+                this.refreshGpuStatus(),
+                this.refreshModelsStatus(),
+                this.refreshQueueStatus(),
+                this.refreshModelControls()
+            ]);
+        } finally {
+            this._isRefreshing = false;
+        }
     }
 
     async checkControllerConnection() {
@@ -741,8 +751,15 @@ export class GPUMonitorModule {
         if (!container) return;
 
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models`, {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python/models/status`, {
                 method: 'GET',
+                headers,
                 timeout: 5000
             });
 
@@ -750,8 +767,12 @@ export class GPUMonitorModule {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json();
-            this.renderModelsStatus(data, container);
+            const result = await response.json();
+            if (result.success) {
+                this.renderModelsStatus(result.models, container);
+            } else {
+                throw new Error(result.error || 'Failed to get models status');
+            }
         } catch (error) {
             logger.warn(`Failed to fetch models status: ${error.message}`);
             container.innerHTML = `
@@ -797,8 +818,15 @@ export class GPUMonitorModule {
         if (!container) return;
 
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/queue`, {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python/queue/status`, {
                 method: 'GET',
+                headers,
                 timeout: 5000
             });
 
@@ -806,8 +834,12 @@ export class GPUMonitorModule {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json();
-            this.renderQueueStatus(data, container);
+            const result = await response.json();
+            if (result.success) {
+                this.renderQueueStatus(result.queue, container);
+            } else {
+                throw new Error(result.error || 'Failed to get queue status');
+            }
         } catch (error) {
             logger.warn(`Failed to fetch queue status: ${error.message}`);
             container.innerHTML = `
@@ -871,8 +903,15 @@ export class GPUMonitorModule {
         if (!container) return;
 
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models`, {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python/models/status`, {
                 method: 'GET',
+                headers,
                 timeout: 5000
             });
 
@@ -880,8 +919,12 @@ export class GPUMonitorModule {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json();
-            this.renderModelControls(data, container);
+            const result = await response.json();
+            if (result.success) {
+                this.renderModelControls(result.models, container);
+            } else {
+                throw new Error(result.error || 'Failed to get model controls');
+            }
         } catch (error) {
             logger.warn(`Failed to fetch model controls: ${error.message}`);
             container.innerHTML = `

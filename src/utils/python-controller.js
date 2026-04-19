@@ -4,6 +4,18 @@ const DEFAULT_PYTHON_CONTROLLER_URL = 'http://localhost:5000';
 
 let controllerUrl = DEFAULT_PYTHON_CONTROLLER_URL;
 
+const gpuCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 5000
+};
+
+const queueCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 5000
+};
+
 export function setControllerUrl(url) {
     controllerUrl = url;
 }
@@ -116,21 +128,33 @@ export async function getVLLMServiceStatus() {
 
 export async function getGPUStatus() {
     try {
+        const now = Date.now();
+        if (gpuCache.data && (now - gpuCache.timestamp) < gpuCache.ttl) {
+            return gpuCache.data;
+        }
         const data = await callPythonController('/manage/gpu');
+        gpuCache.data = data;
+        gpuCache.timestamp = now;
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to get GPU status: ${error.message}`);
-        return null;
+        return gpuCache.data || null;
     }
 }
 
 export async function getQueueStatus() {
     try {
+        const now = Date.now();
+        if (queueCache.data && (now - queueCache.timestamp) < queueCache.ttl) {
+            return queueCache.data;
+        }
         const data = await callPythonController('/manage/queue');
+        queueCache.data = data;
+        queueCache.timestamp = now;
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to get queue status: ${error.message}`);
-        return {};
+        return queueCache.data || {};
     }
 }
 

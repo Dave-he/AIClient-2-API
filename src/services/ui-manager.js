@@ -639,6 +639,16 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await handlePythonGpuStatus(req, res, currentConfig);
     }
 
+    // Models status proxy (proxy to /api/python/models/status)
+    if (method === 'GET' && pathParam === '/api/python-gpu/models') {
+        return await pythonControllerApi.handleGetModelsStatus(req, res);
+    }
+
+    // Queue status proxy (proxy to /api/python/queue/status)
+    if (method === 'GET' && pathParam === '/api/python-gpu/queue') {
+        return await pythonControllerApi.handleGetQueueStatus(req, res);
+    }
+
     return false;
 }
 

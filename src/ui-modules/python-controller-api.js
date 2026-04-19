@@ -1,9 +1,26 @@
 import logger from '../utils/logger.js';
 import { CONFIG } from '../core/config-manager.js';
 
-const CONTROLLER_BASE_URL = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
+const gpuCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 5000
+};
+
+const queueCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 5000
+};
+
+const modelsCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 5000
+};
 
 async function callPythonController(endpoint, method = 'GET', body = null, headers = {}) {
+    const CONTROLLER_BASE_URL = CONFIG.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
     const url = `${CONTROLLER_BASE_URL}${endpoint}`;
     
     try {
@@ -112,12 +129,21 @@ export async function handleSwitchModel(req, res, modelName) {
 
 export async function handleGetGPUStatus(req, res) {
     try {
+        const now = Date.now();
+        if (gpuCache.data && (now - gpuCache.timestamp) < gpuCache.ttl) {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
+            res.end(JSON.stringify({ success: true, ...gpuCache.data }));
+            return true;
+        }
+
         const headers = {};
         if (req.headers.authorization) {
             headers['Authorization'] = req.headers.authorization;
         }
         const data = await callPythonController('/manage/gpu', 'GET', null, headers);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        gpuCache.data = data;
+        gpuCache.timestamp = now;
+        res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'MISS' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -149,13 +175,47 @@ export async function handleGetGPUHistory(req, res) {
 
 export async function handleGetQueueStatus(req, res) {
     try {
+        const now = Date.now();
+        if (queueCache.data && (now - queueCache.timestamp) < queueCache.ttl) {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
+            res.end(JSON.stringify({ success: true, queue: queueCache.data }));
+            return true;
+        }
+
         const headers = {};
         if (req.headers.authorization) {
             headers['Authorization'] = req.headers.authorization;
         }
         const data = await callPythonController('/manage/queue', 'GET', null, headers);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        queueCache.data = data;
+        queueCache.timestamp = now;
+        res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'MISS' });
         res.end(JSON.stringify({ success: true, queue: data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleGetModelsStatus(req, res) {
+    try {
+        const now = Date.now();
+        if (modelsCache.data && (now - modelsCache.timestamp) < modelsCache.ttl) {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
+            res.end(JSON.stringify({ success: true, models: modelsCache.data }));
+            return true;
+        }
+
+        const headers = {};
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+        const data = await callPythonController('/manage/models', 'GET', null, headers);
+        modelsCache.data = data;
+        modelsCache.timestamp = now;
+        res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'MISS' });
+        res.end(JSON.stringify({ success: true, models: data }));
     } catch (error) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: { message: error.message } }));

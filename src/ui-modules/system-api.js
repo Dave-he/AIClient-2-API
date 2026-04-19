@@ -13,6 +13,12 @@ let systemMonitorHistory = {
 };
 const MAX_HISTORY_POINTS = 60;
 
+const systemMonitorCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 5000
+};
+
 async function collectSystemMetrics() {
     const cpuUsage = parseFloat(getCpuUsagePercent());
     const total = os.totalmem();
@@ -164,10 +170,17 @@ export async function handleClearTodayLog(req, res) {
  * 获取系统监控历史数据
  */
 export async function handleGetSystemMonitor(req, res) {
+    const now = Date.now();
+    if (systemMonitorCache.data && (now - systemMonitorCache.timestamp) < systemMonitorCache.ttl) {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
+        res.end(JSON.stringify(systemMonitorCache.data));
+        return true;
+    }
+
     const total = os.totalmem();
     const free = os.freemem();
     const used = total - free;
-    
+
     const formatBytes = (bytes) => {
         if (bytes === 0) return '0 B';
         const k = 1024;
@@ -200,8 +213,7 @@ export async function handleGetSystemMonitor(req, res) {
         logger.warn('[UI API] Failed to get GPU status for system monitor:', error.message);
     }
 
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
+    const result = {
         cpu: {
             usage: parseFloat(getCpuUsagePercent()),
             cores: os.cpus().length,
@@ -217,7 +229,13 @@ export async function handleGetSystemMonitor(req, res) {
         gpu: gpuData,
         timestamp: systemMonitorHistory.timestamp,
         platform: process.platform
-    }));
+    };
+
+    systemMonitorCache.data = result;
+    systemMonitorCache.timestamp = now;
+
+    res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'MISS' });
+    res.end(JSON.stringify(result));
     return true;
 }
 

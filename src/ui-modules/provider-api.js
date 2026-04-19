@@ -12,6 +12,12 @@ import { generateUUID, createProviderConfig, formatSystemPath, detectProviderFro
 import { broadcastEvent } from './event-broadcast.js';
 import { getRegisteredProviders, getServiceAdapter, invalidateServiceAdapter, serviceInstances } from '../providers/adapter.js';
 
+const providerDynamicCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 5000
+};
+
 // 文件级互斥锁：防止并发读写导致数据丢失
 // 安全净化：移除用户输入字段中的危险内容（script、事件处理器、javascript:协议等），
 // 存储原始文本。HTML 转义统一由前端 escHtml() 负责，避免双编码问题。
@@ -384,6 +390,17 @@ export async function handleGetProvidersStatic(req, res, currentConfig, provider
  * 动态数据：实时变化，需要频繁刷新
  */
 export async function handleGetProvidersDynamic(req, res, currentConfig, providerPoolManager) {
+    const now = Date.now();
+    if (providerDynamicCache.data && (now - providerDynamicCache.timestamp) < providerDynamicCache.ttl) {
+        res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'max-age=5',
+            'X-Cache': 'HIT'
+        });
+        res.end(JSON.stringify(providerDynamicCache.data));
+        return true;
+    }
+
     const providerStatus = {};
     
     if (providerPoolManager) {
@@ -421,11 +438,16 @@ export async function handleGetProvidersDynamic(req, res, currentConfig, provide
         logger.warn('[UI API] Failed to supplement provider dynamic status:', error.message);
     }
 
-    res.writeHead(200, { 
+    const result = { providers: sanitizeProviderPools(providerStatus, true) };
+    providerDynamicCache.data = result;
+    providerDynamicCache.timestamp = now;
+
+    res.writeHead(200, {
         'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache'
+        'Cache-Control': 'max-age=5',
+        'X-Cache': 'MISS'
     });
-    res.end(JSON.stringify({ providers: sanitizeProviderPools(providerStatus, true) }));
+    res.end(JSON.stringify(result));
     return true;
 }
 

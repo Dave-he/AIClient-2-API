@@ -8,6 +8,7 @@ import { createRequestHandler } from '../handlers/request-handler.js';
 import { discoverPlugins, getPluginManager } from '../core/plugin-manager.js';
 import { getTLSSidecar } from '../utils/tls-sidecar.js';
 import { HEALTH_CHECK } from '../utils/constants.js';
+import { setControllerUrl } from '../utils/python-controller.js';
 
 /**
  * @license
@@ -279,6 +280,11 @@ function setupSignalHandlers() {
 async function startServer() {
     // Initialize configuration
     await initializeConfig(process.argv.slice(2), 'configs/config.json');
+    
+    // Set Python controller URL from config
+    const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
+    setControllerUrl(controllerBaseUrl);
+    logger.info(`[Initialization] Set Python controller URL: ${controllerBaseUrl}`);
     
     // 自动关联 configs 目录中的配置文件到对应的提供商
     // logger.info('[Initialization] Checking for unlinked provider configs...');

@@ -192,6 +192,9 @@ describe('Python Service Management End-to-End Tests', () => {
 
   describe('Python Service UI Component Tests', () => {
     test('should render Python service control panel', () => {
+      // Clean up previous elements
+      document.body.innerHTML = '';
+      
       const panel = document.createElement('div');
       panel.className = 'python-service-panel';
       panel.innerHTML = `
@@ -219,7 +222,7 @@ describe('Python Service Management End-to-End Tests', () => {
       document.body.appendChild(panel);
 
       expect(document.querySelector('.python-service-panel')).not.toBeNull();
-      expect(document.querySelector('.panel-header h3').textContent).toContain('Python服务控制');
+      expect(document.querySelector('.python-service-panel .panel-header h3').textContent).toContain('Python服务控制');
       expect(document.querySelector('#refreshServiceStatusBtn')).not.toBeNull();
       expect(document.querySelector('#pythonServiceStatus')).not.toBeNull();
       expect(document.querySelector('#startPythonServiceBtn')).not.toBeNull();
@@ -228,6 +231,9 @@ describe('Python Service Management End-to-End Tests', () => {
     });
 
     test('should render config management panel', () => {
+      // Clean up previous elements
+      document.body.innerHTML = '';
+      
       const panel = document.createElement('div');
       panel.className = 'config-management-panel';
       panel.innerHTML = `
@@ -247,13 +253,16 @@ describe('Python Service Management End-to-End Tests', () => {
       document.body.appendChild(panel);
 
       expect(document.querySelector('.config-management-panel')).not.toBeNull();
-      expect(document.querySelector('.panel-header h3').textContent).toContain('配置管理');
+      expect(document.querySelector('.config-management-panel .panel-header h3').textContent).toContain('配置管理');
       expect(document.querySelector('#refreshConfigBtn')).not.toBeNull();
       expect(document.querySelector('#editConfigBtn')).not.toBeNull();
       expect(document.querySelector('#configContent')).not.toBeNull();
     });
 
     test('should render service info cards', () => {
+      // Clean up previous elements
+      document.body.innerHTML = '';
+      
       const statusContainer = document.createElement('div');
       statusContainer.id = 'pythonServiceStatus';
       statusContainer.innerHTML = `
@@ -303,6 +312,9 @@ describe('Python Service Management End-to-End Tests', () => {
     });
 
     test('should render config sections', () => {
+      // Clean up previous elements
+      document.body.innerHTML = '';
+      
       const configContainer = document.createElement('div');
       configContainer.id = 'configContent';
       configContainer.innerHTML = `
@@ -352,6 +364,9 @@ describe('Python Service Management End-to-End Tests', () => {
     });
 
     test('should render config editor modal', () => {
+      // Clean up previous elements
+      document.body.innerHTML = '';
+      
       const modal = document.createElement('div');
       modal.className = 'config-editor-modal';
       modal.id = 'configEditorModal';

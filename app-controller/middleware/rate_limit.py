@@ -6,7 +6,7 @@ from core.logger import setup_logger
 logger = setup_logger()
 
 class RateLimitMiddleware:
-    def __init__(self, max_requests: int = 100, window_seconds: int = 60):
+    def __init__(self, max_requests: int = 200, window_seconds: int = 60):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.clients: Dict[str, Dict[str, int]] = {}
