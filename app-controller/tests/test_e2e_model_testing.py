@@ -255,7 +255,10 @@ class TestE2EModelTesting:
                 
                 assert response.status_code == 404
                 data = response.json()
-                assert "Model unknown-model not found" in data.get("detail", "") or "Model unknown-model not found" in data.get("error", {}).get("message", "")
+                error_message = data.get("detail", "") or data.get("error", "")
+                if isinstance(error_message, dict):
+                    error_message = error_message.get("message", "")
+                assert "Model unknown-model not found" in str(error_message)
 
     @pytest.mark.asyncio
     async def test_switch_and_test_failure(self, mock_app):
