@@ -430,7 +430,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 
-const CONTROLLER_BASE_URL = 'http://192.168.7.103:5000'
+// 使用Node.js代理地址，而不是直接访问Python控制器
+const CONTROLLER_BASE_URL = ''
 
 const loading = ref(true)
 const loadingModels = ref(true)
@@ -464,7 +465,7 @@ const chartTabs = [
   { type: 'power', label: '功耗' }
 ]
 
-const controllerUrl = ref(`${CONTROLLER_BASE_URL}/manage`)
+const controllerUrl = ref('/api/python/manage')
 
 const createChart = () => {
   if (!chartCanvas.value) return
@@ -629,7 +630,7 @@ const addChartData = (utilization, temperature, memory, power) => {
 const refreshGpuStatus = async () => {
   loading.value = true
   try {
-    const response = await fetch('/api/python-gpu/status')
+    const response = await fetch('/api/python/gpu/status')
     const result = await response.json()
     if (result.success) {
       gpuStatus.value = result
@@ -663,10 +664,12 @@ const refreshGpuStatus = async () => {
 const loadModelsStatus = async () => {
   loadingModels.value = true
   try {
-    const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models`, { timeout: 5000 })
+    const response = await fetch('/api/python/models/status', { timeout: 5000 })
     if (response.ok) {
-      const data = await response.json()
-      models.value = data.models || []
+      const result = await response.json()
+      if (result.success) {
+        models.value = result.models || []
+      }
     }
   } catch (error) {
     console.error('Failed to fetch models status:', error)
@@ -682,9 +685,12 @@ const loadModelsStatus = async () => {
 const loadQueueStatus = async () => {
   loadingQueue.value = true
   try {
-    const response = await fetch(`${CONTROLLER_BASE_URL}/manage/queue`, { timeout: 5000 })
+    const response = await fetch('/api/python/queue/status', { timeout: 5000 })
     if (response.ok) {
-      queueStats.value = await response.json()
+      const result = await response.json()
+      if (result.success) {
+        queueStats.value = result.queue || {}
+      }
     }
   } catch (error) {
     console.error('Failed to fetch queue status:', error)
@@ -702,10 +708,13 @@ const loadQueueStatus = async () => {
 const loadAvailableModels = async () => {
   loadingControl.value = true
   try {
-    const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/available`, { timeout: 5000 })
+    const response = await fetch('/api/python/models/status', { timeout: 5000 })
     if (response.ok) {
-      const data = await response.json()
-      availableModels.value = data.models || []
+      const result = await response.json()
+      if (result.success) {
+        // 假设返回的models包含所有模型，我们将其作为可用模型
+        availableModels.value = result.models || []
+      }
     }
   } catch (error) {
     console.error('Failed to fetch available models:', error)
@@ -728,19 +737,17 @@ const switchModel = async (modelName) => {
     
     window.$toast?.info(`正在切换到模型: ${modelName}，切换完成后将自动运行测试...`)
     
-    const response = await fetch(`${CONTROLLER_BASE_URL}/v1/test/model/${modelName}/switch-and-test`, {
+    const response = await fetch(`/api/python/models/${modelName}/switch`, {
       method: 'POST'
     })
     
     if (response.ok) {
-      const data = await response.json()
+      const result = await response.json()
       
-      if (data.status === 'completed') {
+      if (result.success) {
         window.$toast?.success(`成功切换到模型: ${modelName}`)
-        testReport.value = data.report
-        showTestReport.value = true
-      } else if (data.status === 'failed') {
-        window.$toast?.error(data.message || `切换模型失败: ${modelName}`)
+      } else {
+        window.$toast?.error(result.error?.message || `切换模型失败: ${modelName}`)
       }
       
       await loadModelsStatus()
@@ -748,7 +755,7 @@ const switchModel = async (modelName) => {
       await refreshGpuStatus()
     } else {
       const error = await response.json()
-      window.$toast?.error(error.detail || `切换模型失败: ${modelName}`)
+      window.$toast?.error(error.error?.message || `切换模型失败: ${modelName}`)
     }
   } catch (error) {
     console.error('Failed to switch model:', error)
@@ -766,21 +773,21 @@ const runModelTest = async (modelName) => {
     
     window.$toast?.info(`正在测试模型: ${modelName}...`)
     
-    const response = await fetch(`${CONTROLLER_BASE_URL}/v1/test/model/${modelName}`, {
+    const response = await fetch(`/api/python/test/model/${modelName}`, {
       method: 'POST'
     })
     
     if (response.ok) {
-      const data = await response.json()
+      const result = await response.json()
       
-      if (data.status === 'completed') {
+      if (result.success) {
         window.$toast?.success(`测试完成: ${modelName}`)
-        testReport.value = data.report
+        testReport.value = result.report
         showTestReport.value = true
       }
     } else {
       const error = await response.json()
-      window.$toast?.error(error.detail || `测试失败: ${modelName}`)
+      window.$toast?.error(error.error?.message || `测试失败: ${modelName}`)
     }
   } catch (error) {
     console.error('Failed to test model:', error)
@@ -836,17 +843,22 @@ const getTestName = (testName) => {
 
 const stopModel = async (modelName) => {
   try {
-    const response = await fetch(`${CONTROLLER_BASE_URL}/manage/models/${modelName}/stop`, {
+    const response = await fetch(`/api/python/models/${modelName}/stop`, {
       method: 'POST'
     })
     if (response.ok) {
-      window.$toast?.success(`已停止模型: ${modelName}`)
-      await loadModelsStatus()
-      await loadAvailableModels()
-      await refreshGpuStatus()
+      const result = await response.json()
+      if (result.success) {
+        window.$toast?.success(`已停止模型: ${modelName}`)
+        await loadModelsStatus()
+        await loadAvailableModels()
+        await refreshGpuStatus()
+      } else {
+        window.$toast?.error(result.error?.message || `停止模型失败: ${modelName}`)
+      }
     } else {
       const error = await response.json()
-      window.$toast?.error(error.detail || `停止模型失败: ${modelName}`)
+      window.$toast?.error(error.error?.message || `停止模型失败: ${modelName}`)
     }
   } catch (error) {
     console.error('Failed to stop model:', error)
@@ -856,8 +868,13 @@ const stopModel = async (modelName) => {
 
 const checkControllerConnection = async () => {
   try {
-    const response = await fetch(`${CONTROLLER_BASE_URL}/health`, { timeout: 3000 })
-    controllerConnected.value = response.ok
+    const response = await fetch('/api/python/health', { timeout: 3000 })
+    if (response.ok) {
+      const result = await response.json()
+      controllerConnected.value = result.success
+    } else {
+      controllerConnected.value = false
+    }
   } catch (error) {
     controllerConnected.value = false
   }

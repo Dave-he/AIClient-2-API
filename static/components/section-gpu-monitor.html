@@ -94,7 +94,59 @@
                 </div>
             </div>
         </div>
+
+        <!-- Python Service Control Panel -->
+        <div class="python-service-panel">
+            <div class="panel-header">
+                <h3><i class="fas fa-python"></i> <span data-i18n="gpuMonitor.pythonService">Python服务控制</span></h3>
+                <div class="service-actions">
+                    <button id="refreshServiceStatusBtn" class="btn btn-outline btn-sm" data-i18n-title="common.refresh" title="刷新状态">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div id="pythonServiceStatus" class="python-service-status">
+                <div class="status-loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span data-i18n="common.loading">加载中...</span>
+                </div>
+            </div>
+            
+            <div class="service-control-buttons">
+                <button id="startPythonServiceBtn" class="btn btn-success btn-sm" disabled>
+                    <i class="fas fa-play"></i> <span data-i18n="gpuMonitor.start">启动</span>
+                </button>
+                <button id="stopPythonServiceBtn" class="btn btn-danger btn-sm" disabled>
+                    <i class="fas fa-stop"></i> <span data-i18n="gpuMonitor.stop">停止</span>
+                </button>
+                <button id="restartPythonServiceBtn" class="btn btn-warning btn-sm" disabled>
+                    <i class="fas fa-redo"></i> <span data-i18n="gpuMonitor.restart">重启</span>
+                </button>
+            </div>
+        </div>
         
+        <!-- Config Management Panel -->
+        <div class="config-management-panel">
+            <div class="panel-header">
+                <h3><i class="fas fa-cog"></i> <span data-i18n="gpuMonitor.configManagement">配置管理</span></h3>
+                <div class="config-actions">
+                    <button id="refreshConfigBtn" class="btn btn-outline btn-sm" data-i18n-title="common.refresh" title="刷新配置">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button id="editConfigBtn" class="btn btn-outline btn-sm" data-i18n-title="gpuMonitor.editConfig" title="编辑配置">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div id="configContent" class="config-content">
+                <div class="status-loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span data-i18n="common.loading">加载中...</span>
+                </div>
+            </div>
+        </div>
         <!-- Quick Model Switch Panel -->
         <div class="model-switch-panel">
             <div class="panel-header">

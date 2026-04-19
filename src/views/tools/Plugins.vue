@@ -59,91 +59,118 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { logger } from '@/utils/logger.js'
 
-const plugins = ref([
-  {
-    name: 'default-auth',
-    version: '1.0.0',
-    type: 'auth',
-    icon: 'fas fa-shield-alt',
-    description: '默认 API Key 认证插件，支持多种认证方式（Bearer Token、Header、Query）',
-    author: 'AIClient Team',
-    lastUpdated: '2024-01-15',
-    features: ['API Key 认证', '多认证方式', '请求限速', 'IP白名单'],
-    enabled: true,
-    docs: null
-  },
-  {
-    name: 'ai-monitor',
-    version: '1.0.0',
-    type: 'middleware',
-    icon: 'fas fa-eye',
-    description: 'AI 接口监控插件 - 捕获请求和响应参数（全链路协议转换监控，流式聚合输出，用于调试和分析）',
-    author: 'AIClient Team',
-    lastUpdated: '2024-01-15',
-    features: ['全链路监控', '请求捕获', '响应分析', '流式输出'],
-    enabled: true,
-    docs: null
-  },
-  {
-    name: 'api-potluck',
-    version: '1.0.2',
-    type: 'middleware',
-    icon: 'fas fa-utensils',
-    description: 'API 大锅饭 - Key 管理和用量统计插件，支持多用户共享 API Key',
-    author: 'AIClient Team',
-    lastUpdated: '2024-01-20',
-    features: ['Key 管理', '用量统计', '多用户支持', '配额管理'],
-    enabled: true,
-    docs: '#/potluck'
-  },
-  {
-    name: 'model-usage-stats',
-    version: '1.0.0',
-    type: 'middleware',
-    icon: 'fas fa-chart-pie',
-    description: '模型用量统计插件，记录每个模型的调用次数和 Token 消耗',
-    author: 'AIClient Team',
-    lastUpdated: '2024-01-15',
-    features: ['用量统计', 'Token 统计', '模型排行', '数据导出'],
-    enabled: true,
-    docs: '#/model-usage-stats'
-  },
-  {
-    name: 'rate-limit',
-    version: '1.0.0',
-    type: 'middleware',
-    icon: 'fas fa-gauge',
-    description: '请求限流插件，支持基于 IP、用户、API Key 的限流策略',
-    author: 'AIClient Team',
-    lastUpdated: '2024-01-10',
-    features: ['IP限流', '用户限流', '动态调整', '熔断保护'],
-    enabled: false,
-    docs: null
-  },
-  {
-    name: 'cache-proxy',
-    version: '1.0.0',
-    type: 'middleware',
-    icon: 'fas fa-database',
-    description: '请求缓存代理插件，缓存重复请求以减少 API 调用费用',
-    author: 'AIClient Team',
-    lastUpdated: '2024-01-08',
-    features: ['智能缓存', 'TTL 控制', '内存/Redis', '命中率统计'],
-    enabled: false,
-    docs: null
-  }
-])
+const plugins = ref([])
 
-const togglePlugin = (plugin) => {
-  if (plugin.enabled) {
-    logger.info(`Enabling plugin: ${plugin.name}`)
-  } else {
-    logger.info(`Disabling plugin: ${plugin.name}`)
+const loadPlugins = async () => {
+  try {
+    const response = await fetch('/api/plugins')
+    if (response.ok) {
+      const result = await response.json()
+      plugins.value = result.plugins || []
+    }
+  } catch (error) {
+    console.error('Failed to load plugins:', error)
+    // 使用默认数据作为 fallback
+    plugins.value = [
+      {
+        name: 'default-auth',
+        version: '1.0.0',
+        type: 'auth',
+        icon: 'fas fa-shield-alt',
+        description: '默认 API Key 认证插件，支持多种认证方式（Bearer Token、Header、Query）',
+        author: 'AIClient Team',
+        lastUpdated: '2024-01-15',
+        features: ['API Key 认证', '多认证方式', '请求限速', 'IP白名单'],
+        enabled: true,
+        docs: null
+      },
+      {
+        name: 'ai-monitor',
+        version: '1.0.0',
+        type: 'middleware',
+        icon: 'fas fa-eye',
+        description: 'AI 接口监控插件 - 捕获请求和响应参数（全链路协议转换监控，流式聚合输出，用于调试和分析）',
+        author: 'AIClient Team',
+        lastUpdated: '2024-01-15',
+        features: ['全链路监控', '请求捕获', '响应分析', '流式输出'],
+        enabled: true,
+        docs: null
+      },
+      {
+        name: 'api-potluck',
+        version: '1.0.2',
+        type: 'middleware',
+        icon: 'fas fa-utensils',
+        description: 'API 大锅饭 - Key 管理和用量统计插件，支持多用户共享 API Key',
+        author: 'AIClient Team',
+        lastUpdated: '2024-01-20',
+        features: ['Key 管理', '用量统计', '多用户支持', '配额管理'],
+        enabled: true,
+        docs: '#/potluck'
+      },
+      {
+        name: 'model-usage-stats',
+        version: '1.0.0',
+        type: 'middleware',
+        icon: 'fas fa-chart-pie',
+        description: '模型用量统计插件，记录每个模型的调用次数和 Token 消耗',
+        author: 'AIClient Team',
+        lastUpdated: '2024-01-15',
+        features: ['用量统计', 'Token 统计', '模型排行', '数据导出'],
+        enabled: true,
+        docs: '#/model-usage-stats'
+      },
+      {
+        name: 'rate-limit',
+        version: '1.0.0',
+        type: 'middleware',
+        icon: 'fas fa-gauge',
+        description: '请求限流插件，支持基于 IP、用户、API Key 的限流策略',
+        author: 'AIClient Team',
+        lastUpdated: '2024-01-10',
+        features: ['IP限流', '用户限流', '动态调整', '熔断保护'],
+        enabled: false,
+        docs: null
+      },
+      {
+        name: 'cache-proxy',
+        version: '1.0.0',
+        type: 'middleware',
+        icon: 'fas fa-database',
+        description: '请求缓存代理插件，缓存重复请求以减少 API 调用费用',
+        author: 'AIClient Team',
+        lastUpdated: '2024-01-08',
+        features: ['智能缓存', 'TTL 控制', '内存/Redis', '命中率统计'],
+        enabled: false,
+        docs: null
+      }
+    ]
   }
 }
+
+const togglePlugin = async (plugin) => {
+  try {
+    const response = await fetch(`/api/plugins/${plugin.name}/toggle`, {
+      method: 'POST'
+    })
+    if (response.ok) {
+      const result = await response.json()
+      if (result.success) {
+        plugin.enabled = !plugin.enabled
+        logger.info(`${plugin.enabled ? 'Enabling' : 'Disabling'} plugin: ${plugin.name}`)
+      }
+    }
+  } catch (error) {
+    console.error('Failed to toggle plugin:', error)
+  }
+}
+
+onMounted(() => {
+  loadPlugins()
+})
 </script>
 
 <style scoped>

@@ -609,6 +609,31 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await pythonControllerApi.handleGetTestStatus(req, res);
     }
 
+    // Python service status
+    if (method === 'GET' && pathParam === '/api/python-gpu/service/status') {
+        return await pythonControllerApi.handleGetPythonServiceStatus(req, res);
+    }
+
+    // Start Python service
+    if (method === 'POST' && pathParam === '/api/python-gpu/service/start') {
+        return await pythonControllerApi.handleStartPythonService(req, res);
+    }
+
+    // Stop Python service
+    if (method === 'POST' && pathParam === '/api/python-gpu/service/stop') {
+        return await pythonControllerApi.handleStopPythonService(req, res);
+    }
+
+    // Restart Python service
+    if (method === 'POST' && pathParam === '/api/python-gpu/service/restart') {
+        return await pythonControllerApi.handleRestartPythonService(req, res);
+    }
+
+    // Update Python config
+    if (method === 'PUT' && pathParam === '/api/python-gpu/config') {
+        return await pythonControllerApi.handleUpdateConfig(req, res);
+    }
+
     // Python GPU status proxy endpoint (legacy - kept for backward compatibility)
     if (method === 'GET' && pathParam === '/api/python-gpu/status') {
         return await handlePythonGpuStatus(req, res, currentConfig);

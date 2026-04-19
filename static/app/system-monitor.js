@@ -51,11 +51,13 @@ export class SystemMonitor {
     initializeDefaultData() {
         const defaultCpuValues = [15, 18, 12, 25, 20, 17, 14, 22, 19, 21, 16, 13, 20, 24, 18, 15, 22, 25, 19, 16];
         const defaultMemoryValues = [45, 47, 46, 48, 45, 49, 47, 46, 48, 45, 47, 46, 48, 49, 47, 45, 46, 48, 47, 49];
+        const defaultGpuValues = [30, 35, 28, 40, 32, 38, 33, 42, 36, 39, 31, 29, 34, 41, 37, 32, 36, 40, 35, 33];
+        const defaultGpuTempValues = [45, 47, 44, 50, 46, 48, 45, 49, 47, 48, 46, 44, 47, 49, 48, 46, 47, 49, 48, 46];
         
         this.cpuHistoryData = [...defaultCpuValues];
         this.memoryHistoryData = [...defaultMemoryValues];
-        this.gpuHistoryData = [];
-        this.gpuTempHistoryData = [];
+        this.gpuHistoryData = [...defaultGpuValues];
+        this.gpuTempHistoryData = [...defaultGpuTempValues];
         
         console.log('[SystemMonitor] Default data initialized');
     }
@@ -67,14 +69,15 @@ export class SystemMonitor {
             console.log('[SystemMonitor] Initializing...');
             const dashboardSection = document.getElementById('dashboard');
             const gpuMonitorSection = document.getElementById('gpu-monitor');
-            
+
             if (!dashboardSection && !gpuMonitorSection) {
                 console.log('[SystemMonitor] Dashboard or GPU monitor not found, retrying...');
                 setTimeout(initWhenReady, 500);
                 return;
             }
-            
+
             this.isInitialized = true;
+            this.updatePythonGpuVisibility(false);
             this.setupEventListeners();
             this.loadGpuHistoryFromServer();
             this.startPolling();
@@ -304,12 +307,13 @@ export class SystemMonitor {
             this.pythonGpuConnected = data.status === 'available';
             this.renderPythonGpuConnectionStatus(this.pythonGpuConnected);
             this.renderPythonGpuStatus(data);
-            
+            this.updatePythonGpuVisibility(true);
+
             if (this.pythonGpuConnected) {
                 const utilization = data.utilization || 0;
                 const memoryUtil = data.memory_utilization || 0;
                 const temperature = data.temperature || 0;
-                
+
                 this.addToHistory(this.pythonGpuUtilizationHistory, utilization);
                 this.addToHistory(this.pythonGpuMemoryHistory, memoryUtil);
                 this.addToHistory(this.pythonGpuTempHistory, temperature);
@@ -317,7 +321,21 @@ export class SystemMonitor {
         } catch (error) {
             this.pythonGpuConnected = false;
             this.renderPythonGpuConnectionStatus(false);
+            this.updatePythonGpuVisibility(false);
             console.log('[SystemMonitor] Python GPU connection failed:', error.message);
+        }
+    }
+
+    updatePythonGpuVisibility(isConnected) {
+        const sidebarGpuLink = document.querySelector('.nav-item[data-section="gpu-monitor"]');
+        const dashboardGpuPanel = document.querySelector('.python-gpu-monitor');
+
+        if (sidebarGpuLink) {
+            sidebarGpuLink.style.display = isConnected ? '' : 'none';
+        }
+
+        if (dashboardGpuPanel) {
+            dashboardGpuPanel.style.display = isConnected ? '' : 'none';
         }
     }
 

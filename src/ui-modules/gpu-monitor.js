@@ -125,10 +125,42 @@ export class GPUMonitorModule {
             refreshBtn.addEventListener('click', () => this.refreshAllStatus());
         }
 
+        const refreshServiceBtn = document.getElementById('refreshServiceStatusBtn');
+        if (refreshServiceBtn) {
+            refreshServiceBtn.addEventListener('click', () => this.refreshPythonServiceStatus());
+        }
+
+        const startServiceBtn = document.getElementById('startPythonServiceBtn');
+        if (startServiceBtn) {
+            startServiceBtn.addEventListener('click', () => this.startPythonService());
+        }
+
+        const stopServiceBtn = document.getElementById('stopPythonServiceBtn');
+        if (stopServiceBtn) {
+            stopServiceBtn.addEventListener('click', () => this.stopPythonService());
+        }
+
+        const restartServiceBtn = document.getElementById('restartPythonServiceBtn');
+        if (restartServiceBtn) {
+            restartServiceBtn.addEventListener('click', () => this.restartPythonService());
+        }
+
+        const refreshConfigBtn = document.getElementById('refreshConfigBtn');
+        if (refreshConfigBtn) {
+            refreshConfigBtn.addEventListener('click', () => this.refreshConfig());
+        }
+
+        const editConfigBtn = document.getElementById('editConfigBtn');
+        if (editConfigBtn) {
+            editConfigBtn.addEventListener('click', () => this.showConfigEditor());
+        }
+
         document.addEventListener('section-change', (event) => {
             if (event.detail.section === 'gpu-monitor') {
                 this.refreshAllStatus();
                 this.checkControllerConnection();
+                this.refreshPythonServiceStatus();
+                this.refreshConfig();
             }
         });
 
@@ -1160,6 +1192,479 @@ export class GPUMonitorModule {
                 </div>
             </div>
         `;
+    }
+
+    async refreshPythonServiceStatus() {
+        const container = document.getElementById('pythonServiceStatus');
+        if (!container) return;
+
+        try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python-gpu/service/status`, {
+                method: 'GET',
+                headers,
+                timeout: 5000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            if (result.success) {
+                this.renderPythonServiceStatus(result, container);
+            } else {
+                throw new Error(result.error?.message || 'Failed to get service status');
+            }
+        } catch (error) {
+            logger.warn(`Failed to fetch Python service status: ${error.message}`);
+            container.innerHTML = `
+                <div class="status-loading">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>无法获取服务状态</span>
+                </div>
+            `;
+            this.updateServiceButtons(false);
+        }
+    }
+
+    renderPythonServiceStatus(data, container) {
+        const isRunning = data.running;
+        const status = data.status || 'unknown';
+        const serviceName = data.service || 'aiclient-python';
+        const configFile = data.config_file || 'config.yaml';
+
+        container.innerHTML = `
+            <div class="service-info-grid">
+                <div class="service-info-card">
+                    <div class="service-info-label">服务名称</div>
+                    <div class="service-info-value">${serviceName}</div>
+                </div>
+                <div class="service-info-card">
+                    <div class="service-info-label">运行状态</div>
+                    <div class="service-info-value ${isRunning ? 'running' : 'stopped'}">
+                        <i class="fas ${isRunning ? 'fa-check-circle' : 'fa-times-circle'}"></i>
+                        ${isRunning ? '运行中' : '已停止'}
+                    </div>
+                </div>
+                <div class="service-info-card">
+                    <div class="service-info-label">systemd状态</div>
+                    <div class="service-info-value">${status}</div>
+                </div>
+                <div class="service-info-card">
+                    <div class="service-info-label">配置文件</div>
+                    <div class="service-info-value" style="font-size: 0.75rem; word-break: break-all;">${configFile}</div>
+                </div>
+            </div>
+        `;
+
+        this.updateServiceButtons(isRunning);
+    }
+
+    updateServiceButtons(isRunning) {
+        const startBtn = document.getElementById('startPythonServiceBtn');
+        const stopBtn = document.getElementById('stopPythonServiceBtn');
+        const restartBtn = document.getElementById('restartPythonServiceBtn');
+
+        if (startBtn) startBtn.disabled = isRunning;
+        if (stopBtn) stopBtn.disabled = !isRunning;
+        if (restartBtn) restartBtn.disabled = !isRunning;
+    }
+
+    async startPythonService() {
+        try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python-gpu/service/start`, {
+                method: 'POST',
+                headers
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                logger.info('Python service started successfully');
+                this.showToast('Python服务已启动', 'success');
+                await this.refreshPythonServiceStatus();
+            } else {
+                throw new Error(result.error?.message || 'Failed to start service');
+            }
+        } catch (error) {
+            logger.error(`Failed to start Python service: ${error.message}`);
+            this.showToast(`启动失败: ${error.message}`, 'error');
+        }
+    }
+
+    async stopPythonService() {
+        try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python-gpu/service/stop`, {
+                method: 'POST',
+                headers
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                logger.info('Python service stopped successfully');
+                this.showToast('Python服务已停止', 'success');
+                await this.refreshPythonServiceStatus();
+            } else {
+                throw new Error(result.error?.message || 'Failed to stop service');
+            }
+        } catch (error) {
+            logger.error(`Failed to stop Python service: ${error.message}`);
+            this.showToast(`停止失败: ${error.message}`, 'error');
+        }
+    }
+
+    async restartPythonService() {
+        try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python-gpu/service/restart`, {
+                method: 'POST',
+                headers
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                logger.info('Python service restarted successfully');
+                this.showToast('Python服务已重启', 'success');
+                await this.refreshPythonServiceStatus();
+            } else {
+                throw new Error(result.error?.message || 'Failed to restart service');
+            }
+        } catch (error) {
+            logger.error(`Failed to restart Python service: ${error.message}`);
+            this.showToast(`重启失败: ${error.message}`, 'error');
+        }
+    }
+
+    async refreshConfig() {
+        const container = document.getElementById('configContent');
+        if (!container) return;
+
+        try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python-gpu/service/status`, {
+                method: 'GET',
+                headers,
+                timeout: 5000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            if (result.success && result.config) {
+                this.renderConfig(result.config, container);
+            } else {
+                throw new Error(result.error?.message || 'Failed to get config');
+            }
+        } catch (error) {
+            logger.warn(`Failed to fetch config: ${error.message}`);
+            container.innerHTML = `
+                <div class="status-loading">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>无法获取配置</span>
+                </div>
+            `;
+        }
+    }
+
+    renderConfig(config, container) {
+        if (!config) {
+            container.innerHTML = `
+                <div class="status-loading">
+                    <i class="fas fa-info-circle"></i>
+                    <span>暂无配置</span>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+
+        if (config.models) {
+            html += `<div class="config-section">
+                <div class="config-section-header"><i class="fas fa-cubes"></i> 模型配置 (${Object.keys(config.models).length})</div>`;
+            Object.entries(config.models).forEach(([name, modelConfig]) => {
+                const isRunning = modelConfig.running !== undefined ? modelConfig.running : false;
+                const port = modelConfig.port || '-';
+                const memory = modelConfig.required_memory || '-';
+                const supportsImages = modelConfig.supports_images ? '是' : '否';
+                html += `
+                    <div class="config-item">
+                        <div>
+                            <div class="config-item-label">${name}</div>
+                            <div style="font-size: 0.7rem; color: var(--text-muted);">端口: ${port} | 内存: ${memory} | 多模态: ${supportsImages}</div>
+                        </div>
+                        <span class="status-indicator ${isRunning ? 'running' : 'stopped'}"></span>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+        }
+
+        if (config.settings) {
+            html += `<div class="config-section">
+                <div class="config-section-header"><i class="fas fa-sliders-h"></i> 全局设置</div>`;
+            
+            const settings = config.settings;
+            const settingsToShow = [
+                { key: 'concurrency_limit', label: '并发限制' },
+                { key: 'min_available_memory', label: '最小可用内存' },
+                { key: 'request_timeout', label: '请求超时' },
+                { key: 'model_start_timeout', label: '模型启动超时' },
+                { key: 'gpu_memory_utilization', label: 'GPU内存利用率' },
+                { key: 'default_memory_strategy', label: '内存策略' }
+            ];
+            
+            settingsToShow.forEach(({ key, label }) => {
+                if (settings[key] !== undefined) {
+                    let value = settings[key];
+                    if (typeof value === 'number' && key.includes('timeout')) {
+                        value = `${value}秒`;
+                    } else if (typeof value === 'number' && key.includes('utilization')) {
+                        value = `${(value * 100).toFixed(0)}%`;
+                    }
+                    html += `
+                        <div class="config-item">
+                            <span class="config-item-label">${label}</span>
+                            <span class="config-item-value">${value}</span>
+                        </div>
+                    `;
+                }
+            });
+            
+            if (settings.queue) {
+                html += `
+                    <div class="config-item">
+                        <span class="config-item-label">队列最大长度</span>
+                        <span class="config-item-value">${settings.queue.max_length || '-'}</span>
+                    </div>
+                    <div class="config-item">
+                        <span class="config-item-label">队列轮询间隔</span>
+                        <span class="config-item-value">${settings.queue.poll_interval || '-'}秒</span>
+                    </div>
+                `;
+            }
+            
+            html += `</div>`;
+        }
+
+        if (config.vllm) {
+            html += `<div class="config-section">
+                <div class="config-section-header"><i class="fas fa-server"></i> vLLM配置</div>`;
+            const vllm = config.vllm;
+            const vllmToShow = [
+                { key: 'service_name', label: '服务名称' },
+                { key: 'default_port', label: '默认端口' },
+                { key: 'default_gpu_memory_utilization', label: '默认GPU内存利用率' },
+                { key: 'default_max_model_len', label: '默认最大模型长度' }
+            ];
+            
+            vllmToShow.forEach(({ key, label }) => {
+                if (vllm[key] !== undefined) {
+                    let value = vllm[key];
+                    if (typeof value === 'number' && key.includes('utilization')) {
+                        value = `${(value * 100).toFixed(0)}%`;
+                    }
+                    html += `
+                        <div class="config-item">
+                            <span class="config-item-label">${label}</span>
+                            <span class="config-item-value">${value}</span>
+                        </div>
+                    `;
+                }
+            });
+            html += `</div>`;
+        }
+
+        if (!html) {
+            html = `
+                <div class="status-loading">
+                    <i class="fas fa-info-circle"></i>
+                    <span>暂无配置</span>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+
+    showConfigEditor() {
+        const modal = document.createElement('div');
+        modal.className = 'config-editor-modal';
+        modal.id = 'configEditorModal';
+        
+        modal.innerHTML = `
+            <div class="config-editor-container">
+                <div class="config-editor-header">
+                    <h3><i class="fas fa-edit"></i> 编辑配置</h3>
+                    <button class="config-editor-close" onclick="GPUMonitor.closeConfigEditor()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="config-editor-body">
+                    <textarea id="configEditorTextarea" class="config-editor-textarea" placeholder="加载中..."></textarea>
+                </div>
+                <div class="config-editor-footer">
+                    <button class="btn btn-outline" onclick="GPUMonitor.closeConfigEditor()">取消</button>
+                    <button class="btn btn-primary" onclick="GPUMonitor.saveConfig()">
+                        <i class="fas fa-save"></i> 保存配置
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                this.closeConfigEditor();
+            }
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeConfigEditor();
+            }
+        });
+        
+        this.loadConfigForEditing();
+    }
+
+    async loadConfigForEditing() {
+        try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python-gpu/service/status`, {
+                method: 'GET',
+                headers,
+                timeout: 5000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            if (result.success && result.config) {
+                const textarea = document.getElementById('configEditorTextarea');
+                if (textarea) {
+                    textarea.value = JSON.stringify(result.config, null, 2);
+                }
+            } else {
+                throw new Error(result.error?.message || 'Failed to get config');
+            }
+        } catch (error) {
+            logger.error(`Failed to load config for editing: ${error.message}`);
+            this.showToast(`加载配置失败: ${error.message}`, 'error');
+            this.closeConfigEditor();
+        }
+    }
+
+    closeConfigEditor() {
+        const modal = document.getElementById('configEditorModal');
+        if (modal) {
+            document.body.removeChild(modal);
+        }
+    }
+
+    async saveConfig() {
+        const textarea = document.getElementById('configEditorTextarea');
+        if (!textarea) return;
+
+        try {
+            const newConfig = JSON.parse(textarea.value);
+        } catch (e) {
+            this.showToast('JSON格式错误，请检查语法', 'error');
+            return;
+        }
+
+        try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python-gpu/config`, {
+                method: 'PUT',
+                headers,
+                body: textarea.value
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                logger.info('Config saved successfully');
+                this.showToast('配置已保存并热更新', 'success');
+                this.closeConfigEditor();
+                await this.refreshConfig();
+            } else {
+                throw new Error(result.error?.message || 'Failed to save config');
+            }
+        } catch (error) {
+            logger.error(`Failed to save config: ${error.message}`);
+            this.showToast(`保存失败: ${error.message}`, 'error');
+        }
+    }
+
+    showToast(message, type = 'info') {
+        let container = document.querySelector('.toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        
+        let icon = 'fa-info-circle';
+        if (type === 'success') icon = 'fa-check-circle';
+        if (type === 'error') icon = 'fa-times-circle';
+        if (type === 'warning') icon = 'fa-exclamation-circle';
+
+        toast.innerHTML = `<i class="fas ${icon}"></i><span>${message}</span>`;
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.add('toast-fade-out');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
     }
 }
 

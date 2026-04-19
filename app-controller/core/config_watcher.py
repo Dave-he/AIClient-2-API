@@ -63,6 +63,17 @@ class ConfigWatcher:
             except RuntimeError:
                 pass
     
+    def save_config(self, config: Dict) -> bool:
+        try:
+            with open(self.config_path, 'w') as f:
+                yaml.safe_dump(config, f, default_flow_style=False, allow_unicode=True)
+            self._config = config
+            self._last_modified = os.path.getmtime(self.config_path)
+            return True
+        except Exception as e:
+            print(f"Error saving config: {e}")
+            return False
+
     def stop_watching(self):
         if self._watch_task is not None:
             self._stop_event.set()

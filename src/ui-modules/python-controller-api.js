@@ -304,3 +304,139 @@ export async function handleGetTestStatus(req, res) {
     }
     return true;
 }
+
+export async function handleGetPythonServiceStatus(req, res) {
+    try {
+        const headers = {};
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+        const data = await callPythonController('/manage/service/status', 'GET', null, headers);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleStartPythonService(req, res) {
+    try {
+        let body = null;
+        if (req.body) {
+            body = await new Promise((resolve) => {
+                let data = '';
+                req.on('data', (chunk) => { data += chunk; });
+                req.on('end', () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch {
+                        resolve(null);
+                    }
+                });
+            });
+        }
+        const headers = {};
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+        const data = await callPythonController('/manage/service/start', 'POST', body, headers);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleStopPythonService(req, res) {
+    try {
+        let body = null;
+        if (req.body) {
+            body = await new Promise((resolve) => {
+                let data = '';
+                req.on('data', (chunk) => { data += chunk; });
+                req.on('end', () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch {
+                        resolve(null);
+                    }
+                });
+            });
+        }
+        const headers = {};
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+        const data = await callPythonController('/manage/service/stop', 'POST', body, headers);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleRestartPythonService(req, res) {
+    try {
+        let body = null;
+        if (req.body) {
+            body = await new Promise((resolve) => {
+                let data = '';
+                req.on('data', (chunk) => { data += chunk; });
+                req.on('end', () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch {
+                        resolve(null);
+                    }
+                });
+            });
+        }
+        const headers = {};
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+        const data = await callPythonController('/manage/service/restart', 'POST', body, headers);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
+export async function handleUpdateConfig(req, res) {
+    try {
+        let body = null;
+        if (req.body) {
+            body = await new Promise((resolve) => {
+                let data = '';
+                req.on('data', (chunk) => { data += chunk; });
+                req.on('end', () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch {
+                        resolve(null);
+                    }
+                });
+            });
+        }
+        const headers = {};
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+        const data = await callPythonController('/manage/config', 'PUT', body, headers);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
