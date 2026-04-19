@@ -97,6 +97,7 @@ import {
 } from './custom-models-manager.js';
 
 import { SystemMonitor } from './system-monitor.js';
+import { GPUMonitorModule } from './gpu-monitor.js';
 
 /**
  * 加载初始数据
@@ -266,6 +267,9 @@ function initApp() {
     
     // 初始化系统监控
     window.systemMonitor = new SystemMonitor();
+    
+    // 初始化GPU监控模块
+    window.GPUMonitor = new GPUMonitorModule();
     
     initMobileMenu(); // 初始化移动端菜单
     loadInitialData();
