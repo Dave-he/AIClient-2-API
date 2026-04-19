@@ -102,6 +102,20 @@ export async function handleGetGPUStatus(req, res) {
     return true;
 }
 
+export async function handleGetGPUHistory(req, res) {
+    try {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const queryString = url.search;
+        const data = await callPythonController(`/manage/gpu/history${queryString}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...data }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
 export async function handleGetQueueStatus(req, res) {
     try {
         const data = await callPythonController('/manage/queue');

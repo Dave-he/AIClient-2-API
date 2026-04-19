@@ -553,6 +553,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await pythonControllerApi.handleGetGPUStatus(req, res);
     }
 
+    // Get GPU history via Python controller
+    if (method === 'GET' && pathParam.startsWith('/api/python/gpu/history')) {
+        return await pythonControllerApi.handleGetGPUHistory(req, res);
+    }
+
     // Get queue status
     if (method === 'GET' && pathParam === '/api/python/queue/status') {
         return await pythonControllerApi.handleGetQueueStatus(req, res);

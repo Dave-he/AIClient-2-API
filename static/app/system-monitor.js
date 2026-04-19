@@ -768,8 +768,15 @@ export class SystemMonitor {
 
     async loadGpuHistoryFromServer() {
         try {
-            const response = await fetch(`${CONTROLLER_BASE_URL}/manage/gpu/history?count=1000&time_range=${this.currentPythonGpuTimeRange}`, {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`/api/python/gpu/history?count=1000&time_range=${this.currentPythonGpuTimeRange}`, {
                 method: 'GET',
+                headers,
                 timeout: 5000
             });
 
