@@ -321,6 +321,139 @@ export function createRequestHandler(config, providerPoolManager) {
                 }
 
 
+                // vLLM Model Management endpoints (via Python Controller)
+                if (method === 'GET' && path === '/vllm/models') {
+                    try {
+                        const { getVLLMModels } = await import('../utils/python-controller.js');
+                        const models = await getVLLMModels();
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(models));
+                        return true;
+                    } catch (err) {
+                        logger.error(`[Server] Get VLLM models error: ${err.message}`);
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                        return true;
+                    }
+                }
+
+                if (method === 'GET' && path === '/vllm/model/status') {
+                    try {
+                        const { getModelStatus } = await import('../utils/python-controller.js');
+                        const status = await getModelStatus();
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(status));
+                        return true;
+                    } catch (err) {
+                        logger.error(`[Server] Get VLLM model status error: ${err.message}`);
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                        return true;
+                    }
+                }
+
+                if (method === 'POST' && path === '/vllm/model/start') {
+                    try {
+                        const body = await parseRequestBody(req);
+                        const modelName = body?.model;
+                        
+                        if (!modelName) {
+                            res.writeHead(400, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Model name is required' }));
+                            return true;
+                        }
+                        
+                        const { startModel } = await import('../utils/python-controller.js');
+                        const result = await startModel(modelName);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(result));
+                        return true;
+                    } catch (err) {
+                        logger.error(`[Server] Start VLLM model error: ${err.message}`);
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                        return true;
+                    }
+                }
+
+                if (method === 'POST' && path === '/vllm/model/stop') {
+                    try {
+                        const body = await parseRequestBody(req);
+                        const modelName = body?.model;
+                        
+                        if (!modelName) {
+                            res.writeHead(400, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Model name is required' }));
+                            return true;
+                        }
+                        
+                        const { stopModel } = await import('../utils/python-controller.js');
+                        const result = await stopModel(modelName);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(result));
+                        return true;
+                    } catch (err) {
+                        logger.error(`[Server] Stop VLLM model error: ${err.message}`);
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                        return true;
+                    }
+                }
+
+                if (method === 'POST' && path === '/vllm/model/switch') {
+                    try {
+                        const body = await parseRequestBody(req);
+                        const modelName = body?.model;
+                        
+                        if (!modelName) {
+                            res.writeHead(400, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Model name is required' }));
+                            return true;
+                        }
+                        
+                        const { switchModel } = await import('../utils/python-controller.js');
+                        const result = await switchModel(modelName);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(result));
+                        return true;
+                    } catch (err) {
+                        logger.error(`[Server] Switch VLLM model error: ${err.message}`);
+                        res.writeHead(503, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                        return true;
+                    }
+                }
+
+                if (method === 'GET' && path === '/vllm/gpu') {
+                    try {
+                        const { getGPUStatus } = await import('../utils/python-controller.js');
+                        const status = await getGPUStatus();
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(status));
+                        return true;
+                    } catch (err) {
+                        logger.error(`[Server] Get VLLM GPU status error: ${err.message}`);
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                        return true;
+                    }
+                }
+
+                if (method === 'GET' && path === '/vllm/queue') {
+                    try {
+                        const { getQueueStatus } = await import('../utils/python-controller.js');
+                        const status = await getQueueStatus();
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(status));
+                        return true;
+                    } catch (err) {
+                        logger.error(`[Server] Get VLLM queue status error: ${err.message}`);
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                        return true;
+                    }
+                }
+
                 // Handle API requests
                 // Allow overriding MODEL_PROVIDER via request header
                 const modelProviderHeader = req.headers['model-provider'];
