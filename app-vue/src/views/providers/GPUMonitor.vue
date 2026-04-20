@@ -204,7 +204,7 @@
             <i class="fas fa-database"></i>
             <span>暂无可用模型</span>
           </div>
-          <div v-else class="model-list">
+          <div v-else class="model-list compact">
             <div
               v-for="model in availableModels"
               :key="model.name"
@@ -214,7 +214,9 @@
               <div class="model-info">
                 <span class="model-name">{{ model.name }}</span>
                 <span v-if="model.requiredMemory" class="model-memory">{{ model.requiredMemory }}GB</span>
-                <span v-if="model.requests" class="model-requests">{{ model.requests }} r/s</span>
+                <span class="model-runtime-status" :class="model.status === 'running' ? 'running' : 'stopped'">
+                  {{ model.status === 'running' ? '运行中' : '已停止' }}
+                </span>
               </div>
               <div class="model-actions">
                 <button
@@ -223,40 +225,19 @@
                   @click="stopModel(model.name)"
                 >
                   <i class="fas fa-stop"></i>
+                  停止
                 </button>
                 <button
                   v-else
                   class="btn btn-primary btn-xs"
                   @click="switchModel(model.name)"
+                  :disabled="isTesting"
                 >
                   <i class="fas fa-play"></i>
+                  切换
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-
-        <!-- 模型快速切换 -->
-        <div class="quick-switch-panel">
-          <div class="panel-header">
-            <h3><i class="fas fa-bolt"></i> 快速切换</h3>
-          </div>
-          <div class="quick-switch-content" v-if="loadingControl">
-            <div class="skeleton-loader small"></div>
-          </div>
-          <div v-else class="quick-switch-grid">
-            <button
-              v-for="model in availableModels"
-              :key="'quick-' + model.name"
-              class="quick-switch-btn"
-              :class="{ active: model.status === 'running', disabled: isTesting }"
-              @click="switchModel(model.name)"
-              :disabled="isTesting || model.status === 'running'"
-            >
-              <span class="btn-icon"><i class="fas fa-cube"></i></span>
-              <span class="btn-text">{{ model.name }}</span>
-              <span v-if="model.status === 'running'" class="btn-badge">运行中</span>
-            </button>
           </div>
         </div>
       </div>
@@ -362,6 +343,7 @@ const loadingModels = ref(true)
 const loadingQueue = ref(true)
 const loadingControl = ref(true)
 const gpuStatus = ref(null)
+const models = ref([])
 const queueStats = ref({})
 const availableModels = ref([])
 const currentChartType = ref('utilization')
@@ -581,17 +563,19 @@ const applyMonitorData = (data) => {
   const healthData = data.health
 
   if (gpuData) {
+    const memoryUtilization = gpuData.memory_utilization ?? (gpuData.used_memory && gpuData.total_memory ? Math.round((gpuData.used_memory / gpuData.total_memory) * 100) : 0)
     gpuStatus.value = {
       ...gpuStatus.value,
       ...gpuData,
+      memory_utilization: memoryUtilization,
       status: gpuData.status || (gpuData.utilization !== undefined ? 'available' : 'unavailable')
     }
 
     addChartData(
-      gpuData.utilization || Math.floor(Math.random() * 30) + 10,
-      gpuData.temperature || Math.floor(Math.random() * 20) + 50,
-      gpuData.memory_utilization || (gpuData.used_memory && gpuData.total_memory ? (gpuData.used_memory / gpuData.total_memory * 100) : Math.floor(Math.random() * 40) + 20),
-      gpuData.power_draw || Math.floor(Math.random() * 100) + 50
+      gpuData.utilization ?? 0,
+      gpuData.temperature ?? 0,
+      memoryUtilization,
+      gpuData.power_draw ?? 0
     )
   }
 
@@ -617,25 +601,20 @@ const applyMonitorData = (data) => {
 }
 
 const applyFallbackData = () => {
-  addChartData(
-    Math.floor(Math.random() * 30) + 10,
-    Math.floor(Math.random() * 20) + 50,
-    Math.floor(Math.random() * 40) + 20,
-    Math.floor(Math.random() * 100) + 50
-  )
-
-  models.value = [
-    { name: 'Gemma-4-31B', status: 'running', requests: 2.5 },
-    { name: 'Qwen3-72B', status: 'stopped', requests: 0 }
-  ]
-
-  queueStats.value = {
-    activeTasks: 3,
-    waitingTasks: 5,
-    completedTasks: 156,
-    failedTasks: 2
+  gpuStatus.value = {
+    status: 'unavailable',
+    message: '监控数据暂时不可用'
   }
 
+  models.value = []
+  availableModels.value = []
+  queueStats.value = {
+    activeTasks: 0,
+    waitingTasks: 0,
+    completedTasks: 0,
+    failedTasks: 0
+  }
+  currentModel.value = null
   controllerConnected.value = false
 }
 
@@ -1323,6 +1302,10 @@ onUnmounted(() => {
   gap: 0.5rem;
 }
 
+.model-list.compact .model-item {
+  padding: 0.875rem;
+}
+
 .model-item {
   display: flex;
   align-items: center;
@@ -1356,7 +1339,8 @@ onUnmounted(() => {
 }
 
 .model-memory,
-.model-requests {
+.model-requests,
+.model-runtime-status {
   font-size: 0.65rem;
   padding: 0.125rem 0.375rem;
   border-radius: 4px;
@@ -1371,6 +1355,16 @@ onUnmounted(() => {
 .model-requests {
   background: rgba(59, 130, 246, 0.1);
   color: var(--primary);
+}
+
+.model-runtime-status.running {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--success);
+}
+
+.model-runtime-status.stopped {
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-secondary);
 }
 
 .btn {
@@ -1395,6 +1389,11 @@ onUnmounted(() => {
   background: #2563eb;
 }
 
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-danger {
   background: var(--danger);
   color: white;
@@ -1407,69 +1406,6 @@ onUnmounted(() => {
 .btn-xs {
   padding: 0.25rem 0.5rem;
   font-size: 0.7rem;
-}
-
-.quick-switch-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.5rem;
-}
-
-.quick-switch-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0.875rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-  gap: 0.375rem;
-  position: relative;
-}
-
-.quick-switch-btn:hover:not(.disabled):not(.active) {
-  border-color: var(--primary);
-  background: rgba(59, 130, 246, 0.05);
-}
-
-.quick-switch-btn.active {
-  border-color: var(--success);
-  background: rgba(34, 197, 94, 0.05);
-}
-
-.quick-switch-btn.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.quick-switch-btn .btn-icon {
-  font-size: 1.125rem;
-  color: var(--primary);
-}
-
-.quick-switch-btn.active .btn-icon {
-  color: var(--success);
-}
-
-.quick-switch-btn .btn-text {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text);
-  text-align: center;
-}
-
-.quick-switch-btn .btn-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  font-size: 0.6rem;
-  padding: 0.125rem 0.375rem;
-  background: var(--success);
-  color: white;
-  border-radius: 4px;
-  font-weight: 500;
 }
 
 .controller-section {
@@ -1528,7 +1464,7 @@ onUnmounted(() => {
   border: 1px solid var(--border);
 }
 
-#iframe {
+#controllerIframe {
   width: 100%;
   height: 100%;
 }

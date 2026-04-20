@@ -881,9 +881,6 @@ export class GPUMonitorModule {
     }
 
     async refreshModelsStatus() {
-        const container = document.getElementById('modelsStatusContent');
-        if (!container) return;
-
         try {
             const cachedData = monitorCache.getCachedData();
             let models = null;
@@ -916,17 +913,12 @@ export class GPUMonitorModule {
             }
 
             if (models) {
-                this.renderModelsStatus(models, container);
+                this.lastModelsData = models;
+                this.renderUnifiedModels();
             }
         } catch (error) {
             console.warn(`Failed to fetch models status: ${error.message}`);
-            const t = this.i18n.t.bind(this.i18n);
-            container.innerHTML = `
-                <div class="status-loading">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span>${t('gpuMonitor.cannotGetModelStatus')}</span>
-                </div>
-            `;
+            this.showMockModelsStatus();
         }
     }
 
@@ -1103,9 +1095,6 @@ export class GPUMonitorModule {
     }
 
     async refreshModelControls() {
-        const container = document.getElementById('modelControls');
-        if (!container) return;
-
         try {
             const cachedData = monitorCache.getCachedData();
             let models = null;
@@ -1138,17 +1127,12 @@ export class GPUMonitorModule {
             }
 
             if (models) {
-                this.renderModelControls(models, container);
+                this.lastModelsData = models;
+                this.renderUnifiedModels();
             }
         } catch (error) {
             console.warn(`Failed to fetch model controls: ${error.message}`);
-            const t = this.i18n.t.bind(this.i18n);
-            container.innerHTML = `
-                <div class="status-loading">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span>${t('gpuMonitor.cannotGetModelControl')}</span>
-                </div>
-            `;
+            this.showMockQuickSwitch();
         }
     }
 

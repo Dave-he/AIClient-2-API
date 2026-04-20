@@ -85,7 +85,7 @@ AIClient-2-API/
 │       ├── tls-sidecar.js        # TLS Sidecar 管理
 │       ├── grok-assets-proxy.js  # Grok 资源代理
 │       └── constants.js          # 全局常量定义
-├── static/                       # 前端静态资源
+├── static/                       # 旧前端静态资源（原生 JS）
 │   ├── app/                      # 前端应用核心
 │   │   ├── app.js                # 主应用逻辑
 │   │   ├── auth.js               # 认证逻辑
@@ -97,6 +97,20 @@ AIClient-2-API/
 │   ├── components/               # Web Components
 │   ├── index.html                # 主页面
 │   └── login.html                # 登录页面
+├── app-vue/                      # 新前端（Vue 3 + Vite）
+│   ├── src/                      # 源代码
+│   │   ├── components/           # Vue 组件
+│   │   ├── composables/          # 组合式函数
+│   │   ├── views/                # 页面视图
+│   │   ├── router/               # 路由配置
+│   │   ├── locales/              # 国际化文件
+│   │   ├── utils/                # 工具函数
+│   │   ├── App.vue               # 根组件
+│   │   └── main.js               # 入口文件
+│   ├── dist/                     # 构建输出目录
+│   ├── vite.config.js            # Vite 配置
+│   ├── package.json              # 依赖管理
+│   └── .env.example              # 环境变量示例
 ├── configs/                      # 配置文件目录
 │   ├── config.json               # 主配置文件
 │   ├── plugins.json              # 插件配置
