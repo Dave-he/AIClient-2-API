@@ -1,9 +1,9 @@
 <template>
   <div class="gpu-status-panel">
     <div class="panel-header">
-      <h3><i class="fas fa-microchip"></i> GPU状态</h3>
+      <h3><i class="fas fa-microchip"></i> {{ t('gpuMonitor.status') }}</h3>
       <span class="gpu-badge" :class="gpuStatus?.status === 'available' ? 'active' : 'idle'">
-        {{ gpuStatus?.status === 'available' ? '运行中' : '空闲' }}
+        {{ gpuStatus?.status === 'available' ? t('gpuMonitor.running') : t('gpuMonitor.idle') }}
       </span>
     </div>
 
@@ -13,7 +13,7 @@
     <div class="gpu-status-content" v-else-if="!gpuStatus || gpuStatus.status === 'unavailable'">
       <div class="empty-state">
         <i class="fas fa-exclamation-triangle"></i>
-        <span>{{ gpuStatus?.message || '未检测到GPU' }}</span>
+        <span>{{ gpuStatus?.message || t('gpuMonitor.noGpu') }}</span>
       </div>
     </div>
     <div class="gpu-status-content" v-else>
@@ -31,7 +31,7 @@
         <div class="metric-item memory">
           <div class="metric-header">
             <i class="fas fa-memory"></i>
-            <span>显存</span>
+            <span>{{ t('gpuMonitor.memory') }}</span>
           </div>
           <div class="metric-value-row">
             <span class="value">{{ formatMemory(gpuStatus.used_memory) }}</span>
@@ -43,14 +43,14 @@
           </div>
           <div class="metric-footer">
             <span class="percent">{{ gpuStatus.memory_utilization || 0 }}%</span>
-            <span class="label">使用率</span>
+            <span class="label">{{ t('gpuMonitor.percent') }}</span>
           </div>
         </div>
 
         <div class="metric-item utilization">
           <div class="metric-header">
             <i class="fas fa-chart-pie"></i>
-            <span>GPU使用率</span>
+            <span>{{ t('gpuMonitor.utilization') }}</span>
           </div>
           <div class="metric-value-row single">
             <span class="value">{{ gpuStatus.utilization || 0 }}</span>
@@ -64,7 +64,7 @@
         <div class="metric-item temperature" :class="{ warning: (gpuStatus.temperature || 0) > 80 }">
           <div class="metric-header">
             <i class="fas fa-thermometer-half"></i>
-            <span>温度</span>
+            <span>{{ t('gpuMonitor.temperature') }}</span>
           </div>
           <div class="metric-value-row single">
             <span class="value">{{ gpuStatus.temperature || 0 }}</span>
@@ -75,7 +75,7 @@
         <div class="metric-item power">
           <div class="metric-header">
             <i class="fas fa-bolt"></i>
-            <span>功耗</span>
+            <span>{{ t('gpuMonitor.power') }}</span>
           </div>
           <div class="metric-value-row single">
             <span class="value">{{ gpuStatus.power_draw || 0 }}</span>
@@ -88,6 +88,10 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
 defineProps({
   loading: {
     type: Boolean,
@@ -109,7 +113,7 @@ const formatMemory = (bytes) => {
 .gpu-status-panel {
   background: var(--card-bg);
   border-radius: var(--radius);
-  padding: 1.25rem;
+  padding: 1rem;
   box-shadow: var(--shadow);
 }
 
@@ -117,19 +121,19 @@ const formatMemory = (bytes) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
 }
 
 .panel-header h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .panel-header h3 i {
@@ -137,9 +141,9 @@ const formatMemory = (bytes) => {
 }
 
 .gpu-badge {
-  padding: 0.25rem 0.75rem;
+  padding: 0.1875rem 0.625rem;
   border-radius: 9999px;
-  font-size: 0.75rem;
+  font-size: 0.675rem;
   font-weight: 600;
 }
 
@@ -156,43 +160,43 @@ const formatMemory = (bytes) => {
 .gpu-main-info {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.25rem;
+  gap: 0.875rem;
+  margin-bottom: 1rem;
 }
 
 .gpu-icon-wrapper {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
   background: linear-gradient(135deg, var(--primary), #1d4ed8);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
 }
 
 .gpu-details .gpu-name {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--text);
 }
 
 .gpu-details .gpu-identifier {
-  font-size: 0.8rem;
+  font-size: 0.725rem;
   color: var(--text-muted);
 }
 
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .metric-item {
   background: var(--bg);
-  border-radius: 12px;
-  padding: 1rem;
+  border-radius: 10px;
+  padding: 0.75rem;
 }
 
 .metric-item.memory {
@@ -202,20 +206,20 @@ const formatMemory = (bytes) => {
 .metric-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  gap: 0.375rem;
+  margin-bottom: 0.375rem;
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: 0.725rem;
 }
 
 .metric-header i {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.7rem;
+  font-size: 0.625rem;
   color: white;
 }
 
@@ -227,12 +231,12 @@ const formatMemory = (bytes) => {
 .metric-value-row {
   display: flex;
   align-items: baseline;
-  gap: 0.25rem;
-  margin-bottom: 0.5rem;
+  gap: 0.2rem;
+  margin-bottom: 0.375rem;
 }
 
 .metric-value-row .value {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--text);
 }
@@ -240,25 +244,25 @@ const formatMemory = (bytes) => {
 .metric-value-row .separator,
 .metric-value-row .total,
 .metric-value-row .unit {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
 }
 
 .metric-value-row.single .value {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
 }
 
 .progress-bar {
-  height: 6px;
+  height: 5px;
   background: var(--border);
-  border-radius: 3px;
+  border-radius: 2.5px;
   overflow: hidden;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .progress-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 2.5px;
   background: var(--primary);
   transition: width 0.5s ease;
 }
@@ -270,7 +274,7 @@ const formatMemory = (bytes) => {
 .metric-footer {
   display: flex;
   justify-content: space-between;
-  font-size: 0.75rem;
+  font-size: 0.675rem;
   color: var(--text-muted);
 }
 
@@ -279,22 +283,22 @@ const formatMemory = (bytes) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 1.5rem;
   color: var(--text-muted);
 }
 
 .empty-state i {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+  margin-bottom: 0.375rem;
   opacity: 0.5;
 }
 
 .skeleton-loader {
-  height: 200px;
+  height: 180px;
   background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 @keyframes shimmer {

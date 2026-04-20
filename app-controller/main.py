@@ -817,17 +817,34 @@ async def stop_model(model_name: str):
         raise HTTPException(status_code=500, detail=f"Failed to stop model {model_name}")
 
 @app.post("/manage/models/{model_name}/switch")
-async def switch_to_model(model_name: str):
-    logger.info(f"Switching to model {model_name}")
+async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True):
+    logger.info(f"Switching to model {model_name} (test_enabled: {test_enabled})")
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
 
     success = await scheduler.switch_model(model_name)
-    if success:
-        scheduler.mark_model_selected(model_name)
-        return {"status": "switched", "model": model_name}
-    else:
+    if not success:
         raise HTTPException(status_code=503, detail=f"Failed to switch to model {model_name}, insufficient memory")
+
+    scheduler.mark_model_selected(model_name)
+
+    if test_enabled:
+        logger.info(f"Running self-test for model {model_name}")
+        test_result = await switch_vllm_model_with_test(model_name, test_enabled=True)
+        
+        if not test_result.get("success", False):
+            error_msg = test_result.get("error", "Unknown error during model test")
+            logger.error(f"Model {model_name} self-test failed: {error_msg}")
+            raise HTTPException(status_code=503, detail=f"Model switch successful but self-test failed: {error_msg}")
+        
+        logger.info(f"Model {model_name} self-test passed")
+        return {
+            "status": "switched_and_tested",
+            "model": model_name,
+            "test_result": test_result.get("test_result")
+        }
+
+    return {"status": "switched", "model": model_name}
 
 @app.get("/manage/metrics")
 async def get_metrics():

@@ -1,13 +1,13 @@
 <template>
   <div class="current-model-panel">
     <div class="panel-header">
-      <h3><i class="fas fa-cube"></i> 当前模型</h3>
+      <h3><i class="fas fa-cube"></i> {{ t('gpuMonitor.currentModel.title') }}</h3>
     </div>
     <div class="current-model-content">
       <div v-if="loading" class="skeleton-loader small"></div>
       <div v-else-if="!currentModel" class="empty-state small">
         <i class="fas fa-pause-circle"></i>
-        <span>暂无运行模型</span>
+        <span>{{ t('gpuMonitor.currentModel.noModel') }}</span>
       </div>
       <div v-else class="model-running-card">
         <div class="model-icon running">
@@ -17,7 +17,7 @@
           <div class="model-name">{{ typeof currentModel === 'object' ? currentModel.name : currentModel }}</div>
           <div class="model-status">
             <span class="status-indicator running"></span>
-            运行中
+            {{ t('gpuMonitor.currentModel.running') }}
           </div>
         </div>
       </div>
@@ -26,6 +26,10 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
 defineProps({
   loading: {
     type: Boolean,
@@ -42,7 +46,7 @@ defineProps({
 .current-model-panel {
   background: var(--card-bg);
   border-radius: var(--radius);
-  padding: 1.25rem;
+  padding: 1rem;
   box-shadow: var(--shadow);
 }
 
@@ -50,19 +54,19 @@ defineProps({
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
 }
 
 .panel-header h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .panel-header h3 i {
@@ -70,7 +74,7 @@ defineProps({
 }
 
 .current-model-content {
-  min-height: 80px;
+  min-height: 70px;
   display: flex;
   align-items: center;
 }
@@ -78,23 +82,23 @@ defineProps({
 .model-running-card {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 0.75rem;
+  padding: 0.75rem;
   background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
   border: 1px solid rgba(34, 197, 94, 0.2);
-  border-radius: 12px;
+  border-radius: 10px;
   width: 100%;
 }
 
 .model-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 1.125rem;
+  font-size: 1rem;
 }
 
 .model-icon.running {
@@ -102,7 +106,7 @@ defineProps({
 }
 
 .model-info .model-name {
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--text);
 }
@@ -110,14 +114,14 @@ defineProps({
 .model-info .model-status {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
+  gap: 0.375rem;
+  font-size: 0.725rem;
   color: var(--success);
 }
 
 .status-indicator {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
 }
 
@@ -131,22 +135,22 @@ defineProps({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 1.5rem;
   color: var(--text-muted);
 }
 
 .empty-state i {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+  margin-bottom: 0.375rem;
   opacity: 0.5;
 }
 
 .empty-state.small {
-  padding: 1rem;
+  padding: 0.75rem;
 }
 
 .empty-state.small i {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
 }
 
 .skeleton-loader {
@@ -154,12 +158,12 @@ defineProps({
   background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 12px;
+  border-radius: 10px;
   width: 100%;
 }
 
 .skeleton-loader.small {
-  height: 80px;
+  height: 70px;
 }
 
 @keyframes shimmer {

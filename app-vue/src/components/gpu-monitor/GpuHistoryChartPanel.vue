@@ -1,7 +1,7 @@
 <template>
   <div class="gpu-charts-panel">
     <div class="panel-header">
-      <h3><i class="fas fa-chart-area"></i> 历史监控</h3>
+      <h3><i class="fas fa-chart-area"></i> {{ t('gpuMonitor.history.title') }}</h3>
       <div class="chart-tabs">
         <button
           v-for="tab in chartTabs"
@@ -10,7 +10,7 @@
           :class="{ active: chartType === tab.type }"
           @click="$emit('update:chartType', tab.type)"
         >
-          {{ tab.label }}
+          {{ getTabLabel(tab) }}
         </button>
       </div>
     </div>
@@ -22,7 +22,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   chartTabs: {
@@ -44,6 +47,19 @@ defineEmits(['update:chartType'])
 const chartCanvas = ref(null)
 let chartInstance = null
 
+const tabLabelMap = {
+  all: 'gpuMonitor.history.overview',
+  utilization: 'gpuMonitor.utilization',
+  temperature: 'gpuMonitor.temperature',
+  memory: 'gpuMonitor.memory',
+  power: 'gpuMonitor.power'
+}
+
+const getTabLabel = (tab) => {
+  const key = tabLabelMap[tab.type]
+  return key ? t(key) : tab.label
+}
+
 const colors = {
   all: { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
   utilization: { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
@@ -56,7 +72,7 @@ const generateDatasets = () => {
   if (props.chartType === 'all') {
     return [
       {
-        label: 'GPU使用率',
+        label: t('gpuMonitor.metrics.gpuUtilization'),
         data: props.chartData.utilization || [],
         borderColor: colors.utilization.border,
         backgroundColor: colors.utilization.bg,
@@ -67,7 +83,7 @@ const generateDatasets = () => {
         yAxisID: 'y'
       },
       {
-        label: '显存使用率',
+        label: t('gpuMonitor.metrics.memoryUtilization'),
         data: props.chartData.memory || [],
         borderColor: colors.memory.border,
         backgroundColor: colors.memory.bg,
@@ -78,7 +94,7 @@ const generateDatasets = () => {
         yAxisID: 'y'
       },
       {
-        label: '功耗占比',
+        label: t('gpuMonitor.metrics.powerPercent'),
         data: props.chartData.powerPercent || [],
         borderColor: colors.power.border,
         backgroundColor: colors.power.bg,
@@ -90,7 +106,7 @@ const generateDatasets = () => {
         yAxisID: 'y'
       },
       {
-        label: '温度',
+        label: t('gpuMonitor.metrics.temperature'),
         data: props.chartData.temperature || [],
         borderColor: colors.temperature.border,
         backgroundColor: 'rgba(239, 68, 68, 0.08)',
@@ -105,7 +121,7 @@ const generateDatasets = () => {
 
   const config = colors[props.chartType] || colors.utilization
   return [{
-    label: props.chartTabs.find(t => t.type === props.chartType)?.label || '',
+    label: getTabLabel({ type: props.chartType }),
     data: props.chartType === 'power' ? (props.chartData.power || []) : (props.chartData[props.chartType] || []),
     borderColor: config.border,
     backgroundColor: config.bg,
@@ -129,7 +145,7 @@ const getYMax = () => {
 }
 
 const getYTitle = () => {
-  return props.chartType === 'power' ? '功耗 (W)' : '占比 (%)'
+  return props.chartType === 'power' ? t('gpuMonitor.metrics.power') : t('gpuMonitor.metrics.percentage')
 }
 
 const getSecondaryYMax = () => {
@@ -161,18 +177,27 @@ const createChart = () => {
           position: 'bottom',
           labels: {
             usePointStyle: true,
-            boxWidth: 8,
-            boxHeight: 8,
+            boxWidth: 6,
+            boxHeight: 6,
             color: '#64748b',
-            padding: 16
+            padding: 12,
+            font: {
+              size: 11
+            }
           }
         },
         tooltip: {
           backgroundColor: 'rgba(0, 0, 0, 0.8)',
           titleColor: '#fff',
           bodyColor: '#fff',
-          padding: 12,
-          cornerRadius: 8
+          padding: 10,
+          cornerRadius: 6,
+          titleFont: {
+            size: 12
+          },
+          bodyFont: {
+            size: 11
+          }
         }
       },
       scales: {
@@ -182,7 +207,10 @@ const createChart = () => {
           },
           ticks: {
             color: '#94a3b8',
-            maxTicksLimit: 6
+            maxTicksLimit: 6,
+            font: {
+              size: 10
+            }
           }
         },
         y: {
@@ -190,12 +218,18 @@ const createChart = () => {
             color: 'rgba(0, 0, 0, 0.05)'
           },
           ticks: {
-            color: '#94a3b8'
+            color: '#94a3b8',
+            font: {
+              size: 10
+            }
           },
           title: {
             display: true,
             text: getYTitle(),
-            color: '#64748b'
+            color: '#64748b',
+            font: {
+              size: 11
+            }
           },
           min: 0,
           max: getYMax()
@@ -207,12 +241,18 @@ const createChart = () => {
             drawOnChartArea: false
           },
           ticks: {
-            color: '#ef4444'
+            color: '#ef4444',
+            font: {
+              size: 10
+            }
           },
           title: {
             display: props.chartType === 'all',
-            text: '温度 (°C)',
-            color: '#ef4444'
+            text: t('gpuMonitor.metrics.temperature') + ' (°C)',
+            color: '#ef4444',
+            font: {
+              size: 11
+            }
           },
           min: 0,
           max: getSecondaryYMax()
@@ -254,7 +294,7 @@ onUnmounted(() => {
 .gpu-charts-panel {
   background: var(--card-bg);
   border-radius: var(--radius);
-  padding: 1.25rem;
+  padding: 1rem;
   box-shadow: var(--shadow);
 }
 
@@ -262,19 +302,19 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
 }
 
 .panel-header h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .panel-header h3 i {
@@ -283,19 +323,19 @@ onUnmounted(() => {
 
 .chart-tabs {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   background: var(--bg);
-  padding: 4px;
-  border-radius: 8px;
+  padding: 3px;
+  border-radius: 6px;
 }
 
 .chart-tab {
-  padding: 0.375rem 0.75rem;
+  padding: 0.25rem 0.5rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: 0.675rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -312,10 +352,10 @@ onUnmounted(() => {
 
 .gpu-chart-content {
   position: relative;
-  height: 240px;
+  height: 200px;
   background: var(--bg);
-  border-radius: 12px;
-  padding: 1rem;
+  border-radius: 10px;
+  padding: 0.75rem;
 }
 
 .gpu-chart-content canvas {

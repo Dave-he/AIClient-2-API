@@ -466,6 +466,52 @@
     "memory": "显存",
     "temperature": "温度",
     "power": "功耗",
+    "status": "状态",
+    "running": "运行中",
+    "idle": "空闲",
+    "unavailable": "不可用",
+    "gpuName": "GPU型号",
+    "percent": "百分比",
+    "healthCheck": "健康检查",
+    "controller": {
+      "title": "AI控制器",
+      "connected": "已连接",
+      "disconnected": "未连接",
+      "notStarted": "AI控制器未启动或配置",
+      "hint": "请启动 Python 控制器服务以查看详细监控面板"
+    },
+    "currentModel": {
+      "title": "当前模型",
+      "noModel": "暂无运行模型",
+      "running": "运行中"
+    },
+    "queue": {
+      "title": "队列状态",
+      "active": "活跃",
+      "waiting": "等待",
+      "completed": "完成",
+      "failed": "失败"
+    },
+    "modelControl": {
+      "title": "模型管理",
+      "noModels": "暂无可用模型",
+      "memory": "内存",
+      "stopped": "已停止",
+      "stop": "停止",
+      "switch": "切换"
+    },
+    "history": {
+      "title": "历史监控",
+      "overview": "总览"
+    },
+    "metrics": {
+      "gpuUtilization": "GPU使用率",
+      "memoryUtilization": "显存使用率",
+      "powerPercent": "功耗占比",
+      "temperature": "温度",
+      "power": "功耗 (W)",
+      "percentage": "占比 (%)"
+    },
     "model": {
       "start": "启动模型",
       "stop": "停止模型",

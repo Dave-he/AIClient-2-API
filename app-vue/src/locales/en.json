@@ -466,6 +466,52 @@
     "memory": "Memory",
     "temperature": "Temperature",
     "power": "Power",
+    "status": "Status",
+    "running": "Running",
+    "idle": "Idle",
+    "unavailable": "Unavailable",
+    "gpuName": "GPU Model",
+    "percent": "Percent",
+    "healthCheck": "Health Check",
+    "controller": {
+      "title": "AI Controller",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "notStarted": "AI Controller not started or configured",
+      "hint": "Please start the Python controller service to view detailed monitoring panel"
+    },
+    "currentModel": {
+      "title": "Current Model",
+      "noModel": "No running model",
+      "running": "Running"
+    },
+    "queue": {
+      "title": "Queue Status",
+      "active": "Active",
+      "waiting": "Waiting",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "modelControl": {
+      "title": "Model Management",
+      "noModels": "No available models",
+      "memory": "Memory",
+      "stopped": "Stopped",
+      "stop": "Stop",
+      "switch": "Switch"
+    },
+    "history": {
+      "title": "History Monitor",
+      "overview": "Overview"
+    },
+    "metrics": {
+      "gpuUtilization": "GPU Utilization",
+      "memoryUtilization": "Memory Utilization",
+      "powerPercent": "Power Percent",
+      "temperature": "Temperature",
+      "power": "Power (W)",
+      "percentage": "Percentage (%)"
+    },
     "model": {
       "start": "Start Model",
       "stop": "Stop Model",

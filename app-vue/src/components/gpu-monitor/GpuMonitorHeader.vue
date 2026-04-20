@@ -1,14 +1,14 @@
 <template>
   <div class="monitor-header">
     <div class="header-left">
-      <h2 id="gpu-monitor-title"><i class="fas fa-chart-line"></i> GPU监控</h2>
+      <h2 id="gpu-monitor-title"><i class="fas fa-chart-line"></i> {{ t('gpuMonitor.title') }}</h2>
       <div class="connection-status" :class="controllerConnected ? 'online' : 'offline'">
         <span class="status-dot"></span>
-        <span>{{ controllerConnected ? 'AI控制器已连接' : 'AI控制器未连接' }}</span>
+        <span>{{ controllerConnected ? t('gpuMonitor.controller.connected') : t('gpuMonitor.controller.disconnected') }}</span>
       </div>
     </div>
     <div class="header-actions">
-      <button class="btn-icon" @click="$emit('refresh')" title="刷新全部">
+      <button class="btn-icon" @click="$emit('refresh')" :title="t('gpuMonitor.refresh')">
         <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
       </button>
     </div>
@@ -16,6 +16,10 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
 defineProps({
   loading: {
     type: Boolean,
@@ -35,8 +39,8 @@ defineEmits(['refresh'])
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
-  padding: 1rem 1.5rem;
+  margin-bottom: 1rem;
+  padding: 0.875rem 1.25rem;
   background: var(--card-bg);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -45,17 +49,17 @@ defineEmits(['refresh'])
 .header-left {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .header-left h2 {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.1rem;
+  font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .header-left h2 i {
@@ -65,10 +69,10 @@ defineEmits(['refresh'])
 .connection-status {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.875rem;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
   border-radius: 9999px;
-  font-size: 0.8rem;
+  font-size: 0.725rem;
   font-weight: 500;
 }
 
@@ -83,8 +87,8 @@ defineEmits(['refresh'])
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: currentColor;
 }
@@ -95,13 +99,13 @@ defineEmits(['refresh'])
 
 .header-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .btn-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-secondary);
@@ -125,13 +129,13 @@ defineEmits(['refresh'])
 @media (max-width: 768px) {
   .monitor-header {
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
     align-items: flex-start;
   }
 
   .header-left {
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.375rem;
     align-items: flex-start;
   }
 }
