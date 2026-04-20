@@ -2,6 +2,7 @@
 
 import { showToast } from './utils.js';
 import { t } from './i18n.js';
+import { eventBus, EVENTS } from './event-bus.js';
 
 let allConfigs = []; // 存储所有配置数据
 let filteredConfigs = []; // 存储过滤后的配置数据
@@ -608,6 +609,8 @@ async function loadConfigList(searchTerm = '', statusFilter = '', providerFilter
         }
         
         console.log('配置列表加载成功，共', allConfigs.length, '个项目');
+        
+        eventBus.emit(EVENTS.UPLOAD_CONFIG_UPDATED, { configs: allConfigs });
     } catch (error) {
         console.error('加载配置列表失败:', error);
         showToast(t('common.error'), t('common.error') + ': ' + error.message, 'error');

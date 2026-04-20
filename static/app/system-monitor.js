@@ -1,3 +1,5 @@
+import { eventBus, EVENTS } from './event-bus.js';
+
 const API_BASE_URL = '/api/python';
 const DASHBOARD_POLL_INTERVAL_MS = 10000;
 const TOKEN_POLL_INTERVAL_MS = 120000;
@@ -47,6 +49,7 @@ export class SystemMonitor {
         
         systemMonitorInstance = this;
         this.init();
+        this.setupEventBusListeners();
     }
 
     initializeDefaultData() {
@@ -192,6 +195,39 @@ export class SystemMonitor {
         });
 
         window.addEventListener('resize', () => {
+            this.scheduleChartUpdate('all');
+        });
+    }
+
+    setupEventBusListeners() {
+        eventBus.on(EVENTS.CONFIG_UPDATED, () => {
+            console.log('[SystemMonitor] Config updated, refreshing dashboard');
+            if (this.shouldPollDashboard()) {
+                this.refreshAllStatus({ force: true });
+            }
+        });
+        
+        eventBus.on(EVENTS.PROVIDERS_UPDATED, () => {
+            console.log('[SystemMonitor] Providers updated');
+            if (this.shouldPollDashboard()) {
+                this.refreshAllStatus({ force: true });
+            }
+        });
+        
+        eventBus.on(EVENTS.MODELS_UPDATED, () => {
+            console.log('[SystemMonitor] Models updated');
+            this.updateModelsList();
+        });
+        
+        eventBus.on(EVENTS.CACHE_INVALIDATED, () => {
+            console.log('[SystemMonitor] Cache invalidated, refreshing all status');
+            if (this.shouldPollDashboard()) {
+                this.refreshAllStatus({ force: true });
+            }
+        });
+        
+        eventBus.on(EVENTS.SYSTEM_INFO_UPDATED, () => {
+            console.log('[SystemMonitor] System info updated, updating charts');
             this.scheduleChartUpdate('all');
         });
     }
@@ -352,6 +388,7 @@ export class SystemMonitor {
         this.isRefreshing = true;
         try {
             await this.fetchDashboardSummary(force);
+            eventBus.emit(EVENTS.SYSTEM_INFO_UPDATED);
         } finally {
             this.isRefreshing = false;
         }
@@ -466,7 +503,10 @@ export class SystemMonitor {
         }
     }
 
-    updateFromPythonGpuData(gpuData) {
+    updateFromPythonGpuData(fullResult) {
+        const gpuData = fullResult.gpu || {};
+        const serviceData = fullResult.service || {};
+        
         const data = {
             ...gpuData,
             utilization: gpuData.utilization || gpuData.gpu_utilization || 0,
@@ -482,10 +522,10 @@ export class SystemMonitor {
             available_memory: gpuData.available_memory
         };
         
-        this.pythonGpuConnected = data.status !== 'unavailable';
+        this.pythonGpuConnected = fullResult.success === true || serviceData.status === 'active';
         this.renderPythonGpuConnectionStatus(this.pythonGpuConnected);
         this.renderPythonGpuStatus(data);
-        this.updatePythonGpuVisibility(true);
+        this.updatePythonGpuVisibility(this.pythonGpuConnected);
 
         if (this.pythonGpuConnected) {
             this.appendPythonGpuHistoryPoint(data);
@@ -504,8 +544,7 @@ export class SystemMonitor {
                 throw new Error(result?.error || 'Failed to get monitor summary');
             }
 
-            const gpuData = result.gpu || {};
-            this.updateFromPythonGpuData(gpuData);
+            this.updateFromPythonGpuData(result);
         } catch (error) {
             await this.refreshPythonGpuStatusFallback({ forceSample });
         }

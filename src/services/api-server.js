@@ -11,6 +11,7 @@ import { HEALTH_CHECK } from '../utils/constants.js';
 import { setControllerUrl } from '../utils/python-controller.js';
 import { preloadControllerData, startPeriodicRefresh, stopPeriodicRefresh } from '../ui-modules/python-controller-api.js';
 import { preloadDashboardData } from '../ui-modules/dashboard-api.js';
+import { initDefaultMetrics } from '../utils/metrics.js';
 
 /**
  * @license
@@ -396,6 +397,10 @@ async function startServer() {
         logger.info(`  • Gemini-compatible: /v1beta/models, /v1beta/models/{model}:generateContent`);
         logger.info(`  • Claude-compatible: /v1/messages`);
         logger.info(`  • Health check: /health`);
+        logger.info(`  • Metrics endpoint: /metrics`);
+        
+        initDefaultMetrics();
+        logger.info('[Initialization] Default metrics initialized');
         logger.info(`  • UI Management Console: http://${CONFIG.HOST}:${CONFIG.SERVER_PORT}/`);
 
         // Auto-open browser to UI (only if host is 0.0.0.0 or 127.0.0.1)

@@ -1,33 +1,210 @@
-import { existsSync, readFileSync } from 'fs';
 import { promises as fs } from 'fs';
 import path from 'path';
 import multer from 'multer';
 import logger from '../utils/logger.js';
 
-// Token存储到本地文件中
 const TOKEN_STORE_FILE = path.join(process.cwd(), 'configs', 'token-store.json');
-
-// 用量缓存文件路径
 const USAGE_CACHE_FILE = path.join(process.cwd(), 'configs', 'usage-cache.json');
 
-/**
- * Helper function to broadcast events to UI clients
- * @param {string} eventType - The type of event
- * @param {any} data - The data to broadcast
- */
-export function broadcastEvent(eventType, data) {
-    if (global.eventClients && global.eventClients.length > 0) {
+export class EventBroadcaster {
+    constructor(options = {}) {
+        this.clients = new Set();
+        this.logBuffer = [];
+        this.maxLogBufferSize = options.maxLogBufferSize || 100;
+        this.keepAliveInterval = options.keepAliveInterval || 30000;
+        this.maxQueuedMessages = options.maxQueuedMessages || 100;
+        this.messageQueue = [];
+        this.isProcessingQueue = false;
+        this.originalLog = console.log;
+        this.originalError = console.error;
+        this.enabled = true;
+    }
+
+    enable() {
+        this.enabled = true;
+    }
+
+    disable() {
+        this.enabled = false;
+    }
+
+    addClient(response) {
+        if (!this.enabled) return;
+        
+        const clientId = Symbol('client');
+        const client = {
+            id: clientId,
+            response,
+            lastActivity: Date.now(),
+            keepAliveTimer: null
+        };
+
+        this.clients.add(client);
+
+        client.keepAliveTimer = setInterval(() => {
+            if (!response.writableEnded && !response.destroyed) {
+                try {
+                    response.write(':\n\n');
+                    client.lastActivity = Date.now();
+                } catch (err) {
+                    logger.error('[EventBroadcaster] Failed to write keepalive:', err.message);
+                    this.removeClient(client);
+                }
+            } else {
+                this.removeClient(client);
+            }
+        }, this.keepAliveInterval);
+
+        logger.info(`[EventBroadcaster] Client connected, total: ${this.clients.size}`);
+        return clientId;
+    }
+
+    removeClient(client) {
+        if (typeof client === 'symbol') {
+            client = [...this.clients].find(c => c.id === client);
+        }
+        if (!client) return;
+
+        if (client.keepAliveTimer) {
+            clearInterval(client.keepAliveTimer);
+        }
+        this.clients.delete(client);
+        
+        logger.info(`[EventBroadcaster] Client disconnected, total: ${this.clients.size}`);
+    }
+
+    broadcast(eventType, data) {
+        if (!this.enabled) return;
+
         const payload = typeof data === 'string' ? data : JSON.stringify(data);
-        global.eventClients.forEach(client => {
-            client.write(`event: ${eventType}\n`);
-            client.write(`data: ${payload}\n\n`);
-        });
+        const message = `event: ${eventType}\ndata: ${payload}\n\n`;
+
+        this.messageQueue.push({ eventType, data, message });
+        if (this.messageQueue.length > this.maxQueuedMessages) {
+            this.messageQueue.shift();
+        }
+
+        this.processQueue();
+    }
+
+    async processQueue() {
+        if (this.isProcessingQueue || this.messageQueue.length === 0) return;
+
+        this.isProcessingQueue = true;
+        try {
+            while (this.messageQueue.length > 0) {
+                const item = this.messageQueue.shift();
+                await this._broadcastToClients(item.message);
+            }
+        } finally {
+            this.isProcessingQueue = false;
+        }
+    }
+
+    async _broadcastToClients(message) {
+        const disconnected = [];
+        
+        for (const client of this.clients) {
+            try {
+                if (!client.response.writableEnded && !client.response.destroyed) {
+                    client.response.write(message);
+                    client.lastActivity = Date.now();
+                } else {
+                    disconnected.push(client);
+                }
+            } catch (err) {
+                logger.error('[EventBroadcaster] Failed to broadcast to client:', err.message);
+                disconnected.push(client);
+            }
+        }
+
+        for (const client of disconnected) {
+            this.removeClient(client);
+        }
+    }
+
+    addLogEntry(level, ...args) {
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            level,
+            message: args.map(arg => {
+                if (typeof arg === 'string') return arg;
+                try {
+                    return JSON.stringify(arg);
+                } catch (e) {
+                    return String(arg);
+                }
+            }).join(' ')
+        };
+
+        this.logBuffer.push(logEntry);
+        if (this.logBuffer.length > this.maxLogBufferSize) {
+            this.logBuffer.shift();
+        }
+
+        this.broadcast('log', logEntry);
+    }
+
+    setupConsoleOverride() {
+        const self = this;
+
+        console.log = function(...args) {
+            self.originalLog.apply(console, args);
+            self.addLogEntry('info', ...args);
+        };
+
+        console.error = function(...args) {
+            self.originalError.apply(console, args);
+            self.addLogEntry('error', ...args);
+        };
+    }
+
+    restoreConsole() {
+        console.log = this.originalLog;
+        console.error = this.originalError;
+    }
+
+    getLogBuffer(count = this.maxLogBufferSize) {
+        return [...this.logBuffer].slice(-count);
+    }
+
+    getStats() {
+        return {
+            clientCount: this.clients.size,
+            logBufferSize: this.logBuffer.length,
+            queuedMessages: this.messageQueue.length,
+            enabled: this.enabled
+        };
+    }
+
+    clearLogBuffer() {
+        this.logBuffer = [];
+    }
+
+    closeAllConnections() {
+        for (const client of this.clients) {
+            if (client.keepAliveTimer) {
+                clearInterval(client.keepAliveTimer);
+            }
+            try {
+                if (!client.response.writableEnded) {
+                    client.response.end();
+                }
+            } catch (err) {
+                logger.error('[EventBroadcaster] Error closing connection:', err.message);
+            }
+        }
+        this.clients.clear();
+        logger.info('[EventBroadcaster] All connections closed');
     }
 }
 
-/**
- * Server-Sent Events for real-time updates
- */
+const eventBroadcaster = new EventBroadcaster();
+
+export function broadcastEvent(eventType, data) {
+    eventBroadcaster.broadcast(eventType, data);
+}
+
 export async function handleEvents(req, res) {
     res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -39,105 +216,31 @@ export async function handleEvents(req, res) {
     try {
         res.write('\n');
     } catch (err) {
-        logger.error('[Event Broadcast] Failed to write initial data:', err.message);
+        logger.error('[EventBroadcaster] Failed to write initial data:', err.message);
         return true;
     }
 
-    // Store the response object for broadcasting
-    if (!global.eventClients) {
-        global.eventClients = [];
-    }
-    global.eventClients.push(res);
-
-    // Keep connection alive
-    const keepAlive = setInterval(() => {
-        if (!res.writableEnded && !res.destroyed) {
-            try {
-                res.write(':\n\n');
-            } catch (err) {
-                logger.error('[Event Broadcast] Failed to write keepalive:', err.message);
-                clearInterval(keepAlive);
-                global.eventClients = global.eventClients.filter(r => r !== res);
-            }
-        } else {
-            clearInterval(keepAlive);
-            global.eventClients = global.eventClients.filter(r => r !== res);
-        }
-    }, 30000);
+    const clientId = eventBroadcaster.addClient(res);
 
     req.on('close', () => {
-        clearInterval(keepAlive);
-        global.eventClients = global.eventClients.filter(r => r !== res);
+        eventBroadcaster.removeClient(clientId);
     });
 
     return true;
 }
 
-/**
- * Initialize UI management features
- */
 export function initializeUIManagement() {
-    // Initialize log broadcasting for UI
-    if (!global.eventClients) {
-        global.eventClients = [];
-    }
-    if (!global.logBuffer) {
-        global.logBuffer = [];
-    }
-
-    // Override console.log to broadcast logs
-    const originalLog = console.log;
-    console.log = function(...args) {
-        originalLog.apply(console, args);
-        const logEntry = {
-            timestamp: new Date().toISOString(),
-            level: 'info',
-            message: args.map(arg => {
-                if (typeof arg === 'string') return arg;
-                try {
-                    return JSON.stringify(arg);
-                } catch (e) {
-                    return String(arg);
-                }
-            }).join(' ')
-        };
-        global.logBuffer.push(logEntry);
-        if (global.logBuffer.length > 100) {
-            global.logBuffer.shift();
-        }
-        broadcastEvent('log', logEntry);
-    };
-
-    // Override console.error to broadcast errors
-    const originalError = console.error;
-    console.error = function(...args) {
-        originalError.apply(console, args);
-        const logEntry = {
-            timestamp: new Date().toISOString(),
-            level: 'error',
-            message: args.map(arg => {
-                if (typeof arg === 'string') return arg;
-                try {
-                    return JSON.stringify(arg);
-                } catch (e) {
-                    return String(arg);
-                }
-            }).join(' ')
-        };
-        global.logBuffer.push(logEntry);
-        if (global.logBuffer.length > 100) {
-            global.logBuffer.shift();
-        }
-        broadcastEvent('log', logEntry);
-    };
+    eventBroadcaster.setupConsoleOverride();
+    logger.info('[EventBroadcaster] UI management initialized');
 }
 
-// 配置multer中间件
+export function getEventBroadcaster() {
+    return eventBroadcaster;
+}
+
 const storage = multer.diskStorage({
     destination: async (req, file, cb) => {
         try {
-            // multer在destination回调时req.body还未解析，先使用默认路径
-            // 实际的provider会在文件上传完成后从req.body中获取
             const uploadPath = path.join(process.cwd(), 'configs', 'temp');
             await fs.mkdir(uploadPath, { recursive: true });
             cb(null, uploadPath);
@@ -166,21 +269,10 @@ export const upload = multer({
     storage,
     fileFilter,
     limits: {
-        fileSize: 5 * 1024 * 1024 // 5MB限制
+        fileSize: 5 * 1024 * 1024
     }
 });
 
-/**
- * 处理 OAuth 凭据文件上传
- * @param {http.IncomingMessage} req - HTTP 请求对象
- * @param {http.ServerResponse} res - HTTP 响应对象
- * @param {Object} options - 可选配置
- * @param {Object} options.providerMap - 提供商类型映射表
- * @param {string} options.logPrefix - 日志前缀
- * @param {string} options.userInfo - 用户信息（用于日志）
- * @param {Object} options.customUpload - 自定义 multer 实例
- * @returns {Promise<boolean>} 始终返回 true 表示请求已处理
- */
 export function handleUploadOAuthCredentials(req, res, options = {}) {
     const {
         providerMap = {},
@@ -188,9 +280,9 @@ export function handleUploadOAuthCredentials(req, res, options = {}) {
         userInfo = '',
         customUpload = null
     } = options;
-    
+
     const uploadMiddleware = customUpload ? customUpload.single('file') : upload.single('file');
-    
+
     return new Promise((resolve) => {
         uploadMiddleware(req, res, async (err) => {
             if (err) {
@@ -217,32 +309,26 @@ export function handleUploadOAuthCredentials(req, res, options = {}) {
                     return;
                 }
 
-                // multer执行完成后，表单字段已解析到req.body中
                 const providerType = req.body.provider || 'common';
-                // 应用提供商映射（如果有）
                 const provider = providerMap[providerType] || providerType;
                 const tempFilePath = req.file.path;
-                
-                // 根据实际的provider移动文件到正确的目录
+
                 let targetDir = path.join(process.cwd(), 'configs', provider);
-                
-                // 如果是kiro类型的凭证，需要再包裹一层文件夹
+
                 if (provider === 'kiro') {
-                    // 使用时间戳作为子文件夹名称，确保每个上传的文件都有独立的目录
                     const timestamp = Date.now();
                     const originalNameWithoutExt = path.parse(req.file.originalname).name;
                     const subFolder = `${timestamp}_${originalNameWithoutExt}`;
                     targetDir = path.join(targetDir, subFolder);
                 }
-                
+
                 await fs.mkdir(targetDir, { recursive: true });
-                
+
                 const targetFilePath = path.join(targetDir, req.file.filename);
                 await fs.rename(tempFilePath, targetFilePath);
-                
+
                 const relativePath = path.relative(process.cwd(), targetFilePath);
 
-                // 广播更新事件
                 broadcastEvent('config_update', {
                     action: 'add',
                     filePath: relativePath,

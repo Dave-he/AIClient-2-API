@@ -96,8 +96,21 @@ const addLog = (data) => {
   }
 }
 
-const clearLogs = () => {
-  logs.value = []
+const clearLogs = async () => {
+  try {
+    const response = await fetch('/api/system/clear-log', {
+      method: 'POST'
+    })
+    if (response.ok) {
+      logs.value = []
+      await fetchLogs()
+    } else {
+      const error = await response.json()
+      logger.error('Failed to clear logs:', error)
+    }
+  } catch (error) {
+    logger.error('Failed to clear logs:', error)
+  }
 }
 
 const downloadLogs = () => {

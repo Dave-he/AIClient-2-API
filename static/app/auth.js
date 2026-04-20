@@ -277,10 +277,10 @@ async function initAuth() {
     
     // 检查是否已经有有效的token
     if (authManager.isTokenValid()) {
-        // 验证token是否仍然有效（发送一个测试请求）
+        // 验证token是否仍然有效（使用validate-token接口）
         try {
             const apiClient = new ApiClient();
-            await apiClient.get('/health');
+            await apiClient.get('/validate-token');
             return true;
         } catch (error) {
             // Token无效，清除并重定向到登录页

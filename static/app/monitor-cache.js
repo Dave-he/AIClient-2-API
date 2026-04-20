@@ -1,3 +1,5 @@
+import { eventBus, EVENTS } from './event-bus.js';
+
 export class MonitorCache {
     constructor() {
         this._cache = {};
@@ -6,6 +8,11 @@ export class MonitorCache {
         this._callbacks = {};
         this._cacheTTL = 5000;
         this._preloadedData = {};
+        
+        // 重试配置
+        this._maxRetries = 3;
+        this._initialTimeout = 3000;
+        this._timeoutIncrement = 2000;
     }
 
     async getSummary(forceRefresh = false) {
@@ -175,22 +182,8 @@ export class MonitorCache {
                 headers['Authorization'] = `Bearer ${token}`;
             }
             
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const data = await this._fetchWithRetry(url, headers, cacheKey);
             
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: headers,
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
             this._cache[cacheKey] = data;
             this._timestamps[cacheKey] = Date.now();
 
@@ -202,6 +195,48 @@ export class MonitorCache {
                 this._callbacks[cacheKey] = [];
             }
         }
+    }
+
+    async _fetchWithRetry(url, headers, cacheKey) {
+        let lastError = null;
+        
+        for (let attempt = 0; attempt <= this._maxRetries; attempt++) {
+            const timeout = this._initialTimeout + (attempt * this._timeoutIncrement);
+            
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeout);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: headers,
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                lastError = error;
+                
+                if (attempt < this._maxRetries) {
+                    console.warn(`[MonitorCache] Request attempt ${attempt + 1} failed for ${cacheKey}: ${error.message}. Retrying in ${timeout}ms...`);
+                    await this._delay(timeout);
+                }
+            }
+        }
+        
+        console.error(`[MonitorCache] All ${this._maxRetries + 1} attempts failed for ${cacheKey}:`, lastError);
+        throw lastError;
+    }
+
+    _delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     getCachedData(cacheKey) {
@@ -220,6 +255,8 @@ export class MonitorCache {
             this._cache = {};
             this._timestamps = {};
         }
+        
+        eventBus.emit(EVENTS.CACHE_INVALIDATED, { cacheKey });
     }
 
     setTTL(ttl) {

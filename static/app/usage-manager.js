@@ -3,6 +3,7 @@
 import { showToast } from './utils.js';
 import { getAuthHeaders } from './auth.js';
 import { t, getCurrentLanguage } from './i18n.js';
+import { eventBus, EVENTS } from './event-bus.js';
 
 /**
  * 不支持显示用量数据的提供商列表
@@ -226,6 +227,8 @@ export async function refreshUsage() {
         }
 
         showToast(t('common.success'), t('common.refresh.success'), 'success');
+        
+        eventBus.emit(EVENTS.USAGE_UPDATED, { data });
     } catch (error) {
         console.error('获取用量数据失败:', error);
         

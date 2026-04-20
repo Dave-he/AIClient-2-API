@@ -11,6 +11,7 @@ import { updateUsageProviderConfigs } from './usage-manager.js';
 import { updateConfigProviderConfigs } from './config-manager.js';
 import { loadConfigList, updateProviderFilterOptions } from './upload-config-manager.js';
 import { setServiceMode } from './event-handlers.js';
+import { eventBus, EVENTS } from './event-bus.js';
 
 // 保存初始服务器时间和运行时间
 let initialServerTime = null;
@@ -257,6 +258,8 @@ async function loadProviders(forceRefreshSupported = false) {
         } else {
             await loadProvidersDynamic();
         }
+        
+        eventBus.emit(EVENTS.PROVIDERS_UPDATED);
     } catch (error) {
         console.error('Failed to load providers:', error);
     }

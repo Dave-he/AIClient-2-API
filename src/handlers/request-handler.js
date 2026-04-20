@@ -38,6 +38,7 @@ import { handleGrokAssetsProxy } from '../utils/grok-assets-proxy.js';
 import { getMaxRequestSize, containsImageContent } from '../utils/network-utils.js';
 import { getRateLimiter } from '../utils/rate-limiter.js';
 import { compressionMiddleware, cacheControlMiddleware } from '../middleware/performance.js';
+import { recordRequest, recordCacheHit, recordCacheMiss } from '../utils/metrics.js';
 
 const IMAGE_ENDPOINTS = ['/v1/chat/completions', '/v1/images/validate', '/v1/images/upload'];
 
@@ -98,7 +99,10 @@ function parseRequestBody(req, config) {
 export function createRequestHandler(config, providerPoolManager) {
     const pluginManager = getPluginManager();
     return async function requestHandler(req, res) {
-        // Generate unique request ID and set it in logger context
+        const startTime = Date.now();
+        let requestSuccess = true;
+        let requestError = null;
+
         const clientIp = getClientIp(req);
         const requestId = `${clientIp}:${generateRequestId()}`;
 
@@ -179,6 +183,21 @@ export function createRequestHandler(config, providerPoolManager) {
                         provider: currentConfig.MODEL_PROVIDER
                     }));
                     return true;
+                }
+
+                // Metrics endpoint (Prometheus format)
+                if (method === 'GET' && path === '/metrics') {
+                    try {
+                        const { getMetricsManager } = await import('../utils/metrics.js');
+                        const metrics = getMetricsManager().exportPrometheusFormat();
+                        res.writeHead(200, { 'Content-Type': 'text/plain' });
+                        res.end(metrics);
+                        return true;
+                    } catch (error) {
+                        logger.error(`[Server] Metrics endpoint error: ${error.message}`);
+                        handleError(res, { status: 500, message: 'Failed to get metrics' }, currentConfig.MODEL_PROVIDER, null, req);
+                        return;
+                    }
                 }
 
                 // Grok assets proxy endpoint
@@ -455,6 +474,8 @@ export function createRequestHandler(config, providerPoolManager) {
                     handleError(res, error, currentConfig.MODEL_PROVIDER, null, req);
                 }
             } catch (error) {
+                    requestSuccess = false;
+                    requestError = error;
                     logger.error(`[Server] Unhandled error in request handler: ${error.message}`, error);
                     try {
                         if (!res.headersSent) {
@@ -472,7 +493,10 @@ export function createRequestHandler(config, providerPoolManager) {
                         }
                     }
                 } finally {
-                    // Clear request context after request is complete
+                    const duration = Date.now() - startTime;
+                    recordRequest(duration, requestSuccess);
+                    logger.logRequestTiming(requestId, req.url, req.method, duration, 
+                        res.statusCode || (requestSuccess ? 200 : 500), requestError);
                     logger.clearRequestContext(requestId);
                 }
             });

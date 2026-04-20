@@ -1,4 +1,5 @@
 import { monitorCache } from './monitor-cache.js';
+import { eventBus, EVENTS } from './event-bus.js';
 
 export class GPUMonitorModule {
     constructor() {
@@ -17,6 +18,7 @@ export class GPUMonitorModule {
         this.i18n = window.i18n || { t: (key) => key };
         this._pendingUpdates = {};
         this.init();
+        this.setupEventBusListeners();
     }
 
     shouldPoll() {
@@ -259,6 +261,32 @@ export class GPUMonitorModule {
         if (saveConfigBtn) {
             saveConfigBtn.addEventListener('click', () => this.saveConfig());
         }
+    }
+
+    setupEventBusListeners() {
+        eventBus.on(EVENTS.CONFIG_UPDATED, () => {
+            console.log('[GPUMonitor] Config updated, refreshing config');
+            this.refreshConfig();
+        });
+        
+        eventBus.on(EVENTS.PROVIDERS_UPDATED, () => {
+            console.log('[GPUMonitor] Providers updated');
+            if (this.shouldPoll()) {
+                this.refreshAllStatus(true);
+            }
+        });
+        
+        eventBus.on(EVENTS.MODELS_UPDATED, () => {
+            console.log('[GPUMonitor] Models updated, refreshing models list');
+            this.refreshModelsList();
+        });
+        
+        eventBus.on(EVENTS.CACHE_INVALIDATED, () => {
+            console.log('[GPUMonitor] Cache invalidated, refreshing all status');
+            if (this.shouldPoll()) {
+                this.refreshAllStatus(true);
+            }
+        });
     }
 
     handleWebSocketMessage(data) {

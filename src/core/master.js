@@ -19,12 +19,12 @@ import { fileURLToPath } from 'url';
 import { isRetryableNetworkError } from '../utils/common.js';
 import os from 'os';
 import { initializeConfig, CONFIG } from '../core/config-manager.js';
+import { getIPCManager } from './ipc-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 子进程实例
-let workerProcess = null;
+const ipcManager = getIPCManager();
 
 // 子进程状态
 let workerStatus = {
@@ -52,8 +52,9 @@ const resourceMonitorStatus = {
  * 启动子进程
  */
 function startWorker() {
-    if (workerProcess) {
-        logger.info('[Master] Worker process already running, PID:', workerProcess.pid);
+    if (ipcManager.getStats().workerConnected) {
+        const stats = ipcManager.getStats();
+        logger.info('[Master] Worker process already running, PID:', stats.workerConnected ? workerStatus.pid : 'unknown');
         return;
     }
 
@@ -61,7 +62,7 @@ function startWorker() {
     logger.info('[Master] Worker script:', config.workerScript);
     logger.info('[Master] Worker args:', config.args.join(' '));
 
-    workerProcess = fork(config.workerScript, config.args, {
+    const worker = fork(config.workerScript, config.args, {
         stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
         env: {
             ...process.env,
@@ -69,34 +70,39 @@ function startWorker() {
         }
     });
 
-    workerStatus.pid = workerProcess.pid;
+    workerStatus.pid = worker.pid;
     workerStatus.startTime = new Date().toISOString();
 
-    logger.info('[Master] Worker process started, PID:', workerProcess.pid);
+    logger.info('[Master] Worker process started, PID:', worker.pid);
 
-    // 监听子进程消息
-    workerProcess.on('message', (message) => {
-        logger.info('[Master] Received message from worker:', message);
-        handleWorkerMessage(message);
-    });
-
-    // 监听子进程退出
-    workerProcess.on('exit', (code, signal) => {
+    ipcManager.onWorkerDisconnect = (code, signal) => {
         logger.info(`[Master] Worker process exited with code ${code}, signal ${signal}`);
-        workerProcess = null;
         workerStatus.pid = null;
-
-        // 如果不是主动重启导致的退出，尝试自动重启
         if (!workerStatus.isRestarting && code !== 0) {
             logger.info('[Master] Worker crashed, attempting auto-restart...');
             scheduleRestart();
         }
+    };
+
+    ipcManager.onHeartbeatTimeout = () => {
+        logger.error('[Master] Worker heartbeat timeout, triggering restart...');
+        restartWorker();
+    };
+
+    ipcManager.registerMessageHandler('ready', (message) => {
+        logger.info('[Master] Worker is ready');
     });
 
-    // 监听子进程错误
-    workerProcess.on('error', (error) => {
-        logger.error('[Master] Worker process error:', error.message);
+    ipcManager.registerMessageHandler('restart_request', (message) => {
+        logger.info('[Master] Worker requested restart');
+        restartWorker();
     });
+
+    ipcManager.registerMessageHandler('status', (message) => {
+        logger.info('[Master] Worker status:', message.data);
+    });
+
+    ipcManager.setWorkerProcess(worker);
 }
 
 /**
@@ -106,36 +112,37 @@ function startWorker() {
  */
 function stopWorker(graceful = true) {
     return new Promise((resolve) => {
-        if (!workerProcess) {
+        const stats = ipcManager.getStats();
+        if (!stats.workerConnected) {
             logger.info('[Master] No worker process to stop');
             resolve();
             return;
         }
 
-        logger.info('[Master] Stopping worker process, PID:', workerProcess.pid);
+        logger.info('[Master] Stopping worker process, PID:', workerStatus.pid);
 
         const timeout = setTimeout(() => {
-            if (workerProcess) {
+            const worker = ipcManager.workerProcess;
+            if (worker) {
                 logger.info('[Master] Force killing worker process...');
-                workerProcess.kill('SIGKILL');
+                worker.kill('SIGKILL');
             }
             resolve();
-        }, 5000); // 5秒超时后强制杀死
+        }, 5000);
 
-        workerProcess.once('exit', () => {
+        const handleExit = () => {
             clearTimeout(timeout);
-            workerProcess = null;
-            workerStatus.pid = null;
             logger.info('[Master] Worker process stopped');
             resolve();
-        });
+        };
+
+        ipcManager.onWorkerDisconnect = handleExit;
 
         if (graceful) {
-            // 发送优雅关闭信号
-            workerProcess.send({ type: 'shutdown' });
-            workerProcess.kill('SIGTERM');
+            ipcManager.send({ type: 'shutdown' });
+            ipcManager.workerProcess?.kill('SIGTERM');
         } else {
-            workerProcess.kill('SIGKILL');
+            ipcManager.workerProcess?.kill('SIGKILL');
         }
     });
 }
@@ -199,40 +206,18 @@ function scheduleRestart() {
 }
 
 /**
- * 处理来自子进程的消息
- * @param {Object} message - 消息对象
- */
-function handleWorkerMessage(message) {
-    if (!message || !message.type) return;
-
-    switch (message.type) {
-        case 'ready':
-            logger.info('[Master] Worker is ready');
-            break;
-        case 'restart_request':
-            logger.info('[Master] Worker requested restart');
-            restartWorker();
-            break;
-        case 'status':
-            logger.info('[Master] Worker status:', message.data);
-            break;
-        default:
-            logger.info('[Master] Unknown message type:', message.type);
-    }
-}
-
-/**
  * 获取子进程资源使用情况
  * @returns {Object|null}
  */
 function getWorkerResourceUsage() {
-    if (!workerProcess) {
+    const worker = ipcManager.workerProcess;
+    if (!worker) {
         return null;
     }
 
     try {
-        const usage = workerProcess.resourceUsage ? workerProcess.resourceUsage() : null;
-        const memory = workerProcess.memoryUsage ? workerProcess.memoryUsage() : null;
+        const usage = worker.resourceUsage ? worker.resourceUsage() : null;
+        const memory = worker.memoryUsage ? worker.memoryUsage() : null;
         
         const totalMemory = process.platform === 'win32' 
             ? (() => {
@@ -246,7 +231,7 @@ function getWorkerResourceUsage() {
             : os.totalmem();
 
         return {
-            pid: workerProcess.pid,
+            pid: worker.pid,
             cpu: usage ? {
                 user: usage.userCPUTime,
                 system: usage.systemCPUTime,
@@ -385,7 +370,7 @@ function startResourceMonitor() {
 
     // 设置定时任务
     setInterval(() => {
-        if (workerProcess && !workerStatus.isRestarting) {
+        if (ipcManager.workerProcess && !workerStatus.isRestarting) {
             recordResourceUsage();
         }
     }, config.resourceMonitor.interval);
@@ -412,7 +397,7 @@ function getStatus() {
             restartCount: workerStatus.restartCount,
             lastRestartTime: workerStatus.lastRestartTime,
             isRestarting: workerStatus.isRestarting,
-            isRunning: workerProcess !== null,
+            isRunning: ipcManager.workerProcess !== null,
             resourceUsage: workerUsage,
             cpuPercentage: cpuPercent.toFixed(2),
             recentCpuUsage: [...resourceMonitorStatus.recentCpuUsage],

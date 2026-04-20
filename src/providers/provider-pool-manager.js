@@ -18,6 +18,7 @@ import {
     sendProviderUnhealthyAlert, 
     sendProviderRecoveredAlert 
 } from '../utils/alert-manager.js';
+import { recordProviderStatus, recordTokenRefresh, getMetricsManager } from '../utils/metrics.js';
 
 function getCustomModelAliasesForProvider(config, providerType) {
     const customModels = Array.isArray(config?.customModels) ? config.customModels : [];
@@ -893,6 +894,35 @@ export class ProviderPoolManager {
             this._debouncedSave(providerType);
         }
         this._log('info', `Initialized provider statuses: ok (maxErrorCount: ${this.maxErrorCount})`);
+        
+        this._syncMetrics();
+    }
+    
+    _syncMetrics() {
+        const mm = getMetricsManager();
+        let healthyTotal = 0;
+        let unhealthyTotal = 0;
+        let totalTotal = 0;
+        
+        for (const providerType in this.providerStatus) {
+            const providers = this.providerStatus[providerType];
+            const { healthy, unhealthy } = providers.reduce((acc, p) => {
+                if (p.config.isDisabled) return acc;
+                if (p.config.isHealthy) acc.healthy++;
+                else acc.unhealthy++;
+                return acc;
+            }, { healthy: 0, unhealthy: 0 });
+            
+            healthyTotal += healthy;
+            unhealthyTotal += unhealthy;
+            totalTotal += healthy + unhealthy;
+        }
+        
+        mm.set('providers_healthy', healthyTotal);
+        mm.set('providers_unhealthy', unhealthyTotal);
+        mm.set('providers_total', totalTotal);
+        
+        this._log('info', `Synced provider metrics: ${healthyTotal} healthy, ${unhealthyTotal} unhealthy, ${totalTotal} total`);
     }
 
     /**
@@ -1647,6 +1677,7 @@ export class ProviderPoolManager {
                 // 健康状态变化日志
                 if (wasHealthy) {
                     this._logHealthStatusChange(providerType, provider.config, 'healthy', 'unhealthy', errorMessage);
+                    recordProviderStatus(providerType, false, 1);
                 }
                 
                 this._log('warn', `Marked provider as unhealthy: ${providerConfig.uuid} for type ${providerType}. Total errors: ${provider.config.errorCount}`);
@@ -1686,6 +1717,7 @@ export class ProviderPoolManager {
             // 健康状态变化日志
             if (wasHealthy) {
                 this._logHealthStatusChange(providerType, provider.config, 'healthy', 'unhealthy', errorMessage);
+                recordProviderStatus(providerType, false, 1);
             }
 
             this._log('warn', `Immediately marked provider as unhealthy: ${providerConfig.uuid} for type ${providerType}. Reason: ${errorMessage || 'Authentication error'}`);
@@ -1776,6 +1808,7 @@ export class ProviderPoolManager {
             // 健康状态变化日志
             if (!wasHealthy) {
                 this._logHealthStatusChange(providerType, provider.config, 'unhealthy', 'healthy', null);
+                recordProviderStatus(providerType, true, 1);
             }
             
             this._log('info', `Marked provider as healthy: ${provider.config.uuid} for type ${providerType}${resetUsageCount ? ' (usage count reset)' : ''}`);

@@ -14,6 +14,8 @@ import {
 
 import { t } from './i18n.js';
 
+import { eventBus, EVENTS } from './event-bus.js';
+
 import {
     initFileUpload,
     fileUploadHandler
@@ -320,6 +322,58 @@ function initApp() {
             console.log('========================');
         }
     }, REFRESH_INTERVALS.SYSTEM_INFO);
+    
+    // 配置更新事件监听 - 确保所有页面在配置变更后刷新
+    eventBus.on(EVENTS.CONFIG_UPDATED, async (data) => {
+        console.log('[EventBus] Configuration updated, refreshing all modules...');
+        
+        try {
+            await Promise.all([
+                loadConfiguration(),
+                loadProviders(true),
+                refreshModels()
+            ]);
+            
+            if (window.systemMonitor) {
+                window.systemMonitor.refreshSystemInfo();
+            }
+            
+            if (window.GPUMonitor) {
+                window.GPUMonitor.refreshAllStatus();
+            }
+            
+            showToast(t('common.success'), t('common.configApplied'), 'success');
+        } catch (error) {
+            console.error('[EventBus] Error refreshing modules after config update:', error);
+            showToast(t('common.error'), t('common.refreshFailed'), 'error');
+        }
+    });
+    
+    // 配置重载事件监听
+    eventBus.on(EVENTS.CONFIG_RELOADED, () => {
+        console.log('[EventBus] Configuration reloaded');
+    });
+    
+    // 提供商更新事件监听
+    eventBus.on(EVENTS.PROVIDERS_UPDATED, () => {
+        console.log('[EventBus] Providers updated');
+        if (window.customModelsManager) {
+            window.customModelsManager.load();
+        }
+    });
+    
+    // 模型更新事件监听
+    eventBus.on(EVENTS.MODELS_UPDATED, () => {
+        console.log('[EventBus] Models updated');
+        if (window.customModelsManager) {
+            window.customModelsManager.loadModels();
+        }
+    });
+    
+    // 缓存失效事件监听
+    eventBus.on(EVENTS.CACHE_INVALIDATED, (data) => {
+        console.log(`[EventBus] Cache invalidated: ${data?.cacheKey || 'all'}`);
+    });
 
 }
 

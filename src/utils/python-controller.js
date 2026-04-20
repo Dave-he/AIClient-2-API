@@ -4,17 +4,12 @@ const DEFAULT_PYTHON_CONTROLLER_URL = 'http://localhost:5000';
 
 let controllerUrl = DEFAULT_PYTHON_CONTROLLER_URL;
 
-const gpuCache = {
-    data: null,
-    timestamp: 0,
-    ttl: 5000
-};
+const DEFAULT_TIMEOUT = 30000;
+const DEFAULT_RETRY_DELAY = 1000;
+const DEFAULT_MAX_RETRIES = 2;
 
-const queueCache = {
-    data: null,
-    timestamp: 0,
-    ttl: 5000
-};
+const cacheStore = new Map();
+const pendingRequests = new Map();
 
 export function setControllerUrl(url) {
     controllerUrl = url;
@@ -24,41 +19,120 @@ export function getControllerUrl() {
     return controllerUrl;
 }
 
-async function callPythonController(endpoint, method = 'GET', body = null, headers = {}) {
+function createCacheKey(endpoint, method, body) {
+    const bodyStr = body ? JSON.stringify(body) : '';
+    return `${method}:${endpoint}:${bodyStr}`;
+}
+
+function withTimeout(promise, ms, errorMessage = 'Request timed out') {
+    const timeout = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(errorMessage)), ms);
+    });
+    return Promise.race([promise, timeout]);
+}
+
+async function retryAsync(fn, maxRetries, delay, context) {
+    let lastError;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+            if (attempt < maxRetries) {
+                logger.warn(`[Python Controller] Retry ${attempt}/${maxRetries} for ${context}: ${error.message}`);
+                await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, attempt - 1)));
+            }
+        }
+    }
+    throw lastError;
+}
+
+async function callPythonController(endpoint, method = 'GET', body = null, headers = {}, options = {}) {
     const url = `${controllerUrl}${endpoint}`;
-    
-    try {
-        const options = {
+    const {
+        timeout = DEFAULT_TIMEOUT,
+        maxRetries = DEFAULT_MAX_RETRIES,
+        retryDelay = DEFAULT_RETRY_DELAY,
+        cacheTtl = 0,
+        skipCache = false
+    } = options;
+
+    const cacheKey = cacheTtl > 0 && !skipCache ? createCacheKey(endpoint, method, body) : null;
+
+    if (cacheKey && cacheStore.has(cacheKey)) {
+        const cached = cacheStore.get(cacheKey);
+        if (Date.now() - cached.timestamp < cacheTtl) {
+            return cached.data;
+        }
+        cacheStore.delete(cacheKey);
+    }
+
+    const requestKey = `${method}:${url}`;
+    if (pendingRequests.has(requestKey)) {
+        return pendingRequests.get(requestKey);
+    }
+
+    const requestPromise = retryAsync(async () => {
+        const controller = new AbortController();
+        const timeoutId = timeout ? setTimeout(() => controller.abort(), timeout) : null;
+        
+        const fetchOptions = {
             method,
             headers: {
                 'Content-Type': 'application/json',
                 ...headers
-            }
+            },
+            signal: controller.signal
         };
-        
+
         if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
-            options.body = JSON.stringify(body);
+            fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
         }
-        
-        const response = await fetch(url, options);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            logger.error(`[Python Controller] Request failed: ${method} ${url} - ${response.status} ${errorText}`);
-            throw new Error(`HTTP error! status: ${response.status}`);
+
+        try {
+            const response = await fetch(url, fetchOptions);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                const error = new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+                error.status = response.status;
+                throw error;
+            }
+
+            const data = await response.json();
+            return data;
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId);
         }
+    }, maxRetries, retryDelay, `${method} ${url}`);
+
+    pendingRequests.set(requestKey, requestPromise);
+
+    try {
+        const data = await requestPromise;
         
-        const data = await response.json();
+        if (cacheKey && cacheTtl > 0) {
+            cacheStore.set(cacheKey, {
+                data,
+                timestamp: Date.now()
+            });
+        }
+
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Error calling ${method} ${url}: ${error.message}`);
         throw error;
+    } finally {
+        pendingRequests.delete(requestKey);
     }
 }
 
-export async function getVLLMAvailableModels() {
+export async function getVLLMAvailableModels(options = {}) {
     try {
-        const data = await callPythonController('/vllm/models');
+        const data = await callPythonController('/vllm/models', 'GET', null, {}, {
+            cacheTtl: 60000,
+            ...options
+        });
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to get vLLM available models: ${error.message}`);
@@ -66,9 +140,12 @@ export async function getVLLMAvailableModels() {
     }
 }
 
-export async function getVLLMModelStatus() {
+export async function getVLLMModelStatus(options = {}) {
     try {
-        const data = await callPythonController('/vllm/model/status');
+        const data = await callPythonController('/vllm/model/status', 'GET', null, {}, {
+            cacheTtl: 5000,
+            ...options
+        });
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to get vLLM model status: ${error.message}`);
@@ -76,9 +153,12 @@ export async function getVLLMModelStatus() {
     }
 }
 
-export async function switchVLLMModel(modelName) {
+export async function switchVLLMModel(modelName, options = {}) {
     try {
-        const data = await callPythonController('/vllm/model/switch', 'POST', { model_name: modelName });
+        const data = await callPythonController('/vllm/model/switch', 'POST', { model_name: modelName }, {}, {
+            timeout: 120000,
+            ...options
+        });
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to switch vLLM model ${modelName}: ${error.message}`);
@@ -86,9 +166,12 @@ export async function switchVLLMModel(modelName) {
     }
 }
 
-export async function startVLLMService() {
+export async function startVLLMService(options = {}) {
     try {
-        const data = await callPythonController('/vllm/service/start', 'POST');
+        const data = await callPythonController('/vllm/service/start', 'POST', null, {}, {
+            timeout: 180000,
+            ...options
+        });
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to start vLLM service: ${error.message}`);
@@ -96,9 +179,12 @@ export async function startVLLMService() {
     }
 }
 
-export async function stopVLLMService() {
+export async function stopVLLMService(options = {}) {
     try {
-        const data = await callPythonController('/vllm/service/stop', 'POST');
+        const data = await callPythonController('/vllm/service/stop', 'POST', null, {}, {
+            timeout: 60000,
+            ...options
+        });
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to stop vLLM service: ${error.message}`);
@@ -106,9 +192,12 @@ export async function stopVLLMService() {
     }
 }
 
-export async function restartVLLMService() {
+export async function restartVLLMService(options = {}) {
     try {
-        const data = await callPythonController('/vllm/service/restart', 'POST');
+        const data = await callPythonController('/vllm/service/restart', 'POST', null, {}, {
+            timeout: 180000,
+            ...options
+        });
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to restart vLLM service: ${error.message}`);
@@ -116,9 +205,12 @@ export async function restartVLLMService() {
     }
 }
 
-export async function getVLLMServiceStatus() {
+export async function getVLLMServiceStatus(options = {}) {
     try {
-        const data = await callPythonController('/vllm/service/status');
+        const data = await callPythonController('/vllm/service/status', 'GET', null, {}, {
+            cacheTtl: 5000,
+            ...options
+        });
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to get vLLM service status: ${error.message}`);
@@ -126,44 +218,53 @@ export async function getVLLMServiceStatus() {
     }
 }
 
-export async function getGPUStatus() {
+export async function getGPUStatus(options = {}) {
     try {
-        const now = Date.now();
-        if (gpuCache.data && (now - gpuCache.timestamp) < gpuCache.ttl) {
-            return gpuCache.data;
-        }
-        const data = await callPythonController('/manage/gpu');
-        gpuCache.data = data;
-        gpuCache.timestamp = now;
+        const data = await callPythonController('/manage/gpu', 'GET', null, {}, {
+            cacheTtl: 5000,
+            ...options
+        });
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to get GPU status: ${error.message}`);
-        return gpuCache.data || null;
+        return null;
     }
 }
 
-export async function getQueueStatus() {
+export async function getQueueStatus(options = {}) {
     try {
-        const now = Date.now();
-        if (queueCache.data && (now - queueCache.timestamp) < queueCache.ttl) {
-            return queueCache.data;
-        }
-        const data = await callPythonController('/manage/queue');
-        queueCache.data = data;
-        queueCache.timestamp = now;
+        const data = await callPythonController('/manage/queue', 'GET', null, {}, {
+            cacheTtl: 2000,
+            ...options
+        });
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to get queue status: ${error.message}`);
-        return queueCache.data || {};
+        return {};
     }
 }
 
-export async function getHealthStatus() {
+export async function getHealthStatus(options = {}) {
     try {
-        const data = await callPythonController('/health');
+        const data = await callPythonController('/health', 'GET', null, {}, {
+            timeout: 5000,
+            ...options
+        });
         return data;
     } catch (error) {
         logger.error(`[Python Controller] Failed to get health status: ${error.message}`);
         return { status: 'unhealthy' };
     }
+}
+
+export function clearCache() {
+    cacheStore.clear();
+    logger.info('[Python Controller] Cache cleared');
+}
+
+export function getCacheStats() {
+    return {
+        entries: cacheStore.size,
+        pendingRequests: pendingRequests.size
+    };
 }

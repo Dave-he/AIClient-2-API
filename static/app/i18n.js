@@ -2430,11 +2430,4 @@ export function translateElement(element) {
     });
 }
 
-// 导出所有函数
-export default {
-    t,
-    setLanguage,
-    getCurrentLanguage,
-    initI18n,
-    translateElement
-};
+

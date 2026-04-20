@@ -133,7 +133,7 @@ export async function handleDownloadTodayLog(req, res) {
  */
 export async function handleClearTodayLog(req, res) {
     try {
-        const success = logger.clearTodayLog();
+        const success = await logger.clearTodayLog();
         
         if (success) {
             // 广播日志清空事件

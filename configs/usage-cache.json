@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-20T10:15:59.783Z",
+  "timestamp": "2026-04-20T17:33:48.584Z",
   "providers": {
     "claude-kiro-oauth": {
       "providerType": "claude-kiro-oauth",
@@ -38,6 +38,13 @@
     },
     "stats": {
       "providerType": "stats",
+      "instances": [],
+      "totalCount": 0,
+      "successCount": 0,
+      "errorCount": 0
+    },
+    "tokens": {
+      "providerType": "tokens",
       "instances": [],
       "totalCount": 0,
       "successCount": 0,
