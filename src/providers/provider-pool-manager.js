@@ -2,7 +2,9 @@ import * as fs from 'fs';
 import { getServiceAdapter, getRegisteredProviders, invalidateServiceAdapter } from './adapter.js';
 import logger from '../utils/logger.js';
 import { MODEL_PROVIDER, getProtocolPrefix } from '../utils/common.js';
+import { withFileLock, atomicWriteFile } from '../utils/file-lock.js';
 import { convertData } from '../convert/convert.js';
+
 import {
     getConfiguredSupportedModels,
     getCustomModelListProvider,
@@ -61,8 +63,7 @@ export class ProviderPoolManager {
         'openai-codex-oauth': 'gpt-5-codex-mini',
         'openaiResponses-custom': 'gpt-4o-mini',
         'forward-api': 'gpt-4o-mini',
-        'grok-custom': 'grok-3',
-        'local-model': 'gemma-4-31b',
+        'grok-custom': 'grok-4.1-mini',
     };
 
     // 运行时状态字段 - 这些字段不应该保存在静态配置文件中
@@ -763,8 +764,9 @@ export class ProviderPoolManager {
     /**
      * Initializes the status for each provider in the pools.
      * Initially, all providers are considered healthy and have zero usage.
+     * @param {boolean} syncFromConfig - 是否强制从配置同步统计数据（不保留内存中的旧数据）
      */
-    initializeProviderStatus() {
+    initializeProviderStatus(syncFromConfig = false) {
         const oldFullStatus = this.providerStatus || {};
         const isColdStart = Object.keys(oldFullStatus).length === 0;
         this.providerStatus = {}; // Tracks health and usage for each provider instance
@@ -797,20 +799,20 @@ export class ProviderPoolManager {
                     providerConfig.isDisabled = providerConfig.isDisabled !== undefined ? providerConfig.isDisabled : false;
                     
                     // --- V3: 统计数据管理 ---
-                    if (isColdStart) {
-                        // 冷启动：优先从运行时状态恢复，如果没有则使用默认值
-                        if (runtimeConfig) {
+                    if (isColdStart || syncFromConfig) {
+                        // 冷启动或强制同步：优先从运行时状态恢复，如果没有则使用传入配置中的统计数据，最后使用默认值
+                        if (isColdStart && runtimeConfig) {
                             providerConfig.lastUsed = runtimeConfig.lastUsed || null;
                             providerConfig.usageCount = runtimeConfig.usageCount || 0;
                             providerConfig.errorCount = runtimeConfig.errorCount || 0;
                             providerConfig.lastErrorTime = runtimeConfig.lastErrorTime || null;
                             providerConfig.lastErrorMessage = runtimeConfig.lastErrorMessage || null;
                         } else {
-                            providerConfig.lastUsed = null;
-                            providerConfig.usageCount = 0;
-                            providerConfig.errorCount = 0;
-                            providerConfig.lastErrorTime = null;
-                            providerConfig.lastErrorMessage = null;
+                            providerConfig.lastUsed = providerConfig.lastUsed || null;
+                            providerConfig.usageCount = providerConfig.usageCount || 0;
+                            providerConfig.errorCount = providerConfig.errorCount || 0;
+                            providerConfig.lastErrorTime = providerConfig.lastErrorTime || null;
+                            providerConfig.lastErrorMessage = providerConfig.lastErrorMessage || null;
                         }
                     } else if (existing) {
                         // 热重载：从旧状态中恢复统计数据，避免被配置文件中的旧数据覆盖
@@ -1822,11 +1824,35 @@ export class ProviderPoolManager {
         if (provider) {
             provider.config.errorCount = 0;
             provider.config.usageCount = 0;
+            provider.config.isHealthy = true;
+            provider.config.lastErrorTime = null;
+            provider.config.lastErrorMessage = null;
             provider.config._lastSelectionSeq = 0;
             this._log('info', `Reset provider counters: ${provider.config.uuid} for type ${providerType}`);
             
             this._debouncedSave(providerType);
         }
+    }
+
+    /**
+     * 重置特定类型的所有提供商健康状态
+     * @param {string} providerType - 提供商类型
+     */
+    resetAllHealthInType(providerType) {
+        const pool = this.providerStatus[providerType];
+        if (!pool) return;
+
+        pool.forEach(provider => {
+            provider.config.isHealthy = true;
+            provider.config.errorCount = 0;
+            provider.config.lastErrorTime = null;
+            provider.config.lastErrorMessage = null;
+            provider.config.refreshCount = 0;
+            provider.config.needsRefresh = false;
+        });
+
+        this._log('info', `Reset all health status for type ${providerType}`);
+        this._debouncedSave(providerType);
     }
 
     /**
@@ -2313,84 +2339,90 @@ export class ProviderPoolManager {
      * @private
      */
     async _flushPendingSaves() {
-        const typesToSave = Array.from(this.pendingSaves);
-        if (typesToSave.length === 0) return;
-        
-        this.pendingSaves.clear();
-        this.saveTimer = null;
-        
-        try {
-            const poolsFilePath = this.globalConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
-            const runtimeFilePath = this.globalConfig.PROVIDER_POOLS_FILE_PATH ? 
-                this.globalConfig.PROVIDER_POOLS_FILE_PATH.replace('.json', '_runtime.json') : 
-                'configs/provider_pools_runtime.json';
-            
-            let currentStaticPools = {};
-            let currentRuntimePools = {};
-            
-            // 读取静态配置文件
-            try {
-                const fileContent = await fs.promises.readFile(poolsFilePath, 'utf8');
-                currentStaticPools = JSON.parse(fileContent);
-            } catch (readError) {
-                if (readError.code !== 'ENOENT') {
-                    throw readError;
-                }
-            }
-
-            // 读取运行时状态文件
-            try {
-                const fileContent = await fs.promises.readFile(runtimeFilePath, 'utf8');
-                currentRuntimePools = JSON.parse(fileContent);
-            } catch (readError) {
-                if (readError.code !== 'ENOENT') {
-                    throw readError;
-                }
-            }
-
-            // 更新所有待保存的 providerType
-            for (const providerType of typesToSave) {
-                if (this.providerStatus[providerType]) {
-                    // 分离静态配置和运行时状态
-                    currentStaticPools[providerType] = this.providerStatus[providerType].map(p => {
-                        const staticConfig = {};
-                        for (const [key, value] of Object.entries(p.config)) {
-                            if (!ProviderPoolManager.RUNTIME_FIELDS.has(key)) {
-                                staticConfig[key] = value;
-                            }
-                        }
-                        return staticConfig;
-                    });
-                    
-                    currentRuntimePools[providerType] = this.providerStatus[providerType].map(p => {
-                        const runtimeConfig = {};
-                        for (const [key, value] of Object.entries(p.config)) {
-                            if (ProviderPoolManager.RUNTIME_FIELDS.has(key)) {
-                                let val = value;
-                                if (val instanceof Date) {
-                                    val = val.toISOString();
-                                }
-                                runtimeConfig[key] = val;
-                            }
-                        }
-                        runtimeConfig.uuid = p.config.uuid;
-                        return runtimeConfig;
-                    });
-                } else {
-                    this._log('warn', `Attempted to save unknown providerType: ${providerType}`);
-                }
-            }
-            
-            // 写入静态配置文件（不包含运行时状态）
-            await fs.promises.writeFile(poolsFilePath, JSON.stringify(currentStaticPools, null, 2), 'utf8');
-            
-            // 写入运行时状态文件（排除在版本控制之外）
-            await fs.promises.writeFile(runtimeFilePath, JSON.stringify(currentRuntimePools, null, 2), 'utf8');
-            
-            this._log('info', `Provider pools updated successfully for types: ${typesToSave.join(', ')}`);
-        } catch (error) {
-            this._log('error', `Failed to write provider pools: ${error.message}`);
+        // 立即置空定时器，防止重叠调用
+        if (this.saveTimer) {
+            clearTimeout(this.saveTimer);
+            this.saveTimer = null;
         }
+
+        const poolsFilePath = this.globalConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+        const runtimeFilePath = this.globalConfig.PROVIDER_POOLS_FILE_PATH ? 
+            this.globalConfig.PROVIDER_POOLS_FILE_PATH.replace('.json', '_runtime.json') : 
+            'configs/provider_pools_runtime.json';
+        
+        // 使用文件锁确保并发安全
+        await withFileLock(poolsFilePath, async () => {
+            // 原子化提取待保存任务并清空，防止在异步循环期间丢失新更新
+            const typesToSave = Array.from(this.pendingSaves);
+            if (typesToSave.length === 0) return;
+            this.pendingSaves.clear();
+
+            try {
+                let currentStaticPools = {};
+                let currentRuntimePools = {};
+
+                // 读取静态配置文件
+                try {
+                    const fileContent = await fs.promises.readFile(poolsFilePath, 'utf8');
+                    currentStaticPools = JSON.parse(fileContent);
+                } catch (readError) {
+                    if (readError.code !== 'ENOENT') {
+                        throw readError;
+                    }
+                }
+
+                // 读取运行时状态文件
+                try {
+                    const fileContent = await fs.promises.readFile(runtimeFilePath, 'utf8');
+                    currentRuntimePools = JSON.parse(fileContent);
+                } catch (readError) {
+                    if (readError.code !== 'ENOENT') {
+                        throw readError;
+                    }
+                }
+
+                // 更新所有待保存的 providerType
+                for (const providerType of typesToSave) {
+                    if (this.providerStatus[providerType]) {
+                        // 分离静态配置和运行时状态
+                        currentStaticPools[providerType] = this.providerStatus[providerType].map(p => {
+                            const staticConfig = {};
+                            for (const [key, value] of Object.entries(p.config)) {
+                                if (!ProviderPoolManager.RUNTIME_FIELDS.has(key)) {
+                                    staticConfig[key] = value;
+                                }
+                            }
+                            return staticConfig;
+                        });
+                        
+                        currentRuntimePools[providerType] = this.providerStatus[providerType].map(p => {
+                            const runtimeConfig = {};
+                            for (const [key, value] of Object.entries(p.config)) {
+                                if (ProviderPoolManager.RUNTIME_FIELDS.has(key)) {
+                                    let val = value;
+                                    if (val instanceof Date) {
+                                        val = val.toISOString();
+                                    }
+                                    runtimeConfig[key] = val;
+                                }
+                            }
+                            runtimeConfig.uuid = p.config.uuid;
+                            return runtimeConfig;
+                        });
+                    } else {
+                        this._log('warn', `Attempted to save unknown providerType: ${providerType}`);
+                    }
+                }
+                
+                // 使用原子化写入
+                await atomicWriteFile(poolsFilePath, JSON.stringify(currentStaticPools, null, 2), 'utf8');
+                await atomicWriteFile(runtimeFilePath, JSON.stringify(currentRuntimePools, null, 2), 'utf8');
+                
+                this._log('info', `Provider pools updated successfully for types: ${typesToSave.join(', ')}`);
+            } catch (error) {
+                this._log('error', `Failed to write provider pools: ${error.message}`);
+            }
+        });
     }
 
 }

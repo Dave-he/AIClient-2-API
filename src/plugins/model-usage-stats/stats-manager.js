@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import logger from '../../utils/logger.js';
 import { RateManager } from '../../utils/rate-tracker.js';
+import { getBeijingDateString } from '../../utils/common.js';
 
 const STATS_STORE_FILE = path.join(process.cwd(), 'configs', 'model-usage-stats.json');
 const DEFAULT_CONFIG = {
@@ -36,6 +37,9 @@ function createEmptyUsage() {
         completionTokens: 0,
         totalTokens: 0,
         cachedTokens: 0,
+        maxQps: 0,
+        maxRpm: 0,
+        maxTps: 0,
         lastUsedAt: null
     };
 }
@@ -60,6 +64,9 @@ function normalizeUsageBlock(block) {
         completionTokens: toNumber(block.completionTokens),
         totalTokens: toNumber(block.totalTokens),
         cachedTokens: toNumber(block.cachedTokens),
+        maxQps: toNumber(block.maxQps),
+        maxRpm: toNumber(block.maxRpm),
+        maxTps: toNumber(block.maxTps),
         lastUsedAt: block.lastUsedAt || null
     };
 }
@@ -381,6 +388,9 @@ function resetUsageBlockTokens(block) {
     block.completionTokens = 0;
     block.totalTokens = 0;
     block.cachedTokens = 0;
+    block.maxQps = 0;
+    block.maxRpm = 0;
+    block.maxTps = 0;
 }
 
 export function setConfigGetter(getter) {
@@ -433,7 +443,9 @@ export async function finalizeRequest({ requestId, model, provider, fromProvider
         return false;
     }
 
-    const timestamp = new Date().toISOString();
+    const now = new Date();
+    const timestamp = now.toISOString();
+    const dateKey = getBeijingDateString();
     const normalizedProvider = state.provider || provider || 'unknown';
     const normalizedModel = state.model || model || 'unknown';
     
@@ -452,12 +464,25 @@ export async function finalizeRequest({ requestId, model, provider, fromProvider
     rateManager.record(`provider:${normalizedProvider}`, usage.totalTokens);
     rateManager.record(`model:${normalizedModel}`, usage.totalTokens);
 
-    // 记录每日统计
-    const dateKey = timestamp.split('T')[0];
+    const globalRates = rateManager.getGlobalStats();
+    
+    // 更新持久化峰值
+    const updatePeaks = (target) => {
+        target.maxQps = Math.max(target.maxQps || 0, globalRates.qps);
+        target.maxRpm = Math.max(target.maxRpm || 0, globalRates.rpm);
+        target.maxTps = Math.max(target.maxTps || 0, globalRates.tps);
+    };
+
+    updatePeaks(statsStore.summary);
+    updatePeaks(ensureProviderStore(normalizedProvider).summary);
+    updatePeaks(ensureModelStore(normalizedProvider, normalizedModel));
+
     if (!statsStore.daily[dateKey]) {
         statsStore.daily[dateKey] = createEmptyUsage();
     }
-    applyUsage(statsStore.daily[dateKey], usage, timestamp);
+    const dailyBlock = statsStore.daily[dateKey];
+    applyUsage(dailyBlock, usage, timestamp);
+    updatePeaks(dailyBlock);
 
     // 记录每小时统计（YYYY-MM-DDTHH）
     const hourKey = timestamp.slice(0, 13); // YYYY-MM-DDTHH
@@ -473,7 +498,7 @@ export async function finalizeRequest({ requestId, model, provider, fromProvider
     }
     applyUsage(statsStore.minuteData[minuteKey], usage, timestamp);
 
-    logger.info(`${getTracePrefix(requestId)} >>> Request Finalized: Provider: ${normalizedProvider} | Model: ${normalizedModel} | Prompt: ${usage.promptTokens} | Completion: ${usage.completionTokens} | Total: ${usage.totalTokens} | Cached: ${usage.cachedTokens} | Stream: ${Boolean(state.isStream)}`);
+    logger.info(`${getTracePrefix(requestId)} >>> Request Finalized: Provider: ${normalizedProvider} | Model: ${normalizedModel} | Prompt: ${usage.promptTokens} | Completion: ${usage.completionTokens} | Total: ${usage.totalTokens} | Cached: ${usage.cachedTokens} | Stream: ${Boolean(state.isStream)} | QPS: ${globalRates.qps}`);
     markDirty();
     await persistIfDirty();
     return true;
@@ -487,22 +512,29 @@ export async function getStats() {
     const globalRates = rateManager.getGlobalStats();
     stats.summary.qps = globalRates.qps;
     stats.summary.tps = globalRates.tps;
-    stats.summary.maxQps = globalRates.maxQps;
-    stats.summary.maxTps = globalRates.maxTps;
+    stats.summary.rpm = globalRates.rpm;
+    // 峰值取持久化值和当前内存值中的较大者
+    stats.summary.maxQps = Math.max(stats.summary.maxQps || 0, globalRates.maxQps);
+    stats.summary.maxTps = Math.max(stats.summary.maxTps || 0, globalRates.maxTps);
+    stats.summary.maxRpm = Math.max(stats.summary.maxRpm || 0, globalRates.maxRpm);
 
     for (const [provider, providerStore] of Object.entries(stats.providers || {})) {
         const pRates = rateManager.getStats(`provider:${provider}`);
         providerStore.summary.qps = pRates.qps;
         providerStore.summary.tps = pRates.tps;
-        providerStore.summary.maxQps = pRates.maxQps;
-        providerStore.summary.maxTps = pRates.maxTps;
+        providerStore.summary.rpm = pRates.rpm;
+        providerStore.summary.maxQps = Math.max(providerStore.summary.maxQps || 0, pRates.maxQps);
+        providerStore.summary.maxTps = Math.max(providerStore.summary.maxTps || 0, pRates.maxTps);
+        providerStore.summary.maxRpm = Math.max(providerStore.summary.maxRpm || 0, pRates.maxRpm);
 
         for (const [model, modelStore] of Object.entries(providerStore.models || {})) {
             const mRates = rateManager.getStats(`model:${model}`);
             modelStore.qps = mRates.qps;
             modelStore.tps = mRates.tps;
-            modelStore.maxQps = mRates.maxQps;
-            modelStore.maxTps = mRates.maxTps;
+            modelStore.rpm = mRates.rpm;
+            modelStore.maxQps = Math.max(modelStore.maxQps || 0, mRates.maxQps);
+            modelStore.maxTps = Math.max(modelStore.maxTps || 0, mRates.maxTps);
+            modelStore.maxRpm = Math.max(modelStore.maxRpm || 0, mRates.maxRpm);
         }
     }
 

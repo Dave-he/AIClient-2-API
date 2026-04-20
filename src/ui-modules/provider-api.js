@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import logger from '../utils/logger.js';
 import { getRequestBody } from '../utils/common.js';
 import {
@@ -11,6 +11,9 @@ import {
 import { generateUUID, createProviderConfig, formatSystemPath, detectProviderFromPath, addToUsedPaths, isPathUsed, pathsEqual } from '../utils/provider-utils.js';
 import { broadcastEvent } from './event-broadcast.js';
 import { getRegisteredProviders, getServiceAdapter, invalidateServiceAdapter, serviceInstances } from '../providers/adapter.js';
+import { withFileLock, atomicWriteFile } from '../utils/file-lock.js';
+
+
 
 const providerDynamicCache = {
     data: null,
@@ -150,7 +153,7 @@ function getManagedSupportedModels(providerType, providers = []) {
     );
 }
 
-function persistProviderStatusToFile(currentConfig, providerPoolManager) {
+async function persistProviderStatusToFile(currentConfig, providerPoolManager) {
     const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
     const providerPools = {};
 
@@ -158,7 +161,7 @@ function persistProviderStatusToFile(currentConfig, providerPoolManager) {
         providerPools[providerType] = providerPoolManager.providerStatus[providerType].map(providerStatus => providerStatus.config);
     }
 
-    writeFileSync(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+    await atomicWriteFile(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
     return filePath;
 }
 
@@ -246,30 +249,6 @@ async function runProviderHealthCheck(providerPoolManager, providerType, provide
     }
 }
 
-// 使用 Promise 链式队列，确保文件操作顺序执行
-let _fileLockChain = Promise.resolve();
-
-// 超时包装函数：防止操作永久挂起导致锁链阻塞
-function withTimeout(promise, ms = 30000) {
-    return Promise.race([
-        promise,
-        new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Operation timeout after ${ms}ms`)), ms)
-        )
-    ]);
-}
-
-function withFileLock(fn) {
-    const next = _fileLockChain
-        .then(() => withTimeout(fn(), 30000))
-        .catch(err => {
-            // 记录错误并抛出，中断操作
-            logger.error('[FileLock] Operation failed:', err?.message || err);
-            throw err;
-        });
-    _fileLockChain = next.then(() => {}).catch(() => {});
-    return next;
-}
 /**
  * 获取所有提供商的状态（包括支持的类型和号池组）
  */
@@ -601,15 +580,18 @@ export async function handleDetectProviderModels(req, res, currentConfig, provid
  * 添加新的提供商配置
  */
 export async function handleAddProvider(req, res, currentConfig, providerPoolManager) {
-    return withFileLock(() => _handleAddProvider(req, res, currentConfig, providerPoolManager)).catch(err => {
+    try {
+        const body = await getRequestBody(req);
+        const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+        return await withFileLock(filePath, () => _handleAddProvider(req, res, currentConfig, providerPoolManager, body));
+    } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'File operation failed: ' + err.message } }));
         return true;
-    });
+    }
 }
-async function _handleAddProvider(req, res, currentConfig, providerPoolManager) {
+async function _handleAddProvider(req, res, currentConfig, providerPoolManager, body) {
     try {
-        const body = await getRequestBody(req);
         const { providerType, providerConfig } = body;
 
         if (!providerType || !providerConfig) {
@@ -658,7 +640,7 @@ async function _handleAddProvider(req, res, currentConfig, providerPoolManager) 
         providerPools[providerType].push(filteredConfig);
 
         // Save to file
-        writeFileSync(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+        await atomicWriteFile(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
         logger.info(`[UI API] Added new provider to ${providerType}: ${providerConfig.uuid}`);
 
         // Update provider pool manager if available
@@ -703,15 +685,18 @@ async function _handleAddProvider(req, res, currentConfig, providerPoolManager) 
  * 更新特定提供商配置
  */
 export async function handleUpdateProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid) {
-    return withFileLock(() => _handleUpdateProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid)).catch(err => {
+    try {
+        const body = await getRequestBody(req);
+        const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+        return await withFileLock(filePath, () => _handleUpdateProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid, body));
+    } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'File operation failed: ' + err.message } }));
         return true;
-    });
+    }
 }
-async function _handleUpdateProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid) {
+async function _handleUpdateProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid, body) {
     try {
-        const body = await getRequestBody(req);
         const { providerConfig } = body;
 
         if (!providerConfig) {
@@ -765,7 +750,7 @@ async function _handleUpdateProvider(req, res, currentConfig, providerPoolManage
         providerPools[providerType][providerIndex] = updatedProvider;
 
         // Save to file
-        writeFileSync(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+        await atomicWriteFile(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
         logger.info(`[UI API] Updated provider ${providerUuid} in ${providerType}`);
         invalidateServiceAdapter(providerType, providerUuid);
 
@@ -802,7 +787,8 @@ async function _handleUpdateProvider(req, res, currentConfig, providerPoolManage
  * 删除特定提供商配置
  */
 export async function handleDeleteProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid) {
-    return withFileLock(() => _handleDeleteProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid)).catch(err => {
+    const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+    return withFileLock(filePath, () => _handleDeleteProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid)).catch(err => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'File operation failed: ' + err.message } }));
         return true;
@@ -844,7 +830,7 @@ async function _handleDeleteProvider(req, res, currentConfig, providerPoolManage
         }
 
         // Save to file
-        writeFileSync(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+        await atomicWriteFile(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
         logger.info(`[UI API] Deleted provider ${providerUuid} from ${providerType}`);
         invalidateServiceAdapter(providerType, providerUuid);
 
@@ -877,11 +863,13 @@ async function _handleDeleteProvider(req, res, currentConfig, providerPoolManage
     }
 }
 
+
 /**
  * 禁用/启用特定提供商配置
  */
 export async function handleDisableEnableProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid, action) {
-    return withFileLock(() => _handleDisableEnableProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid, action)).catch(err => {
+    const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+    return withFileLock(filePath, () => _handleDisableEnableProvider(req, res, currentConfig, providerPoolManager, providerType, providerUuid, action)).catch(err => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'File operation failed: ' + err.message } }));
         return true;
@@ -919,7 +907,7 @@ async function _handleDisableEnableProvider(req, res, currentConfig, providerPoo
         provider.isDisabled = action === 'disable';
         
         // Save to file
-        writeFileSync(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+        await atomicWriteFile(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
         logger.info(`[UI API] ${action === 'disable' ? 'Disabled' : 'Enabled'} provider ${providerUuid} in ${providerType}`);
 
         // Update provider pool manager if available
@@ -961,54 +949,66 @@ async function _handleDisableEnableProvider(req, res, currentConfig, providerPoo
  * 重置特定提供商类型的所有提供商健康状态
  */
 export async function handleResetProviderHealth(req, res, currentConfig, providerPoolManager, providerType) {
+    const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+    return withFileLock(filePath, () => _handleResetProviderHealth(req, res, currentConfig, providerPoolManager, providerType)).catch(err => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'File operation failed: ' + err.message } }));
+        return true;
+    });
+}
+async function _handleResetProviderHealth(req, res, currentConfig, providerPoolManager, providerType) {
     try {
         const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
-        let providerPools = {};
         
-        // Load existing pools
-        if (existsSync(filePath)) {
-            try {
-                const fileContent = readFileSync(filePath, 'utf-8');
-                providerPools = JSON.parse(fileContent);
-            } catch (readError) {
+        let resetCount = 0;
+        let totalCount = 0;
+
+        if (providerPoolManager && providerPoolManager.providerStatus[providerType]) {
+            // 如果管理器存在，优先使用管理器的方法直接重置内存和触发保存
+            const pool = providerPoolManager.providerStatus[providerType];
+            totalCount = pool.length;
+            
+            pool.forEach(ps => {
+                if (!ps.config.isHealthy) resetCount++;
+            });
+            
+            providerPoolManager.resetAllHealthInType(providerType);
+        } else {
+            // 回退逻辑：手动操作文件
+            let providerPools = {};
+            if (existsSync(filePath)) {
+                try {
+                    const fileContent = readFileSync(filePath, 'utf-8');
+                    providerPools = JSON.parse(fileContent);
+                } catch (readError) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: { message: 'Provider pools file not found' } }));
+                    return true;
+                }
+            }
+
+            const providers = providerPools[providerType] || [];
+            if (providers.length === 0) {
                 res.writeHead(404, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: { message: 'Provider pools file not found' } }));
+                res.end(JSON.stringify({ error: { message: 'No providers found for this type' } }));
                 return true;
             }
+
+            totalCount = providers.length;
+            providers.forEach(provider => {
+                if (!provider.isHealthy) resetCount++;
+                provider.isHealthy = true;
+                provider.errorCount = 0;
+                provider.refreshCount = 0;
+                provider.needsRefresh = false;
+                provider.lastErrorTime = null;
+                provider.lastErrorMessage = null;
+            });
+
+            await atomicWriteFile(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
         }
 
-        // Reset health status for all providers of this type
-        const providers = providerPools[providerType] || [];
-        
-        if (providers.length === 0) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: { message: 'No providers found for this type' } }));
-            return true;
-        }
-
-        let resetCount = 0;
-        providers.forEach(provider => {
-            // 统计 isHealthy 从 false 变为 true 的节点数量
-            if (!provider.isHealthy) {
-                resetCount++;
-            }
-            // 重置所有节点的状态
-            provider.isHealthy = true;
-            provider.errorCount = 0;
-            provider.refreshCount = 0;
-            provider.needsRefresh = false;
-            provider.lastErrorTime = null;
-        });
-
-        // Save to file
-        writeFileSync(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
         logger.info(`[UI API] Reset health status for ${resetCount} providers in ${providerType}`);
-
-        // Update provider pool manager if available
-        if (providerPoolManager) {
-            providerPoolManager.providerPools = providerPools;
-            providerPoolManager.initializeProviderStatus();
-        }
 
         // 广播更新事件
         broadcastEvent('config_update', {
@@ -1024,7 +1024,7 @@ export async function handleResetProviderHealth(req, res, currentConfig, provide
             success: true,
             message: `Successfully reset health status for ${resetCount} providers`,
             resetCount,
-            totalCount: providers.length
+            totalCount
         }));
         return true;
     } catch (error) {
@@ -1038,6 +1038,14 @@ export async function handleResetProviderHealth(req, res, currentConfig, provide
  * 删除特定提供商类型的所有不健康节点
  */
 export async function handleDeleteUnhealthyProviders(req, res, currentConfig, providerPoolManager, providerType) {
+    const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+    return withFileLock(filePath, () => _handleDeleteUnhealthyProviders(req, res, currentConfig, providerPoolManager, providerType)).catch(err => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'File operation failed: ' + err.message } }));
+        return true;
+    });
+}
+async function _handleDeleteUnhealthyProviders(req, res, currentConfig, providerPoolManager, providerType) {
     try {
         const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
         let providerPools = {};
@@ -1086,7 +1094,7 @@ export async function handleDeleteUnhealthyProviders(req, res, currentConfig, pr
         }
 
         // Save to file
-        writeFileSync(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+        await atomicWriteFile(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
         logger.info(`[UI API] Deleted ${unhealthyProviders.length} unhealthy providers from ${providerType}`);
 
         // Update provider pool manager if available
@@ -1125,6 +1133,14 @@ export async function handleDeleteUnhealthyProviders(req, res, currentConfig, pr
  * 批量刷新特定提供商类型的所有不健康节点的 UUID
  */
 export async function handleRefreshUnhealthyUuids(req, res, currentConfig, providerPoolManager, providerType) {
+    const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+    return withFileLock(filePath, () => _handleRefreshUnhealthyUuids(req, res, currentConfig, providerPoolManager, providerType)).catch(err => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'File operation failed: ' + err.message } }));
+        return true;
+    });
+}
+async function _handleRefreshUnhealthyUuids(req, res, currentConfig, providerPoolManager, providerType) {
     try {
         const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
         let providerPools = {};
@@ -1177,7 +1193,7 @@ export async function handleRefreshUnhealthyUuids(req, res, currentConfig, provi
         }
 
         // Save to file
-        writeFileSync(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+        await atomicWriteFile(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
         logger.info(`[UI API] Refreshed UUIDs for ${refreshedProviders.length} unhealthy providers in ${providerType}`);
 
         // Update provider pool manager if available
@@ -1216,6 +1232,8 @@ export async function handleRefreshUnhealthyUuids(req, res, currentConfig, provi
  * 对特定提供商类型的所有提供商执行健康检查
  */
 export async function handleHealthCheck(req, res, currentConfig, providerPoolManager, providerType) {
+    // 健康检查涉及大量异步操作，但最后的文件保存必须加锁
+    // 为了不长时间占用文件锁，我们只在保存文件时加锁
     try {
         if (!providerPoolManager) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1318,15 +1336,29 @@ export async function handleHealthCheck(req, res, currentConfig, providerPoolMan
             }
         }
 
-        // 保存更新后的状态到文件
+        // 保存更新后的状态到文件 - 使用文件锁
         const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
         
-        // 从 providerStatus 构建 providerPools 对象并保存
-        const providerPools = {};
-        for (const pType in providerPoolManager.providerStatus) {
-            providerPools[pType] = providerPoolManager.providerStatus[pType].map(ps => ps.config);
-        }
-        writeFileSync(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+        await withFileLock(filePath, async (checkValidity) => {
+            let currentPools = {};
+            // 读取现有配置，保留未知字段
+            if (existsSync(filePath)) {
+                try {
+                    const fileContent = readFileSync(filePath, 'utf-8');
+                    currentPools = JSON.parse(fileContent);
+                } catch (readError) {
+                    logger.warn('[UI API] Failed to read existing provider pools for health check merge:', readError.message);
+                }
+            }
+
+            // 在写入前检查锁是否过期
+            checkValidity();
+
+            // 更新当前 providerType 的所有节点
+            currentPools[providerType] = providerPoolManager.providerStatus[providerType].map(ps => ps.config);
+
+            await atomicWriteFile(filePath, JSON.stringify(currentPools, null, 2), 'utf-8');
+        });
 
         const successCount = results.filter(r => r.success === true).length;
         const failCount = results.filter(r => r.success === false).length;
@@ -1336,7 +1368,7 @@ export async function handleHealthCheck(req, res, currentConfig, providerPoolMan
         // 广播更新事件
         broadcastEvent('config_update', {
             action: 'health_check',
-            filePath: filePath,
+            filePath,
             providerType,
             results: results.map(r => ({ ...r, message: sanitizeProviderData({ message: r.message }).message })),
             timestamp: new Date().toISOString()
@@ -1386,7 +1418,8 @@ export async function handleSingleProviderHealthCheck(req, res, currentConfig, p
         const result = await runProviderHealthCheck(providerPoolManager, providerType, providerStatus);
 
         // 使用文件锁进行持久化，防止并发写入冲突
-        const filePath = await withFileLock(async () => {
+        const poolFilePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+        const filePath = await withFileLock(poolFilePath, async () => {
             return persistProviderStatusToFile(currentConfig, providerPoolManager);
         });
 
@@ -1520,16 +1553,15 @@ export async function handleQuickLinkProvider(req, res, currentConfig, providerP
         // Save to file only if there were successful links
         const successCount = results.filter(r => r.success).length;
         if (successCount > 0) {
-            await withFileLock(async () => {
-                writeFileSync(poolsFilePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+            await withFileLock(poolsFilePath, async () => {
+                await atomicWriteFile(poolsFilePath, JSON.stringify(providerPools, null, 2), 'utf-8');
                 return poolsFilePath;
             });
 
-            // Update provider pool manager if available
-            if (providerPoolManager) {
-                providerPoolManager.providerPools = providerPools;
-                providerPoolManager.initializeProviderStatus();
-            }
+        // Update provider pool manager if available
+        if (providerPoolManager) {
+            providerPoolManager.resetAllHealthInType(providerType);
+        }
 
             // Broadcast update events
             broadcastEvent('config_update', {
@@ -1579,6 +1611,14 @@ export async function handleQuickLinkProvider(req, res, currentConfig, providerP
  * 刷新特定提供商的UUID
  */
 export async function handleRefreshProviderUuid(req, res, currentConfig, providerPoolManager, providerType, providerUuid) {
+    const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
+    return withFileLock(filePath, () => _handleRefreshProviderUuid(req, res, currentConfig, providerPoolManager, providerType, providerUuid)).catch(err => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'File operation failed: ' + err.message } }));
+        return true;
+    });
+}
+async function _handleRefreshProviderUuid(req, res, currentConfig, providerPoolManager, providerType, providerUuid) {
     try {
         const filePath = currentConfig.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
         let providerPools = {};
@@ -1613,7 +1653,8 @@ export async function handleRefreshProviderUuid(req, res, currentConfig, provide
         providerPools[providerType][providerIndex].uuid = newUuid;
 
         // Save to file
-        writeFileSync(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+        await atomicWriteFile(filePath, JSON.stringify(providerPools, null, 2), 'utf-8');
+
         logger.info(`[UI API] Refreshed UUID for provider in ${providerType}: ${oldUuid} -> ${newUuid}`);
         invalidateServiceAdapter(providerType, oldUuid);
         invalidateServiceAdapter(providerType, newUuid);
