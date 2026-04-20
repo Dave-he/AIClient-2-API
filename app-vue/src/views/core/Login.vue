@@ -71,9 +71,11 @@
 
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { apiClient, setToken } from '@/utils/api.js';
 
+const router = useRouter();
 const { t } = useI18n();
 const username = ref('admin');
 const password = ref('');
@@ -91,19 +93,27 @@ const handleLogin = async () => {
   error.value = '';
 
   try {
-    const response = await apiClient.post('/api/login', {
-      username: username.value,
-      password: password.value
+    // 直接使用 fetch 避免 axios 拦截器问题
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: username.value,
+        password: password.value
+      })
     });
 
-    if (response.data.success) {
-      setToken(response.data.token);
-      window.location.href = '/';
+    const data = await response.json();
+
+    if (data.success) {
+      setToken(data.token);
+      // 使用 window.location 确保 token 已保存后再跳转
+      window.location.replace('/');
     } else {
-      error.value = response.data.message || t('login.loginFailed');
+      error.value = data.message || t('login.loginFailed');
     }
   } catch (err) {
-    error.value = err.response?.data?.message || t('login.loginFailedTryLater');
+    error.value = err.message || t('login.loginFailedTryLater');
   } finally {
     isLoading.value = false;
   }

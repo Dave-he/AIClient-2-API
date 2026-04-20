@@ -34,14 +34,22 @@ async function loadSystemInfo() {
         const memoryUsageEl = document.getElementById('memoryUsage');
         const cpuUsageEl = document.getElementById('cpuUsage');
 
-        if (appVersionEl) appVersionEl.textContent = data.appVersion ? `v${data.appVersion}` : '--';
+        if (appVersionEl) {
+            appVersionEl.textContent = data.appVersion ? `v${data.appVersion}` : '--';
+            appVersionEl.classList.remove('skeleton-text');
+            appVersionEl.style.width = '';
+        }
         
         // 自动检查更新
         if (data.appVersion) {
             checkUpdate(true);
         }
 
-        if (nodeVersionEl) nodeVersionEl.textContent = data.nodeVersion || '--';
+        if (nodeVersionEl) {
+            nodeVersionEl.textContent = data.nodeVersion || '--';
+            nodeVersionEl.classList.remove('skeleton-text');
+            nodeVersionEl.style.width = '';
+        }
         
         // 保存Node.js版本到全局变量，供GPU不可用时显示
         window.__nodeVersion = data.nodeVersion || '--';
@@ -56,12 +64,26 @@ async function loadSystemInfo() {
         // 初始显示
         if (serverTimeEl) {
             serverTimeEl.textContent = data.serverTime ? new Date(data.serverTime).toLocaleString(getCurrentLanguage()) : '--';
+            serverTimeEl.classList.remove('skeleton-text');
+            serverTimeEl.style.width = '';
         }
-        if (uptimeEl) uptimeEl.textContent = data.uptime ? formatUptime(data.uptime) : '--';
+        if (uptimeEl) {
+            uptimeEl.textContent = data.uptime ? formatUptime(data.uptime) : '--';
+            uptimeEl.classList.remove('skeleton-text');
+            uptimeEl.style.width = '';
+        }
 
         // 更新内存使用和CPU使用
-        if (memoryUsageEl) memoryUsageEl.textContent = data.memoryUsage || '--';
-        if (cpuUsageEl) cpuUsageEl.textContent = data.cpuUsage || '--';
+        if (memoryUsageEl) {
+            memoryUsageEl.textContent = data.memoryUsage || '--';
+            memoryUsageEl.classList.remove('skeleton-text');
+            memoryUsageEl.style.width = '';
+        }
+        if (cpuUsageEl) {
+            cpuUsageEl.textContent = data.cpuUsage || '--';
+            cpuUsageEl.classList.remove('skeleton-text');
+            cpuUsageEl.style.width = '';
+        }
 
         // 加载服务模式信息
         await loadServiceModeInfo();
@@ -96,10 +118,14 @@ async function loadServiceModeInfo() {
                 ? '<i class="fas fa-check-circle" style="color: #10b981; margin-left: 4px;" title="' + t('dashboard.serviceMode.canRestart') + '"></i>'
                 : '';
             serviceModeEl.innerHTML = modeText;
+            serviceModeEl.classList.remove('skeleton-text');
+            serviceModeEl.style.width = '';
         }
         
         if (processPidEl) {
             processPidEl.textContent = data.pid || '--';
+            processPidEl.classList.remove('skeleton-text');
+            processPidEl.style.width = '';
         }
         
         if (platformInfoEl) {
@@ -111,6 +137,8 @@ async function loadServiceModeInfo() {
                 'freebsd': 'FreeBSD'
             };
             platformInfoEl.textContent = platformMap[data.platform] || data.platform || '--';
+            platformInfoEl.classList.remove('skeleton-text');
+            platformInfoEl.style.width = '';
         }
         
         // 保存到全局变量，供GPU不可用时显示

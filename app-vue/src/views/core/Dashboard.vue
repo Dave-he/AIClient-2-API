@@ -4,7 +4,7 @@
     
     <div class="stats-container">
       <div class="stats-row">
-        <StatCard icon="fa-clock" :value="systemInfo.uptime" label="运行时间" />
+        <StatCard icon="fa-clock" :value="systemInfo.uptime" label="运行时间" type="uptime" />
         <StatCard icon="fa-microchip" :value="`${systemInfo.cpu}%`" label="CPU" type="cpu" />
         <StatCard icon="fa-memory" :value="`${systemInfo.memory}%`" label="内存" type="memory" />
         <StatCard icon="fa-video-card" :value="`${systemInfo.gpu}%`" label="GPU" type="gpu" />

@@ -356,29 +356,37 @@ export function useDashboard() {
       const data = response.data;
       
       if (data.success && data.status !== 'unavailable') {
-        const memoryUsageValue = Number(data.memoryUsage ?? data.memory_utilization ?? 0);
-        const utilizationValue = Number(data.utilization || 0);
-        const temperatureValue = Number(data.temperature || 0);
-        const powerValue = Number(data.power || 0);
+        const utilizationValue = Number(data.utilization ?? 0);
+        const temperatureValue = Number(data.temperature ?? 0);
+        const powerValue = Number(data.power_draw ?? 0);
+        const memoryUtilValue = Number(data.memory_utilization ?? 0);
+        const totalMemoryBytes = Number(data.total_memory ?? 0);
+        const usedMemoryBytes = Number(data.used_memory ?? 0);
+        const availableMemoryBytes = Number(data.available_memory ?? 0);
+        
+        const totalMemoryGB = totalMemoryBytes > 0 ? (totalMemoryBytes / (1024 ** 3)).toFixed(1) : '--';
+        const usedMemoryGB = usedMemoryBytes > 0 ? (usedMemoryBytes / (1024 ** 3)).toFixed(1) : '--';
+        const availableMemoryGB = availableMemoryBytes > 0 ? (availableMemoryBytes / (1024 ** 3)).toFixed(1) : '--';
+        
         pythonGpuConnected.value = true;
         pythonGpuInfo.value = {
           utilization: `${utilizationValue}%`,
-          memory: `${data.memoryUsed}/${data.memoryTotal}`,
+          memory: `${usedMemoryGB} / ${totalMemoryGB} GB`,
           temperature: `${temperatureValue}°C`,
           power: `${powerValue}W`,
           name: data.name || '--',
-          totalMemory: data.memoryTotal || '--',
-          usedMemory: data.memoryUsed || '--',
-          availableMemory: data.memoryAvailable || '--',
+          totalMemory: `${totalMemoryGB} GB`,
+          usedMemory: `${usedMemoryGB} GB`,
+          availableMemory: `${availableMemoryGB} GB`,
           serverTime: data.serverTime ? new Date(data.serverTime).toLocaleString('zh-CN') : '--',
           utilizationValue,
-          memoryUsageValue,
+          memoryUsageValue: memoryUtilValue,
           temperatureValue,
           powerValue
         };
 
         pythonGpuUtilizationData.value.push(utilizationValue);
-        pythonGpuMemoryData.value.push(memoryUsageValue);
+        pythonGpuMemoryData.value.push(memoryUtilValue);
         pythonGpuTemperatureData.value.push(temperatureValue);
 
         if (pythonGpuUtilizationData.value.length > 60) pythonGpuUtilizationData.value.shift();

@@ -3,7 +3,7 @@
     <div class="stat-icon-wrapper" :class="{ [type]: type }">
       <i :class="['fas', icon]"></i>
     </div>
-    <div class="stat-content">
+    <div class="stat-content" :class="{ [type]: type }">
       <span class="stat-value">{{ value }}</span>
       <span class="stat-label">{{ label }}</span>
     </div>
@@ -27,7 +27,7 @@ defineProps({
   type: {
     type: String,
     default: '',
-    validator: (val) => ['', 'cpu', 'memory', 'gpu'].includes(val)
+    validator: (val) => ['', 'cpu', 'memory', 'gpu', 'uptime'].includes(val)
   }
 });
 </script>
@@ -78,6 +78,15 @@ defineProps({
 .stat-icon-wrapper.gpu {
   background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
   color: white;
+}
+
+.stat-icon-wrapper.uptime {
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+  color: white;
+}
+
+.stat-content.uptime .stat-value {
+  font-size: 0.875rem;
 }
 
 .stat-content {

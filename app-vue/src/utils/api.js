@@ -36,11 +36,22 @@ const createApiInstance = (baseURL = '') => {
     },
     (error) => {
       if (error.response?.status === 401) {
-        localStorage.removeItem('authToken');
-        if (router) {
-          router.push('/login');
-        } else {
-          window.location.href = '/login';
+        // 忽略可选的 API 请求的 401 错误
+        const url = error.config?.url || '';
+        const optionalEndpoints = ['/api/system/check-update', '/api/validate-token'];
+        const isOptional = optionalEndpoints.some(endpoint => url.includes(endpoint));
+        
+        if (!isOptional) {
+          // 如果已经在登录页，不需要再次跳转
+          const currentPath = window.location.pathname;
+          if (currentPath !== '/login') {
+            localStorage.removeItem('authToken');
+            if (router) {
+              router.push('/login');
+            } else {
+              window.location.href = '/login';
+            }
+          }
         }
       } else {
         errorHandler.handleApiError(error);

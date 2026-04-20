@@ -58,7 +58,7 @@ export default defineConfig(({ mode }) => {
       ]
     },
     build: {
-      outDir: 'dist',
+      outDir: resolve(__dirname, '../dist'),
       sourcemap: mode === 'development',
       minify: mode === 'production' ? 'terser' : false,
       rollupOptions: {

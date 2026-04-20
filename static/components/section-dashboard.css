@@ -76,9 +76,13 @@
 }
 
 .stat-info h3 {
-    font-size: 2rem;
+    font-size: 1.25rem;
     font-weight: 700;
     margin-bottom: 0.25rem;
+}
+
+.stat-info h3.uptime-value {
+    font-size: 1.125rem;
 }
 
 .stat-info p {
@@ -312,7 +316,7 @@
 
 .info-item .info-value {
     color: var(--text-primary);
-    font-size: 1rem;
+    font-size: 0.875rem;
     font-weight: 600;
 }
 
@@ -1150,7 +1154,7 @@
 }
 
 .python-stat-value {
-    font-size: 1.25rem;
+    font-size: 1rem;
     font-weight: 700;
     color: var(--text-primary);
     line-height: 1.2;

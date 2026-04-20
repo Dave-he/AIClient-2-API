@@ -113,6 +113,9 @@ export class SystemMonitor {
                 }
                 if (preloaded.python) {
                     this.updateFromPythonGpuData(preloaded.python);
+                    if (preloaded.python.summary) {
+                        this.updateFromPythonSummary(preloaded.python);
+                    }
                 }
             }
         } catch (error) {
@@ -489,9 +492,9 @@ export class SystemMonitor {
     }
 
     updateFromPythonSummary(data) {
-        if (!data.gpu) return;
-        
-        this.updateFromPythonGpuData(data.gpu);
+        if (data.gpu) {
+            this.updateFromPythonGpuData(data.gpu);
+        }
         
         if (data.summary) {
             if (data.summary.running_model || (data.summary.models && data.summary.models.length > 0)) {
@@ -651,14 +654,14 @@ export class SystemMonitor {
             const totalMemElement = document.getElementById('pythonGpuTotalMemory');
             const usedMemElement = document.getElementById('pythonGpuUsedMemory');
             const availMemElement = document.getElementById('pythonGpuAvailableMemory');
-            if (utilElement) utilElement.textContent = '--';
-            if (memElement) memElement.textContent = '--';
-            if (tempElement) tempElement.textContent = '--';
-            if (powerElement) powerElement.textContent = '--';
-            if (nameElement) nameElement.textContent = data?.message || '未检测到GPU';
-            if (totalMemElement) totalMemElement.textContent = '--';
-            if (usedMemElement) usedMemElement.textContent = '--';
-            if (availMemElement) availMemElement.textContent = '--';
+            if (utilElement) { utilElement.textContent = '--'; utilElement.classList.remove('skeleton-text'); utilElement.style.width = ''; }
+            if (memElement) { memElement.textContent = '--'; memElement.classList.remove('skeleton-text'); memElement.style.width = ''; }
+            if (tempElement) { tempElement.textContent = '--'; tempElement.classList.remove('skeleton-text'); tempElement.style.width = ''; }
+            if (powerElement) { powerElement.textContent = '--'; powerElement.classList.remove('skeleton-text'); powerElement.style.width = ''; }
+            if (nameElement) { nameElement.textContent = data?.message || '未检测到GPU'; nameElement.classList.remove('skeleton-text'); nameElement.style.width = ''; }
+            if (totalMemElement) { totalMemElement.textContent = '--'; totalMemElement.classList.remove('skeleton-text'); totalMemElement.style.width = ''; }
+            if (usedMemElement) { usedMemElement.textContent = '--'; usedMemElement.classList.remove('skeleton-text'); usedMemElement.style.width = ''; }
+            if (availMemElement) { availMemElement.textContent = '--'; availMemElement.classList.remove('skeleton-text'); availMemElement.style.width = ''; }
             return;
         }
 
@@ -674,14 +677,14 @@ export class SystemMonitor {
         const totalMemEl = document.getElementById('pythonGpuTotalMemory');
         const usedMemEl = document.getElementById('pythonGpuUsedMemory');
         const availMemEl = document.getElementById('pythonGpuAvailableMemory');
-        if (utilEl) utilEl.textContent = `${data.utilization || 0}%`;
-        if (memEl) memEl.textContent = `${data.memory_utilization || 0}%`;
-        if (tempEl) tempEl.textContent = `${data.temperature || 0}°C`;
-        if (powerEl) powerEl.textContent = `${data.power_draw || 0}W`;
-        if (nameEl) nameEl.textContent = data.name || 'Unknown';
-        if (totalMemEl) totalMemEl.textContent = `${totalMemoryGB.toFixed(1)} GB`;
-        if (usedMemEl) usedMemEl.textContent = `${usedMemoryGB.toFixed(1)} GB`;
-        if (availMemEl) availMemEl.textContent = `${availableMemoryGB.toFixed(1)} GB`;
+        if (utilEl) { utilEl.textContent = `${data.utilization || 0}%`; utilEl.classList.remove('skeleton-text'); utilEl.style.width = ''; }
+        if (memEl) { memEl.textContent = `${data.memory_utilization || 0}%`; memEl.classList.remove('skeleton-text'); memEl.style.width = ''; }
+        if (tempEl) { tempEl.textContent = `${data.temperature || 0}°C`; tempEl.classList.remove('skeleton-text'); tempEl.style.width = ''; }
+        if (powerEl) { powerEl.textContent = `${data.power_draw || 0}W`; powerEl.classList.remove('skeleton-text'); powerEl.style.width = ''; }
+        if (nameEl) { nameEl.textContent = data.name || 'Unknown'; nameEl.classList.remove('skeleton-text'); nameEl.style.width = ''; }
+        if (totalMemEl) { totalMemEl.textContent = `${totalMemoryGB.toFixed(1)} GB`; totalMemEl.classList.remove('skeleton-text'); totalMemEl.style.width = ''; }
+        if (usedMemEl) { usedMemEl.textContent = `${usedMemoryGB.toFixed(1)} GB`; usedMemEl.classList.remove('skeleton-text'); usedMemEl.style.width = ''; }
+        if (availMemEl) { availMemEl.textContent = `${availableMemoryGB.toFixed(1)} GB`; availMemEl.classList.remove('skeleton-text'); availMemEl.style.width = ''; }
         
         this._removeMultipleSkeletonClasses([
             '#pythonGpuUtilization',
@@ -1619,11 +1622,20 @@ export class SystemMonitor {
         };
         const activeSeries = selectedSeriesMap[this.currentTokenSeries] || selectedSeriesMap.total;
         const allValues = activeSeries.flat().filter(v => v > 0);
-        const maxValue = Math.max(...allValues.filter(v => v > 0), 1);
+        const hasRealData = allValues.length > 0;
+        const maxValue = hasRealData ? Math.max(...allValues, 1) : 100;
         const minValue = 0;
 
         this.drawGrid(ctx, chartWidth, chartHeight, padding);
         this.drawTokenAxes(ctx, chartWidth, chartHeight, padding, chartData.labels, minValue, maxValue);
+
+        if (!hasRealData) {
+            ctx.fillStyle = '#6b7280';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('暂无数据，Token 用量统计需要实际 API 请求后才会显示', width / 2, height / 2);
+            return;
+        }
 
         const allDatasets = [
             { data: chartData.promptTokens, color: '#3b82f6', gradient: ['#3b82f6', '#60a5fa'], label: '输入 Token' },
