@@ -5,7 +5,7 @@ export class GPUMonitorModule {
         this.pollingInterval = null;
         this.webSocket = null;
         this.chart = null;
-        this.currentChartType = 'utilization';
+        this.currentChartType = 'all';
         this.gpuHistoryData = [];
         this.lastGpuData = null;
         this.animationFrame = null;
@@ -58,6 +58,25 @@ export class GPUMonitorModule {
         return null;
     }
 
+    normalizeHistoryPoint(point = {}) {
+        const usedMemory = Number(point.used_memory || 0);
+        const totalMemory = Number(point.total_memory || 0);
+        const memoryUtilization = point.memory_utilization ?? (
+            totalMemory > 0 ? Math.round((usedMemory / totalMemory) * 100) : 0
+        );
+        const powerDraw = Number(point.power_draw || 0);
+        const powerLimit = Number(point.power_limit || 0);
+        const powerPercent = point.power_percent ?? (
+            powerLimit > 0 ? Math.round((powerDraw / powerLimit) * 100) : 0
+        );
+
+        return {
+            ...point,
+            memory_utilization: memoryUtilization,
+            power_percent: powerPercent
+        };
+    }
+
     initGpuStatusElements() {
         const container = document.getElementById('gpuStatusContent');
         if (!container) {
@@ -68,7 +87,7 @@ export class GPUMonitorModule {
 
         const t = this.i18n.t.bind(this.i18n);
         container.innerHTML = `
-            <div class="gpu-card glass-effect">
+            <div class="gpu-card">
                 <div class="gpu-header">
                     <div class="gpu-name" id="gpuName">
                         <i class="fas fa-video-card"></i>
@@ -79,7 +98,7 @@ export class GPUMonitorModule {
                         <span>${t('gpuMonitor.initializing')}</span>
                     </div>
                 </div>
-                
+
                 <div class="gpu-metrics-grid">
                     <div class="metric-card">
                         <div class="metric-icon" id="memoryIcon"><i class="fas fa-memory"></i></div>
@@ -94,35 +113,29 @@ export class GPUMonitorModule {
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="metric-card">
                         <div class="metric-icon" id="utilIcon"><i class="fas fa-cpu"></i></div>
                         <div class="metric-info">
                             <div class="metric-label">${t('gpuMonitor.gpuUtilization')}</div>
                             <div class="metric-value" id="utilValue">--%</div>
-                            <div class="metric-gauge">
-                                <svg viewBox="0 0 100 50">
-                                    <path d="M 10 45 A 40 40 0 0 1 90 45" fill="none" stroke="#e5e7eb" stroke-width="8" stroke-linecap="round"/>
-                                    <path id="utilArc" d="M 10 45 A 40 40 0 0 1 50 45" fill="none" stroke="#3b82f6" stroke-width="8" stroke-linecap="round"/>
-                                </svg>
+                            <div class="metric-bar-container">
+                                <div class="metric-bar-bg">
+                                    <div class="metric-bar-fill temperature" id="utilBar"></div>
+                                </div>
+                                <span class="metric-percent" id="utilPercent">--%</span>
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="metric-card">
                         <div class="metric-icon" id="tempIcon"><i class="fas fa-thermometer-half"></i></div>
                         <div class="metric-info">
                             <div class="metric-label">${t('gpuMonitor.temperature')}</div>
                             <div class="metric-value" id="tempValue">--°C</div>
-                            <div class="metric-bar-container">
-                                <div class="metric-bar-bg">
-                                    <div class="metric-bar-fill temperature" id="tempBar"></div>
-                                </div>
-                                <span class="metric-percent" id="tempPercent">--%</span>
-                            </div>
                         </div>
                     </div>
-                    
+
                     <div class="metric-card">
                         <div class="metric-icon" id="powerIcon"><i class="fas fa-bolt"></i></div>
                         <div class="metric-info">
@@ -134,22 +147,6 @@ export class GPUMonitorModule {
                                 </div>
                                 <span class="metric-percent" id="powerPercent">--%</span>
                             </div>
-                        </div>
-                    </div>
-                    
-                    <div class="metric-card compact">
-                        <div class="metric-icon small" id="fanIcon"><i class="fas fa-wind"></i></div>
-                        <div class="metric-info">
-                            <div class="metric-label">${t('gpuMonitor.fanSpeed')}</div>
-                            <div class="metric-value" id="fanValue">--%</div>
-                        </div>
-                    </div>
-                    
-                    <div class="metric-card compact">
-                        <div class="metric-icon small" id="clockIcon"><i class="fas fa-gauge"></i></div>
-                        <div class="metric-info">
-                            <div class="metric-label">${t('gpuMonitor.coreClock')}</div>
-                            <div class="metric-value" id="clockValue">-- MHz</div>
                         </div>
                     </div>
                 </div>
@@ -221,6 +218,11 @@ export class GPUMonitorModule {
                 this.updateChart();
             });
         });
+
+        const saveConfigBtn = document.getElementById('saveConfigBtn');
+        if (saveConfigBtn) {
+            saveConfigBtn.addEventListener('click', () => this.saveConfig());
+        }
     }
 
     handleWebSocketMessage(data) {
@@ -229,7 +231,7 @@ export class GPUMonitorModule {
                 this.updateGpuStatusFromSocket(data.gpu.current);
             }
             if (data.gpu.history && data.gpu.history.length > 0) {
-                this.gpuHistoryData = data.gpu.history;
+                this.gpuHistoryData = data.gpu.history.map(item => this.normalizeHistoryPoint(item));
                 this.updateChart();
             }
         }
@@ -243,6 +245,7 @@ export class GPUMonitorModule {
         if (!gpu) return;
 
         const memoryPercent = gpu.memory_utilization || ((gpu.used_memory / gpu.total_memory) * 100);
+        const powerPercent = gpu.power_percent || (gpu.power_limit ? Math.round((gpu.power_draw / gpu.power_limit) * 100) : 0);
         const usedGB = (gpu.used_memory / (1024**3)).toFixed(1);
         const totalGB = (gpu.total_memory / (1024**3)).toFixed(1);
 
@@ -251,17 +254,15 @@ export class GPUMonitorModule {
         this.animateValue('memoryPercent', `${Math.round(memoryPercent)}%`);
 
         this.animateValue('utilValue', `${gpu.utilization}%`);
-        this.animateGauge('utilArc', gpu.utilization);
+        this.animateBar('utilBar', gpu.utilization);
+        this.animateValue('utilPercent', `${gpu.utilization}%`);
 
         this.animateValue('tempValue', `${gpu.temperature}°C`);
-        const tempPercent = Math.min(gpu.temperature, 100);
-        this.animateBar('tempBar', tempPercent);
-        this.animateValue('tempPercent', `${gpu.temperature}%`);
         this.updateTempColor(gpu.temperature);
 
         this.animateValue('powerValue', `${gpu.power_draw}W / ${gpu.power_limit}W`);
-        this.animateBar('powerBar', gpu.power_percent || 0);
-        this.animateValue('powerPercent', `${gpu.power_percent || 0}%`);
+        this.animateBar('powerBar', powerPercent);
+        this.animateValue('powerPercent', `${powerPercent}%`);
 
         this.animateValue('fanValue', `${gpu.fan_speed || 0}%`);
         this.animateValue('clockValue', `${gpu.clock_sm || 0} MHz`);
@@ -295,8 +296,23 @@ export class GPUMonitorModule {
     animateBar(elementId, targetWidth) {
         const bar = document.getElementById(elementId);
         if (!bar) return;
-        
+
         bar.style.width = `${targetWidth}%`;
+    }
+
+    showToast(message, type = 'info') {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i><span>${message}</span>`;
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.add('toast-fade-out');
+            setTimeout(() => toast.remove(), 200);
+        }, 3000);
     }
 
     animateGauge(elementId, percentage) {
@@ -417,16 +433,20 @@ export class GPUMonitorModule {
         }
         
         const datasets = this.getChartDatasets();
-        
-        let allValues = [];
-        datasets.forEach(ds => allValues.push(...ds.data));
-        const minValue = Math.min(...allValues) * 0.9;
-        const maxValue = Math.max(...allValues) * 1.1;
-        
+
+        const primaryDatasets = datasets.filter(ds => ds.axis !== 'temperature');
+        const secondaryDatasets = datasets.filter(ds => ds.axis === 'temperature');
+        const primaryValues = primaryDatasets.flatMap(ds => ds.data).filter(v => Number.isFinite(v));
+        const secondaryValues = secondaryDatasets.flatMap(ds => ds.data).filter(v => Number.isFinite(v));
+        const minValue = this.currentChartType === 'all' ? 0 : (primaryValues.length ? Math.min(...primaryValues) * 0.9 : 0);
+        const maxValue = this.currentChartType === 'all' ? 100 : (primaryValues.length ? Math.max(...primaryValues) * 1.1 : 100);
+        const secondaryMinValue = 0;
+        const secondaryMaxValue = secondaryValues.length ? Math.ceil(Math.max(100, ...secondaryValues) / 10) * 10 : 100;
+
         this.drawGrid(ctx, chartWidth, chartHeight, padding);
-        this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue);
-        this.drawLines(ctx, chartWidth, chartHeight, padding, datasets, minValue, maxValue, progress);
-        this.drawPoints(ctx, chartWidth, chartHeight, padding, datasets, minValue, maxValue);
+        this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, secondaryMinValue, secondaryMaxValue);
+        this.drawLines(ctx, chartWidth, chartHeight, padding, datasets, minValue, maxValue, secondaryMinValue, secondaryMaxValue, progress);
+        this.drawPoints(ctx, chartWidth, chartHeight, padding, datasets, minValue, maxValue, secondaryMinValue, secondaryMaxValue);
         this.drawLegend(ctx, width, padding);
     }
 
@@ -439,7 +459,8 @@ export class GPUMonitorModule {
                 data: this.gpuHistoryData.map(d => d.utilization),
                 color: '#3b82f6',
                 label: t('gpuMonitor.gpuUtilization'),
-                gradient: this.createGradient('#3b82f6', '#1d4ed8')
+                gradient: this.createGradient('#3b82f6', '#1d4ed8'),
+                axis: 'percent'
             });
         }
         
@@ -448,7 +469,8 @@ export class GPUMonitorModule {
                 data: this.gpuHistoryData.map(d => d.temperature),
                 color: '#ef4444',
                 label: t('gpuMonitor.temperature') + '(°C)',
-                gradient: this.createGradient('#ef4444', '#dc2626')
+                gradient: this.createGradient('#ef4444', '#dc2626'),
+                axis: 'temperature'
             });
         }
         
@@ -457,7 +479,8 @@ export class GPUMonitorModule {
                 data: this.gpuHistoryData.map(d => d.memory_utilization),
                 color: '#f59e0b',
                 label: t('gpuMonitor.memoryUtilization'),
-                gradient: this.createGradient('#f59e0b', '#d97706')
+                gradient: this.createGradient('#f59e0b', '#d97706'),
+                axis: 'percent'
             });
         }
         
@@ -466,7 +489,9 @@ export class GPUMonitorModule {
                 data: this.gpuHistoryData.map(d => d.power_percent || 0),
                 color: '#06b6d4',
                 label: t('gpuMonitor.power') + '(%)',
-                gradient: this.createGradient('#06b6d4', '#0891b2')
+                gradient: this.createGradient('#06b6d4', '#0891b2'),
+                axis: 'percent',
+                dashed: this.currentChartType === 'all'
             });
         }
         
@@ -502,7 +527,7 @@ export class GPUMonitorModule {
         }
     }
 
-    drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue) {
+    drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, secondaryMinValue = 0, secondaryMaxValue = 100) {
         ctx.strokeStyle = '#9ca3af';
         ctx.lineWidth = 2;
         
@@ -524,7 +549,17 @@ export class GPUMonitorModule {
         for (let i = 0; i <= gridLines; i++) {
             const y = padding.top + (chartHeight / gridLines) * i;
             const value = maxValue - ((maxValue - minValue) / gridLines) * i;
-            ctx.fillText(Math.round(value), padding.left - 10, y + 4);
+            const suffix = this.currentChartType === 'temperature' ? '°C' : '%';
+            ctx.fillText(`${Math.round(value)}${suffix}`, padding.left - 10, y + 4);
+        }
+
+        if (this.currentChartType === 'all') {
+            ctx.textAlign = 'left';
+            for (let i = 0; i <= gridLines; i++) {
+                const y = padding.top + (chartHeight / gridLines) * i;
+                const value = secondaryMaxValue - ((secondaryMaxValue - secondaryMinValue) / gridLines) * i;
+                ctx.fillText(`${Math.round(value)}°C`, padding.left + chartWidth + 10, y + 4);
+            }
         }
         
         ctx.textAlign = 'center';
@@ -542,7 +577,7 @@ export class GPUMonitorModule {
         ctx.restore();
     }
 
-    drawLines(ctx, chartWidth, chartHeight, padding, datasets, minValue, maxValue, progress) {
+    drawLines(ctx, chartWidth, chartHeight, padding, datasets, minValue, maxValue, secondaryMinValue, secondaryMaxValue, progress) {
         const dataLength = this.gpuHistoryData.length;
         const visibleLength = Math.floor(dataLength * progress);
         
@@ -551,13 +586,16 @@ export class GPUMonitorModule {
             ctx.lineWidth = 2.5;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
+            ctx.setLineDash(ds.dashed ? [6, 4] : []);
             ctx.beginPath();
             
             const visibleData = ds.data.slice(0, visibleLength);
             
             visibleData.forEach((value, index) => {
                 const x = padding.left + (chartWidth / (dataLength - 1)) * index;
-                const y = padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight;
+                const rangeMin = ds.axis === 'temperature' ? secondaryMinValue : minValue;
+                const rangeMax = ds.axis === 'temperature' ? secondaryMaxValue : maxValue;
+                const y = padding.top + chartHeight - ((value - rangeMin) / (rangeMax - rangeMin || 1)) * chartHeight;
                 
                 if (index === 0) {
                     ctx.moveTo(x, y);
@@ -576,7 +614,9 @@ export class GPUMonitorModule {
                 
                 visibleData.forEach((value, index) => {
                     const x = padding.left + (chartWidth / (dataLength - 1)) * index;
-                    const y = padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight;
+                    const rangeMin = ds.axis === 'temperature' ? secondaryMinValue : minValue;
+                    const rangeMax = ds.axis === 'temperature' ? secondaryMaxValue : maxValue;
+                    const y = padding.top + chartHeight - ((value - rangeMin) / (rangeMax - rangeMin || 1)) * chartHeight;
                     ctx.lineTo(x, y);
                 });
                 
@@ -585,16 +625,19 @@ export class GPUMonitorModule {
                 ctx.fill();
                 ctx.globalAlpha = 1;
             }
+            ctx.setLineDash([]);
         });
     }
 
-    drawPoints(ctx, chartWidth, chartHeight, padding, datasets, minValue, maxValue) {
+    drawPoints(ctx, chartWidth, chartHeight, padding, datasets, minValue, maxValue, secondaryMinValue, secondaryMaxValue) {
         const dataLength = this.gpuHistoryData.length;
         
         datasets.forEach(ds => {
             const lastValue = ds.data[ds.data.length - 1];
             const x = padding.left + (chartWidth / (dataLength - 1)) * (ds.data.length - 1);
-            const y = padding.top + chartHeight - ((lastValue - minValue) / (maxValue - minValue)) * chartHeight;
+            const rangeMin = ds.axis === 'temperature' ? secondaryMinValue : minValue;
+            const rangeMax = ds.axis === 'temperature' ? secondaryMaxValue : maxValue;
+            const y = padding.top + chartHeight - ((lastValue - rangeMin) / (rangeMax - rangeMin || 1)) * chartHeight;
             
             ctx.beginPath();
             ctx.arc(x, y, 6, 0, Math.PI * 2);
@@ -715,22 +758,13 @@ export class GPUMonitorModule {
 
     async refreshCurrentModel() {
         try {
-            const cachedData = monitorCache.getCachedData();
+            const cachedData = monitorCache.getCachedData('summary');
             let data = null;
 
-            if (cachedData && cachedData.summary) {
-                data = cachedData.summary;
+            if (cachedData) {
+                data = cachedData;
             } else {
-                const response = await fetch(`/api/python/models/summary`, {
-                    method: 'GET',
-                    timeout: 5000
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                data = await response.json();
+                data = await monitorCache.getModelsSummary();
             }
 
             if (data && data.models && data.models.length > 0) {
@@ -779,33 +813,26 @@ export class GPUMonitorModule {
         const placeholder = document.getElementById('iframePlaceholder');
 
         try {
-            const cachedData = monitorCache.getCachedData();
-            let healthData = cachedData?.health;
-            let controllerBaseUrl = cachedData?.controllerUrl || 'http://localhost:5000';
+            const cachedData = monitorCache.getCachedData('health');
+            let healthData = cachedData;
+            let controllerBaseUrl = 'http://localhost:5000';
 
             if (!healthData) {
-                const response = await fetch('/api/python/health', {
-                    method: 'GET',
-                    timeout: 5000
-                });
-
-                if (!response.ok) {
-                    throw new Error('Controller not responding');
-                }
-
-                healthData = await response.json();
-                controllerBaseUrl = healthData.controllerUrl || healthData.url || 'http://localhost:5000';
+                healthData = await monitorCache.getHealth();
+                controllerBaseUrl = healthData?.controllerUrl || healthData?.url || 'http://localhost:5000';
+            } else {
+                controllerBaseUrl = healthData?.controllerUrl || healthData?.url || 'http://localhost:5000';
             }
 
             if (healthData && (healthData.status === 'healthy' || healthData.success)) {
                 this.animateStatusChange(statusElement, true);
-                
+
                 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
                     const portMatch = controllerBaseUrl.match(/:(\d+)$/);
                     const controllerPort = portMatch ? portMatch[1] : '5000';
                     controllerBaseUrl = `${window.location.protocol}//${window.location.hostname}:${controllerPort}`;
                 }
-                
+
                 if (iframe && placeholder) {
                     iframe.src = `${controllerBaseUrl}/docs`;
                     placeholder.style.display = 'none';
@@ -969,33 +996,17 @@ export class GPUMonitorModule {
         if (!container) return;
 
         try {
-            const cachedData = monitorCache.getCachedData();
+            const cachedData = monitorCache.getCachedData('queueStatus');
             let queue = null;
 
             if (cachedData && cachedData.queue) {
                 queue = cachedData.queue;
             } else {
-                const token = window.authManager ? window.authManager.getToken() : null;
-                const headers = {};
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                }
-
-                const response = await fetch(`/api/python/queue/status`, {
-                    method: 'GET',
-                    headers,
-                    timeout: 5000
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-                if (result.success) {
+                const result = await monitorCache.getQueueStatus();
+                if (result && result.success) {
                     queue = result.queue;
                 } else {
-                    throw new Error(result.error || 'Failed to get queue status');
+                    throw new Error(result?.error || 'Failed to get queue status');
                 }
             }
 
@@ -1387,33 +1398,17 @@ export class GPUMonitorModule {
         try {
             let result = null;
 
-            const cachedData = monitorCache.getCachedData();
-            if (cachedData && cachedData.service) {
-                result = { success: true, ...cachedData.service };
+            const cachedData = monitorCache.getCachedData('serviceStatus');
+            if (cachedData) {
+                result = cachedData;
             } else {
-                const token = window.authManager ? window.authManager.getToken() : null;
-                const headers = {};
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                }
-
-                const response = await fetch(`/api/python-gpu/service/status`, {
-                    method: 'GET',
-                    headers,
-                    timeout: 5000
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                result = await response.json();
+                result = await monitorCache.getServiceStatus();
             }
 
-            if (result.success) {
+            if (result && result.success) {
                 this.renderPythonServiceStatus(result, container);
             } else {
-                throw new Error(result.error?.message || 'Failed to get service status');
+                throw new Error(result?.error?.message || 'Failed to get service status');
             }
         } catch (error) {
             console.warn(`Failed to fetch Python service status: ${error.message}`);
@@ -1659,39 +1654,18 @@ export class GPUMonitorModule {
     }
 
     showConfigEditor() {
-        const container = document.createElement('div');
-        container.className = 'config-editor-modal';
-        
-        const t = this.i18n.t.bind(this.i18n);
-        
-        container.innerHTML = `
-            <div class="config-editor-container">
-                <div class="config-editor-header">
-                    <h3><i class="fas fa-edit"></i> ${t('gpuMonitor.editConfig')}</h3>
-                    <button class="config-editor-close" onclick="this.closest('.config-editor-modal').remove()"><i class="fas fa-times"></i></button>
-                </div>
-                <div class="config-editor-body">
-                    <textarea class="config-editor-textarea" placeholder="${t('gpuMonitor.configPlaceholder')}"></textarea>
-                </div>
-                <div class="config-editor-footer">
-                    <button class="btn btn-outline" onclick="this.closest('.config-editor-modal').remove()">${t('common.cancel')}</button>
-                    <button class="btn btn-primary" onclick="window.GPUMonitor.saveConfig()">${t('common.save')}</button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(container);
-        
-        container.addEventListener('click', (e) => {
-            if (e.target === container) {
-                document.body.removeChild(container);
-            }
-        });
+        const modal = document.getElementById('configEditorModal');
+        const textarea = document.getElementById('configEditorTextarea');
+        if (modal && textarea) {
+            modal.style.display = 'flex';
+        }
     }
 
     async saveConfig() {
-        const modal = document.querySelector('.config-editor-modal');
-        const textarea = modal.querySelector('.config-editor-textarea');
+        const modal = document.getElementById('configEditorModal');
+        const textarea = document.getElementById('configEditorTextarea');
+        if (!modal || !textarea) return;
+
         const configContent = textarea.value;
         
         try {
@@ -1709,15 +1683,15 @@ export class GPUMonitorModule {
 
             const result = await response.json();
             if (result.success) {
-                alert(this.i18n.t('gpuMonitor.configSaved'));
-                document.body.removeChild(modal);
+                this.showToast(this.i18n.t('gpuMonitor.configSaved'), 'success');
+                modal.style.display = 'none';
                 await this.refreshConfig();
             } else {
                 throw new Error(result.error?.message || this.i18n.t('gpuMonitor.configSaveFailed'));
             }
         } catch (error) {
             console.error('Failed to save config:', error.message);
-            alert(`${this.i18n.t('gpuMonitor.configSaveFailed')}: ${error.message}`);
+            this.showToast(`${this.i18n.t('gpuMonitor.configSaveFailed')}: ${error.message}`, 'error');
         }
     }
 

@@ -11,12 +11,32 @@ export class MonitorCache {
         return this._getWithCache('/api/python/monitor/summary', 'summary', forceRefresh);
     }
 
+    async getModelsSummary(forceRefresh = false) {
+        return this._getWithCache('/api/python/models/summary', 'modelsSummary', forceRefresh);
+    }
+
     async getModelsStatus(forceRefresh = false) {
         return this._getWithCache('/api/python/models/status', 'modelsStatus', forceRefresh);
     }
 
     async getGpuStatus(forceRefresh = false) {
         return this._getWithCache('/api/python-gpu/status', 'gpuStatus', forceRefresh);
+    }
+
+    async getServiceStatus(forceRefresh = false) {
+        return this._getWithCache('/api/python-gpu/service/status', 'serviceStatus', forceRefresh);
+    }
+
+    async getHealth(forceRefresh = false) {
+        return this._getWithCache('/api/python/health', 'health', forceRefresh);
+    }
+
+    async getQueueStatus(forceRefresh = false) {
+        return this._getWithCache('/api/python/queue/status', 'queueStatus', forceRefresh);
+    }
+
+    async getGpuConfig(forceRefresh = false) {
+        return this._getWithCache('/api/python-gpu/config', 'gpuConfig', forceRefresh);
     }
 
     async getProvidersDynamic(forceRefresh = false) {
@@ -46,8 +66,15 @@ export class MonitorCache {
         this._fetching[cacheKey] = true;
 
         try {
+            const token = localStorage.getItem('authToken');
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
             const response = await fetch(url, {
                 method: 'GET',
+                headers: headers,
                 timeout: 10000
             });
 

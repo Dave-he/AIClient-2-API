@@ -171,6 +171,19 @@
           <div class="token-chart-area">
             <canvas id="tokenChart"></canvas>
           </div>
+          <div class="chart-legend token-toggle-legend">
+            <button
+              v-for="item in tokenSeriesTabs"
+              :key="item.id"
+              type="button"
+              class="legend-chip"
+              :class="{ active: activeTokenSeries === item.id }"
+              @click="activeTokenSeries = item.id"
+            >
+              <span class="legend-color" :class="item.colorClass"></span>
+              <span>{{ item.label }}</span>
+            </button>
+          </div>
           <div v-if="tokenChartData.total" class="token-summary">
             <div class="token-stat">
               <span class="token-stat-label">总消耗</span>
@@ -366,6 +379,11 @@ const {
   pythonGpuInfo,
   providerStatus,
   availableModels,
+  activeChartTab,
+  activePythonChartTab,
+  activeTokenSeries,
+  activeTimeRange,
+  tokenChartData,
   hasUpdate,
   latestVersion,
   routingExamples,
@@ -376,29 +394,31 @@ const {
   copyToClipboard
 } = useDashboard();
 
-const activeChartTab = ref('cpu');
 const chartTabs = [
   { id: 'cpu', label: 'CPU' },
   { id: 'memory', label: '内存' },
   { id: 'gpu', label: 'GPU' }
 ];
 
-const activePythonChartTab = ref('utilization');
 const pythonChartTabs = [
   { id: 'utilization', label: '使用率' },
   { id: 'memory', label: '显存' },
   { id: 'temperature', label: '温度' },
-  { id: 'all', label: '全部' }
+  { id: 'all', label: '总览' }
 ];
 
-const activeTimeRange = ref('hour');
 const timeRangeTabs = [
   { id: 'hour', label: '最近一小时' },
   { id: 'day', label: '最近一天' },
   { id: 'week', label: '最近一周' }
 ];
 
-const tokenChartData = ref({});
+const tokenSeriesTabs = [
+  { id: 'total', label: '总 Token', colorClass: 'total' },
+  { id: 'prompt', label: '输入', colorClass: 'prompt' },
+  { id: 'completion', label: '输出', colorClass: 'completion' },
+  { id: 'all', label: '全部对比', colorClass: 'multi' }
+];
 
 const formatTokens = (tokens) => {
   if (!tokens) return '--';

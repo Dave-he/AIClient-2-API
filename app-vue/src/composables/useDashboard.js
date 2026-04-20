@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { apiClient } from '@/utils/api.js';
 import { logger } from '@/utils/logger.js';
 import { SimpleChart } from '@/utils/chart.js';
@@ -33,11 +33,19 @@ export function useDashboard() {
     totalMemory: '--',
     usedMemory: '--',
     availableMemory: '--',
-    serverTime: '--'
+    serverTime: '--',
+    utilizationValue: 0,
+    memoryUsageValue: 0,
+    temperatureValue: 0,
+    powerValue: 0
   });
 
   const providerStatus = ref([]);
   const availableModels = ref([]);
+  const activeChartTab = ref('cpu');
+  const activePythonChartTab = ref('utilization');
+  const activeTokenSeries = ref('total');
+  const activeTimeRange = ref('hour');
 
   const hasUpdate = ref(false);
   const latestVersion = ref('');
@@ -68,12 +76,114 @@ export function useDashboard() {
   const memoryData = ref([]);
   const gpuData = ref([]);
   const gpuTempData = ref([]);
+  const pythonGpuUtilizationData = ref([]);
+  const pythonGpuMemoryData = ref([]);
+  const pythonGpuTemperatureData = ref([]);
   const tokenChartData = ref({
     total: 0,
     input: 0,
     output: 0,
     history: []
   });
+
+  const getSystemChartSeries = () => {
+    const configs = {
+      cpu: { data: cpuData.value, lineColor: '#3b82f6', fillColor: 'rgba(59, 130, 246, 0.12)', label: 'CPU使用率', axis: 'primary' },
+      memory: { data: memoryData.value, lineColor: '#10b981', fillColor: 'rgba(16, 185, 129, 0.12)', label: '内存使用率', axis: 'primary' },
+      gpu: { data: gpuData.value, lineColor: '#8b5cf6', fillColor: 'rgba(139, 92, 246, 0.12)', label: 'GPU使用率', axis: 'primary' },
+      gpuTemp: { data: gpuTempData.value, lineColor: '#ef4444', fillColor: 'rgba(239, 68, 68, 0.08)', label: 'GPU温度', axis: 'secondary', fill: false }
+    };
+
+    switch (activeChartTab.value) {
+      case 'memory':
+        return [configs.memory];
+      case 'gpu':
+        return [configs.gpu, configs.gpuTemp];
+      default:
+        return [configs.cpu];
+    }
+  };
+
+  const getPythonChartSeries = () => {
+    const seriesMap = {
+      utilization: [{ data: pythonGpuUtilizationData.value, lineColor: '#8b5cf6', fillColor: 'rgba(139, 92, 246, 0.12)', label: 'GPU使用率', axis: 'primary' }],
+      memory: [{ data: pythonGpuMemoryData.value, lineColor: '#3b82f6', fillColor: 'rgba(59, 130, 246, 0.12)', label: '显存使用率', axis: 'primary' }],
+      temperature: [{ data: pythonGpuTemperatureData.value, lineColor: '#ef4444', fillColor: 'rgba(239, 68, 68, 0.08)', label: 'GPU温度', axis: 'secondary', fill: false }],
+      all: [
+        { data: pythonGpuUtilizationData.value, lineColor: '#8b5cf6', fillColor: 'rgba(139, 92, 246, 0.12)', label: 'GPU使用率', axis: 'primary', fill: false },
+        { data: pythonGpuMemoryData.value, lineColor: '#3b82f6', fillColor: 'rgba(59, 130, 246, 0.12)', label: '显存使用率', axis: 'primary', fill: false },
+        { data: pythonGpuTemperatureData.value, lineColor: '#ef4444', fillColor: 'rgba(239, 68, 68, 0.08)', label: 'GPU温度', axis: 'secondary', fill: false }
+      ]
+    };
+
+    return seriesMap[activePythonChartTab.value] || seriesMap.utilization;
+  };
+
+  const getTokenSeries = () => {
+    const labels = tokenChartData.value.history.map((item) => item.label || item.hour || item.key || '');
+    const promptSeries = { data: tokenChartData.value.history.map(h => h.promptTokens || h.input || 0), lineColor: '#3b82f6', fillColor: 'rgba(59, 130, 246, 0.12)', label: '输入 Token', axis: 'primary' };
+    const completionSeries = { data: tokenChartData.value.history.map(h => h.completionTokens || h.output || 0), lineColor: '#10b981', fillColor: 'rgba(16, 185, 129, 0.12)', label: '输出 Token', axis: 'primary' };
+    const totalSeries = { data: tokenChartData.value.history.map(h => h.total || h.totalTokens || 0), lineColor: '#8b5cf6', fillColor: 'rgba(139, 92, 246, 0.12)', label: '总 Token', axis: 'primary' };
+
+    let series;
+    switch (activeTokenSeries.value) {
+      case 'prompt':
+        series = [promptSeries];
+        break;
+      case 'completion':
+        series = [completionSeries];
+        break;
+      case 'all':
+        series = [
+          { ...promptSeries, fill: false },
+          { ...completionSeries, fill: false },
+          { ...totalSeries, fill: false }
+        ];
+        break;
+      default:
+        series = [totalSeries];
+    }
+
+    return { labels, series };
+  };
+
+  const updateSystemChart = () => {
+    if (!systemChart) return;
+    systemChart.series = getSystemChartSeries();
+    systemChart.options.secondaryAxis = activeChartTab.value === 'gpu'
+      ? {
+          enabled: true,
+          minValue: 0,
+          maxValue: 100,
+          color: '#ef4444',
+          formatter: (value) => `${Math.round(value)}°C`
+        }
+      : { enabled: false };
+    systemChart.draw();
+  };
+
+  const updatePythonGpuChart = () => {
+    if (!pythonGpuChart || !pythonGpuConnected.value) return;
+    pythonGpuChart.series = getPythonChartSeries();
+    pythonGpuChart.options.secondaryAxis = activePythonChartTab.value === 'all' || activePythonChartTab.value === 'temperature'
+      ? {
+          enabled: true,
+          minValue: 0,
+          maxValue: 100,
+          color: '#ef4444',
+          formatter: (value) => `${Math.round(value)}°C`
+        }
+      : { enabled: false };
+    pythonGpuChart.draw();
+  };
+
+  const updateTokenChart = () => {
+    if (!tokenChart || tokenChartData.value.history.length === 0) return;
+    const { labels, series } = getTokenSeries();
+    tokenChart.series = series;
+    tokenChart.options.xAxisLabels = labels;
+    tokenChart.draw();
+  };
 
   const formatUptime = (seconds) => {
     const days = Math.floor(seconds / 86400);
@@ -94,13 +204,15 @@ export function useDashboard() {
 
     systemChart = new SimpleChart('systemChart', {
       ...chartConfigs.cpu,
-      maxPoints: 60
+      maxPoints: 60,
+      yAxisFormatter: (value) => `${Math.round(value)}%`
     });
 
     pythonGpuChart = new SimpleChart('pythonGpuChart', {
       lineColor: '#f59e0b',
       fillColor: 'rgba(245, 158, 11, 0.1)',
-      maxPoints: 60
+      maxPoints: 60,
+      yAxisFormatter: (value) => `${Math.round(value)}%`
     });
 
     tokenChart = new SimpleChart('tokenChart', {
@@ -108,27 +220,25 @@ export function useDashboard() {
       fillColor: 'rgba(6, 182, 212, 0.1)',
       maxPoints: 60,
       maxValue: 100000,
-      minValue: 0
+      minValue: 0,
+      yAxisFormatter: (value) => {
+        if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+        if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
+        return Math.round(value).toString();
+      }
     });
   };
 
   // 更新图表数据
   const updateChartData = () => {
-    if (systemChart) {
-      systemChart.data = cpuData.value.length > 0 ? cpuData.value : [];
-      systemChart.draw();
-    }
-    if (pythonGpuChart && pythonGpuConnected.value) {
-      const utilValue = parseFloat(pythonGpuInfo.value.utilization) || 0;
-      pythonGpuChart.addPoint(utilValue);
-      pythonGpuChart.draw();
-    }
+    updateSystemChart();
+    updatePythonGpuChart();
   };
 
   // 获取Token统计数据
   const fetchTokenStats = async () => {
     try {
-      const response = await apiClient.get('/api/token-stats');
+      const response = await apiClient.get(`/api/token-stats?range=${activeTimeRange.value}`);
       const data = response.data;
       
       if (data.total) {
@@ -139,10 +249,7 @@ export function useDashboard() {
           history: data.history || []
         };
 
-        if (tokenChart && tokenChartData.value.history.length > 0) {
-          tokenChart.data = tokenChartData.value.history.map(h => h.total || 0);
-          tokenChart.draw();
-        }
+        updateTokenChart();
       }
     } catch (error) {
       logger.error('Failed to fetch token stats', error);
@@ -227,18 +334,36 @@ export function useDashboard() {
       const data = response.data;
       
       if (data.success) {
+        const memoryUsageValue = Number(data.memoryUsage ?? data.memory_utilization ?? 0);
+        const utilizationValue = Number(data.utilization || 0);
+        const temperatureValue = Number(data.temperature || 0);
+        const powerValue = Number(data.power || 0);
         pythonGpuConnected.value = true;
         pythonGpuInfo.value = {
-          utilization: `${data.utilization}%`,
+          utilization: `${utilizationValue}%`,
           memory: `${data.memoryUsed}/${data.memoryTotal}`,
-          temperature: `${data.temperature}°C`,
-          power: `${data.power}W`,
+          temperature: `${temperatureValue}°C`,
+          power: `${powerValue}W`,
           name: data.name || '--',
           totalMemory: data.memoryTotal || '--',
           usedMemory: data.memoryUsed || '--',
           availableMemory: data.memoryAvailable || '--',
-          serverTime: data.serverTime ? new Date(data.serverTime).toLocaleString('zh-CN') : '--'
+          serverTime: data.serverTime ? new Date(data.serverTime).toLocaleString('zh-CN') : '--',
+          utilizationValue,
+          memoryUsageValue,
+          temperatureValue,
+          powerValue
         };
+
+        pythonGpuUtilizationData.value.push(utilizationValue);
+        pythonGpuMemoryData.value.push(memoryUsageValue);
+        pythonGpuTemperatureData.value.push(temperatureValue);
+
+        if (pythonGpuUtilizationData.value.length > 60) pythonGpuUtilizationData.value.shift();
+        if (pythonGpuMemoryData.value.length > 60) pythonGpuMemoryData.value.shift();
+        if (pythonGpuTemperatureData.value.length > 60) pythonGpuTemperatureData.value.shift();
+
+        updatePythonGpuChart();
       } else {
         pythonGpuConnected.value = false;
       }
@@ -347,11 +472,15 @@ export function useDashboard() {
 
     // 初始化图表
     await initCharts();
+    updateSystemChart();
+    updatePythonGpuChart();
+    updateTokenChart();
 
     // 每5秒更新系统监控
     refreshInterval = setInterval(async () => {
       await fetchSystemMonitor();
       await fetchSystemInfo();
+      await fetchPythonGpuStatus();
     }, 5000);
 
     // 每30秒更新Token统计
@@ -381,6 +510,22 @@ export function useDashboard() {
     });
   });
 
+  watch(activeChartTab, () => {
+    updateSystemChart();
+  });
+
+  watch(activePythonChartTab, () => {
+    updatePythonGpuChart();
+  });
+
+  watch(activeTokenSeries, () => {
+    updateTokenChart();
+  });
+
+  watch(activeTimeRange, async () => {
+    await fetchTokenStats();
+  });
+
   return {
     systemInfo,
     gpuStatus,
@@ -388,6 +533,11 @@ export function useDashboard() {
     pythonGpuInfo,
     providerStatus,
     availableModels,
+    activeChartTab,
+    activePythonChartTab,
+    activeTokenSeries,
+    activeTimeRange,
+    tokenChartData,
     hasUpdate,
     latestVersion,
     routingExamples,

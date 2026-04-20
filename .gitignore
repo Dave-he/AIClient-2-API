@@ -45,6 +45,6 @@ vue-dist
 configs/token-store.json
 configs/usage-cache.json
 configs/model-usage-stats.json
-configs/provider_pools.json
 configs/provider_pools_runtime.json
 configs/fetch_system_prompt.txt
+.codeflicker/

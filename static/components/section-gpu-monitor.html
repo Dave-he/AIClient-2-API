@@ -39,7 +39,8 @@
                 <div class="panel-header">
                     <h3><i class="fas fa-chart-line"></i> <span data-i18n="gpuMonitor.gpuHistory">历史监控</span></h3>
                     <div class="chart-tabs" role="tablist">
-                        <button class="chart-tab active" data-chart-type="utilization" data-i18n="gpuMonitor.utilization">使用率</button>
+                        <button class="chart-tab active" data-chart-type="all">总览</button>
+                        <button class="chart-tab" data-chart-type="utilization" data-i18n="gpuMonitor.utilization">使用率</button>
                         <button class="chart-tab" data-chart-type="temperature" data-i18n="gpuMonitor.temperature">温度</button>
                         <button class="chart-tab" data-chart-type="memory" data-i18n="gpuMonitor.memory">显存</button>
                         <button class="chart-tab" data-chart-type="power" data-i18n="gpuMonitor.power">功耗</button>
@@ -115,26 +116,6 @@
                         <p class="hint" data-i18n="gpuMonitor.iframeHint">请启动 Python 控制器服务</p>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="toastContainer" class="toast-container"></div>
-
-    <div id="configEditorModal" class="config-editor-modal" style="display:none;">
-        <div class="config-editor-container">
-            <div class="config-editor-header">
-                <h3 data-i18n="gpuMonitor.editConfig">编辑配置</h3>
-                <button class="config-editor-close" onclick="document.getElementById('configEditorModal').style.display='none'">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="config-editor-body">
-                <textarea id="configEditorTextarea" class="config-editor-textarea" data-i18n-placeholder="gpuMonitor.configPlaceholder"></textarea>
-            </div>
-            <div class="config-editor-footer">
-                <button class="btn btn-outline" onclick="document.getElementById('configEditorModal').style.display='none'" data-i18n="common.cancel">取消</button>
-                <button id="saveConfigBtn" class="btn btn-primary" data-i18n="common.save">保存</button>
             </div>
         </div>
     </div>

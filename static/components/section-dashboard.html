@@ -77,7 +77,7 @@
                     <button class="chart-type-tab active" data-python-chart-type="utilization">使用率</button>
                     <button class="chart-type-tab" data-python-chart-type="memory">显存</button>
                     <button class="chart-type-tab" data-python-chart-type="temperature">温度</button>
-                    <button class="chart-type-tab" data-python-chart-type="all">全部</button>
+                    <button class="chart-type-tab" data-python-chart-type="all">总览</button>
                 </div>
                 <div class="time-range-tabs gpu-time-range">
                     <button class="time-range-tab active" data-python-time-range="hour">1小时</button>
@@ -133,18 +133,25 @@
         <div class="token-chart-area">
             <canvas id="tokenTrendChart"></canvas>
         </div>
+        <div class="token-chart-toolbar">
+            <span class="token-chart-hint">默认突出总 Token，点击图例可切换查看输入、输出或全部对比</span>
+        </div>
         <div class="token-chart-legend" id="tokenChartLegend">
-            <div class="legend-item">
+            <div class="legend-item" data-token-series="total">
                 <span class="legend-color prompt"></span>
+                <span>总Token</span>
+            </div>
+            <div class="legend-item" data-token-series="prompt">
+                <span class="legend-color total"></span>
                 <span>输入Token</span>
             </div>
-            <div class="legend-item">
+            <div class="legend-item" data-token-series="completion">
                 <span class="legend-color completion"></span>
                 <span>输出Token</span>
             </div>
-            <div class="legend-item">
-                <span class="legend-color total"></span>
-                <span>总Token</span>
+            <div class="legend-item" data-token-series="all">
+                <span class="legend-color multi"></span>
+                <span>全部对比</span>
             </div>
         </div>
     </div>

@@ -35,6 +35,23 @@ class RateLimiter:
     def _get_request_key(self, request_id: str) -> str:
         return f"{self.request_prefix}{request_id}"
     
+    def _decode_value(self, value):
+        if isinstance(value, bytes):
+            return value.decode()
+        return value
+    
+    def _get_priority_queue_key(self, model_name: str, priority: int) -> str:
+        return f"{self.queue_prefix}{model_name}:{priority}"
+    
+    def _get_all_priority_queue_keys(self, model_name: str) -> List[str]:
+        return [self._get_priority_queue_key(model_name, level) for level in self.PRIORITIES.values()]
+    
+    def _extract_model_name_from_queue_key(self, key: str) -> str:
+        suffix = key.replace(self.queue_prefix, "", 1)
+        if ":" in suffix:
+            return suffix.rsplit(":", 1)[0]
+        return suffix
+    
     def increment_request(self, model_name: str) -> int:
         if not self.client:
             return 0
@@ -53,10 +70,24 @@ class RateLimiter:
     
     def acquire_request(self, model_name: str, max_concurrent: int) -> bool:
         """兼容旧接口：获取请求槽位"""
-        if not self.is_available(model_name, max_concurrent):
+        if not self.client:
             return False
-        self.increment_request(model_name)
-        return True
+        key = self._get_active_key(model_name)
+        while True:
+            try:
+                with self.client.pipeline() as pipe:
+                    pipe.watch(key)
+                    current = pipe.get(key)
+                    active = int(current) if current else 0
+                    if active >= max_concurrent:
+                        pipe.unwatch()
+                        return False
+                    pipe.multi()
+                    pipe.incr(key)
+                    pipe.execute()
+                    return True
+            except redis.WatchError:
+                continue
     
     def release_request(self, model_name: str):
         """兼容旧接口：释放请求槽位"""
@@ -116,9 +147,6 @@ class RateLimiter:
         key = self._get_active_key(model_name)
         self.client.delete(key)
     
-    def _get_priority_queue_key(self, model_name: str, priority: int) -> str:
-        return f"{self.queue_prefix}{model_name}:{priority}"
-    
     def enqueue_request(self, model_name: str, request_data: Dict[str, Any], priority: str = "normal") -> str:
         if not self.client:
             return ""
@@ -152,13 +180,12 @@ class RateLimiter:
             request_id = self.client.lpop(queue_key)
             
             if request_id:
-                if isinstance(request_id, bytes):
-                    request_id = request_id.decode()
+                request_id = self._decode_value(request_id)
                 request_key = self._get_request_key(request_id)
                 request_data = self.client.get(request_key)
                 
                 if request_data:
-                    info = json.loads(request_data)
+                    info = json.loads(self._decode_value(request_data))
                     info["status"] = "processing"
                     self.client.set(request_key, json.dumps(info), ex=3600)
                     return info
@@ -168,9 +195,7 @@ class RateLimiter:
     def get_queue_length(self, model_name: str) -> int:
         if not self.client:
             return 0
-        
-        queue_key = self._get_queue_key(model_name)
-        return self.client.llen(queue_key)
+        return self.get_total_queue_length(model_name)
     
     def get_total_queue_length(self, model_name: str) -> int:
         """获取所有优先级队列的总长度"""
@@ -178,8 +203,7 @@ class RateLimiter:
             return 0
         
         total_length = 0
-        for priority_level in self.PRIORITIES.values():
-            queue_key = self._get_priority_queue_key(model_name, priority_level)
+        for queue_key in self._get_all_priority_queue_keys(model_name):
             total_length += self.client.llen(queue_key)
         
         return total_length
@@ -200,10 +224,11 @@ class RateLimiter:
         if not request_data:
             return False
         
-        info = json.loads(request_data)
+        info = json.loads(self._decode_value(request_data))
         if info["status"] == "queued":
             model_name = info["model_name"]
-            queue_key = self._get_queue_key(model_name)
+            priority_level = info.get("priority_level", self.PRIORITIES.get(info.get("priority", "normal"), 2))
+            queue_key = self._get_priority_queue_key(model_name, priority_level)
             self.client.lrem(queue_key, 0, request_id)
         
         info["status"] = "cancelled"
@@ -219,7 +244,7 @@ class RateLimiter:
         request_data = self.client.get(request_key)
         
         if request_data:
-            info = json.loads(request_data)
+            info = json.loads(self._decode_value(request_data))
             info["status"] = "completed"
             info["completed_at"] = datetime.now().isoformat()
             if result:
@@ -234,7 +259,7 @@ class RateLimiter:
         request_data = self.client.get(request_key)
         
         if request_data:
-            return json.loads(request_data)
+            return json.loads(self._decode_value(request_data))
         
         return None
     
@@ -246,9 +271,12 @@ class RateLimiter:
         keys = self.client.keys(pattern)
         
         status = {}
+        model_names = set()
         for key in keys:
-            key_str = key.decode() if isinstance(key, bytes) else key
-            model_name = key_str.replace(self.queue_prefix, "")
+            key_str = self._decode_value(key)
+            model_names.add(self._extract_model_name_from_queue_key(key_str))
+        
+        for model_name in model_names:
             status[model_name] = {
                 "active_requests": self.get_active_requests(model_name),
                 "queue_length": self.get_queue_length(model_name)
@@ -260,8 +288,7 @@ class RateLimiter:
         if not self.client:
             return
         
-        queue_key = self._get_queue_key(model_name)
-        self.client.delete(queue_key)
+        self.client.delete(*self._get_all_priority_queue_keys(model_name))
     
     def close(self):
         if self.client:

@@ -31,6 +31,7 @@ export class SystemMonitor {
 
         this.tokenChart = null;
         this.currentTokenTimeRange = 'hour';
+        this.currentTokenSeries = 'total';
         this.tokenChartData = {};
         this.tokenDataPollingInterval = null;
         this.isRefreshing = false;
@@ -149,6 +150,15 @@ export class SystemMonitor {
             });
         });
 
+        const tokenLegendItems = document.querySelectorAll('#tokenChartLegend .legend-item');
+        tokenLegendItems.forEach(item => {
+            item.addEventListener('click', () => {
+                this.currentTokenSeries = item.dataset.tokenSeries || 'total';
+                this.updateTokenLegend();
+                this.updateTokenChart();
+            });
+        });
+
         document.addEventListener('section-change', (event) => {
             if (event.detail.section === 'dashboard') {
                 this.refreshAllStatus({ force: true });
@@ -191,6 +201,13 @@ export class SystemMonitor {
             } else {
                 item.style.display = 'none';
             }
+        });
+    }
+
+    updateTokenLegend() {
+        const legendItems = document.querySelectorAll('#tokenChartLegend .legend-item');
+        legendItems.forEach(item => {
+            item.classList.toggle('active', item.dataset.tokenSeries === this.currentTokenSeries);
         });
     }
 
@@ -1321,7 +1338,8 @@ export class SystemMonitor {
             this.tokenChart = null;
             this.initTokenChart();
         }
-        
+
+        this.updateTokenLegend();
         this.updateTokenChart();
     }
 
@@ -1625,18 +1643,32 @@ export class SystemMonitor {
             return;
         }
 
-        const allValues = [...chartData.promptTokens, ...chartData.completionTokens, ...chartData.totalTokens];
+        const selectedSeriesMap = {
+            prompt: [chartData.promptTokens],
+            completion: [chartData.completionTokens],
+            total: [chartData.totalTokens],
+            all: [chartData.promptTokens, chartData.completionTokens, chartData.totalTokens]
+        };
+        const activeSeries = selectedSeriesMap[this.currentTokenSeries] || selectedSeriesMap.total;
+        const allValues = activeSeries.flat().filter(v => v > 0);
         const maxValue = Math.max(...allValues.filter(v => v > 0), 1);
         const minValue = 0;
 
         this.drawGrid(ctx, chartWidth, chartHeight, padding);
         this.drawTokenAxes(ctx, chartWidth, chartHeight, padding, chartData.labels, minValue, maxValue);
 
-        const datasets = [
+        const allDatasets = [
             { data: chartData.promptTokens, color: '#3b82f6', gradient: ['#3b82f6', '#60a5fa'], label: '输入 Token' },
             { data: chartData.completionTokens, color: '#10b981', gradient: ['#10b981', '#34d399'], label: '输出 Token' },
             { data: chartData.totalTokens, color: '#8b5cf6', gradient: ['#8b5cf6', '#a78bfa'], label: '总 Token' }
         ];
+        const datasets = this.currentTokenSeries === 'all'
+            ? allDatasets
+            : allDatasets.filter(ds => (
+                (this.currentTokenSeries === 'prompt' && ds.label === '输入 Token') ||
+                (this.currentTokenSeries === 'completion' && ds.label === '输出 Token') ||
+                (this.currentTokenSeries === 'total' && ds.label === '总 Token')
+            ));
 
         datasets.forEach(ds => {
             this.drawArea(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
