@@ -360,13 +360,19 @@ Score = baseScore + usageScore + sequenceScore + loadScore + freshBonus
 # 1. 进入 Vue 项目目录
 cd app-vue
 
-# 2. 安装依赖
+# 2. 安装依赖（推荐使用 pnpm）
+pnpm install
+
+# 或使用 npm
 npm install
 
 # 3. 配置环境变量（复制示例文件）
 cp .env.example .env
 
 # 4. 启动开发服务器
+pnpm dev
+
+# 或使用 npm
 npm run dev
 
 # 5. 访问 http://localhost:5173
@@ -586,19 +592,83 @@ python main.py --log-dir /path/to/your/logs
 
 ---
 
+## 启动方式
+
+### 后端服务启动
+
+```bash
+# 进入项目根目录
+cd /root/AIClient-2-API
+
+# 使用 pnpm 安装依赖
+pnpm install
+
+# 启动主进程（推荐方式）
+pnpm start
+
+# 或直接运行主进程
+node src/core/master.js
+
+# 指定端口启动
+node src/core/master.js --port 3000
+
+# 指定配置文件
+node src/core/master.js --config configs/config.json
+```
+
+### Vue 前端开发模式
+
+```bash
+# 进入 Vue 项目目录
+cd app-vue
+
+# 使用 pnpm 安装依赖
+pnpm install
+
+# 启动开发服务器
+pnpm dev
+
+# 构建生产版本
+pnpm build
+
+# 预览构建结果
+pnpm preview
+```
+
+### 服务管理（Linux 系统）
+
+```bash
+# 使用 systemctl 管理服务
+sudo systemctl start aiclient-node
+sudo systemctl stop aiclient-node
+sudo systemctl restart aiclient-node
+sudo systemctl status aiclient-node
+
+# 查看服务日志
+journalctl -u aiclient-node -f
+```
+
+---
+
 ## 测试
 
 ```bash
-# 运行所有测试
-npm test
+# 使用 pnpm 运行所有测试
+pnpm test
 
 # 运行单元测试
-npm run test:unit
+pnpm test:unit
 
 # 运行集成测试
-npm run test:integration
+pnpm test:integration
 
 # 测试摘要
+pnpm test:summary
+
+# 或使用 npm
+npm test
+npm run test:unit
+npm run test:integration
 npm run test:summary
 ```
 

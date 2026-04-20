@@ -35,6 +35,7 @@ from core.vllm_manager import (
     restart_vllm_service,
     get_vllm_service_status,
     switch_vllm_model,
+    switch_vllm_model_with_test,
     MODEL_BASE_PATH,
     VLLM_SERVICE_NAME,
     VLLM_DEFAULT_PORT

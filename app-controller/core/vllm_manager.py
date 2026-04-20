@@ -3,12 +3,14 @@ vLLM 模型管理模块
 - 扫描 /mnt/pve_models/ 目录下可用的模型
 - 管理 vLLM 服务状态（启动/停止/重启/切换）
 - 提供模型信息（显存需求、路径、支持的功能等）
+- 模型切换后自动自测验证
 """
 
 import os
 import subprocess
 import json
 import asyncio
+import httpx
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -254,7 +256,7 @@ def get_vllm_service_status() -> Dict[str, Any]:
 
 def switch_vllm_model(model_name: str) -> Dict[str, Any]:
     """
-    切换到指定模型：
+    切换到指定模型（同步版本）：
     1. 更新启动脚本
     2. 重启 vLLM 服务
     """
@@ -292,6 +294,74 @@ def switch_vllm_model(model_name: str) -> Dict[str, Any]:
         "model_path": model_path,
         "service": VLLM_SERVICE_NAME,
         "status": "restarting"
+    }
+
+
+async def switch_vllm_model_with_test(model_name: str, test_enabled: bool = True) -> Dict[str, Any]:
+    """
+    切换到指定模型并进行自测：
+    1. 更新启动脚本
+    2. 重启 vLLM 服务
+    3. 等待服务启动
+    4. 执行自测验证模型是否可用
+    :param model_name: 模型名称
+    :param test_enabled: 是否启用自测
+    :return: 切换结果字典，包含自测结果
+    """
+    model_path = os.path.join(MODEL_BASE_PATH, model_name)
+
+    # 检查模型是否存在
+    if not os.path.exists(model_path):
+        return {
+            "success": False,
+            "error": f"Model not found: {model_name}",
+            "model_path": model_path
+        }
+
+    # 更新启动脚本
+    script_updated = _update_vllm_script(model_path)
+    if not script_updated:
+        return {
+            "success": False,
+            "error": "Failed to update vLLM start script",
+            "model_path": model_path
+        }
+
+    # 重启服务
+    service_restarted = restart_vllm_service()
+    if not service_restarted:
+        return {
+            "success": False,
+            "error": "Failed to restart vLLM service",
+            "model_path": model_path
+        }
+
+    # 等待服务启动（至少等待5秒）
+    await asyncio.sleep(5)
+
+    # 执行自测
+    test_result = None
+    if test_enabled:
+        test_result = await _test_vllm_model(model_name)
+        
+        if not test_result.get("success", False):
+            return {
+                "success": False,
+                "error": f"Model switch failed: {test_result.get('message', 'Unknown error')}",
+                "model": model_name,
+                "model_path": model_path,
+                "service": VLLM_SERVICE_NAME,
+                "status": "test_failed",
+                "test_result": test_result
+            }
+
+    return {
+        "success": True,
+        "model": model_name,
+        "model_path": model_path,
+        "service": VLLM_SERVICE_NAME,
+        "status": "switched" if not test_enabled else "switched_and_tested",
+        "test_result": test_result
     }
 
 
@@ -334,3 +404,102 @@ def _update_vllm_script(model_path: str) -> bool:
         return True
     except Exception as e:
         return False
+
+
+async def _test_vllm_model(model_name: str, max_retries: int = 5, retry_delay: int = 10) -> Dict[str, Any]:
+    """
+    自测 vLLM 模型是否可用
+    :param model_name: 模型名称
+    :param max_retries: 最大重试次数
+    :param retry_delay: 重试间隔（秒）
+    :return: 自测结果字典
+    """
+    vllm_url = f"http://localhost:{VLLM_DEFAULT_PORT}/v1/chat/completions"
+    
+    test_payload = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": "Hello, please respond with a brief message."}],
+        "max_tokens": 10,
+        "temperature": 0.7
+    }
+    
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(vllm_url, json=test_payload, timeout=30)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    
+                    # 检查响应是否有效
+                    if result.get("choices") and len(result["choices"]) > 0:
+                        content = result["choices"][0].get("message", {}).get("content", "")
+                        if content.strip():
+                            return {
+                                "success": True,
+                                "message": "Model test passed",
+                                "attempt": attempt + 1,
+                                "response_content": content.strip(),
+                                "token_count": result.get("usage", {}).get("completion_tokens", 0)
+                            }
+                        else:
+                            return {
+                                "success": False,
+                                "message": "Model returned empty response",
+                                "attempt": attempt + 1,
+                                "error": "Empty response content"
+                            }
+                    else:
+                        return {
+                            "success": False,
+                            "message": "Invalid response structure from vLLM",
+                            "attempt": attempt + 1,
+                            "error": "Missing choices in response"
+                        }
+                else:
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    return {
+                        "success": False,
+                        "message": f"vLLM returned HTTP error {response.status_code}",
+                        "attempt": attempt + 1,
+                        "error": response.text[:200] if response.text else "Unknown error"
+                    }
+        except httpx.HTTPError as e:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+            return {
+                "success": False,
+                "message": f"HTTP request failed",
+                "attempt": attempt + 1,
+                "error": str(e)
+            }
+        except asyncio.TimeoutError:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+            return {
+                "success": False,
+                "message": "Request timed out",
+                "attempt": attempt + 1,
+                "error": "Timeout waiting for response"
+            }
+        except Exception as e:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+            return {
+                "success": False,
+                "message": "Unexpected error during test",
+                "attempt": attempt + 1,
+                "error": str(e)
+            }
+    
+    return {
+        "success": False,
+        "message": "All retry attempts failed",
+        "attempt": max_retries,
+        "error": "Max retries exceeded"
+    }

@@ -5,19 +5,7 @@ ROOT_DIR="$(dirname "$DIR")"
 
 cd "$ROOT_DIR"
 
-PNPM="$HOME/.nvm/versions/node/v24.12.0/bin/pnpm"
-NODE="$HOME/.nvm/versions/node/v24.12.0/bin/node"
-
 echo "=== Starting AIClient2API Service ==="
 
-echo "Pulling latest changes..."
-git pull --rebase
-
-echo "Installing dependencies..."
-"$PNPM" install
-
-echo "Building project..."
-"$PNPM" run build
-
 echo "Starting Node.js API service on port 30000..."
-"$NODE" src/core/master.js
+node src/core/master.js
