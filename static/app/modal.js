@@ -2305,9 +2305,15 @@ async function loadModelsListForSwitch(modal) {
             ...status
         }));
 
-        if (cachedData && cachedData.summary && cachedData.summary.models) {
-            const runningModels = cachedData.summary.models.filter(m => m.running);
-            currentModel = runningModels.length > 0 ? runningModels[0].name : null;
+        if (cachedData && cachedData.summary) {
+            if (cachedData.summary.running_model) {
+                currentModel = typeof cachedData.summary.running_model === 'string'
+                    ? cachedData.summary.running_model
+                    : cachedData.summary.running_model.name || null;
+            } else if (cachedData.summary.models) {
+                const runningModels = cachedData.summary.models.filter(m => m.running);
+                currentModel = runningModels.length > 0 ? runningModels[0].name : null;
+            }
         } else {
             try {
                 const summaryResponse = await fetch(`/api/python/models/summary`, {
@@ -2449,6 +2455,10 @@ async function switchModel(modelName) {
             }
             // 刷新模型列表缓存，确保模型列表与新切换的模型同步
             await refreshModels();
+            // 清空监控缓存，确保 getCurrentRunningModel 能获取到最新数据
+            if (window.monitorCache) {
+                window.monitorCache.invalidateCache();
+            }
         } else {
             throw new Error(data.error?.message || '切换失败');
         }

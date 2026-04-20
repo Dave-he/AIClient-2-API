@@ -12,8 +12,14 @@ export class GPUMonitorModule {
         this.testReport = null;
         this._isRefreshing = false;
         this.currentModel = null;
+        this.lastModelsData = null;
+        this.lastQueueData = null;
         this.i18n = window.i18n || { t: (key) => key };
         this.init();
+    }
+
+    shouldPoll() {
+        return document.visibilityState === 'visible' && this.isCurrentSection('gpu-monitor');
     }
 
     init() {
@@ -32,6 +38,24 @@ export class GPUMonitorModule {
         window.addEventListener('componentsLoaded', () => {
             this.initGpuStatusElements();
         });
+    }
+
+    resolveCurrentModelFromSummary(summary) {
+        if (!summary) return null;
+
+        if (summary.running_model) {
+            if (typeof summary.running_model === 'string') {
+                return summary.models?.find(model => model.name === summary.running_model) || summary.running_model;
+            }
+            return summary.running_model;
+        }
+
+        if (Array.isArray(summary.models)) {
+            const runningModels = summary.models.filter(model => model.running);
+            return runningModels.length > 0 ? runningModels[0] : null;
+        }
+
+        return null;
     }
 
     initGpuStatusElements() {
@@ -171,17 +195,20 @@ export class GPUMonitorModule {
 
         const refreshModelsListBtn = document.getElementById('refreshModelsListBtn');
         if (refreshModelsListBtn) {
-            refreshModelsListBtn.addEventListener('click', () => this.refreshQuickSwitch());
+            refreshModelsListBtn.addEventListener('click', () => this.refreshAllStatus(true));
         }
 
         document.addEventListener('section-change', async (event) => {
             if (event.detail.section === 'gpu-monitor') {
-                await monitorCache.getSummary();
-                this.refreshAllStatus();
-                this.checkControllerConnection();
+                await this.refreshAllStatus(true);
                 this.refreshPythonServiceStatus();
                 this.refreshConfig();
-                this.refreshQuickSwitch();
+            }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (this.shouldPoll()) {
+                this.refreshAllStatus(true);
             }
         });
 
@@ -207,10 +234,8 @@ export class GPUMonitorModule {
             }
         }
         if (data.models) {
-            const container = document.getElementById('modelsStatusContent');
-            if (container) {
-                this.renderModelsStatus(data.models, container);
-            }
+            this.lastModelsData = data.models;
+            this.renderUnifiedModels();
         }
     }
 
@@ -625,7 +650,7 @@ export class GPUMonitorModule {
     startPolling() {
         this.stopPolling();
         this.pollingInterval = setInterval(() => {
-            if (this.isCurrentSection('gpu-monitor')) {
+            if (this.shouldPoll()) {
                 this.refreshAllStatus();
                 this.checkControllerConnection();
             }
@@ -644,13 +669,13 @@ export class GPUMonitorModule {
         return activeSection?.id === sectionId;
     }
 
-    async refreshAllStatus() {
+    async refreshAllStatus(forceRefresh = false) {
         if (this._isRefreshing) {
             return;
         }
         this._isRefreshing = true;
         try {
-            const data = await monitorCache.getSummary();
+            const data = await monitorCache.getSummary(forceRefresh);
             
             if (data && data.success) {
                 if (data.gpu) {
@@ -663,27 +688,25 @@ export class GPUMonitorModule {
                     }
                 }
                 if (data.models) {
-                    const container = document.getElementById('modelsStatusContent');
-                    if (container) this.renderModelsStatus(data.models, container);
+                    this.lastModelsData = data.models;
                 }
                 if (data.queue) {
                     const container = document.getElementById('queueStatusContent');
                     if (container) this.renderQueueStatus(data.queue, container);
+                    this.lastQueueData = data.queue;
                 }
                 if (data.summary && data.summary.models) {
-                    const runningModels = data.summary.models.filter(m => m.running);
-                    this.currentModel = runningModels.length > 0 ? runningModels[0] : null;
+                    this.currentModel = this.resolveCurrentModelFromSummary(data.summary);
                     this.renderCurrentModel();
-                    const container = document.getElementById('modelControls');
-                    if (container) this.renderModelControls(data.summary.models, container);
+                    this.lastModelsData = data.summary.models;
                 }
+                this.renderUnifiedModels();
             }
         } catch (error) {
             console.warn(`Failed to fetch monitor summary: ${error.message}`);
             this.showMockGpuStatus();
             this.showMockModelsStatus();
             this.showMockQueueStatus();
-            this.showMockModelControls();
             this.showMockCurrentModel();
         } finally {
             this._isRefreshing = false;
@@ -711,8 +734,7 @@ export class GPUMonitorModule {
             }
 
             if (data && data.models && data.models.length > 0) {
-                const runningModels = data.models.filter(m => m.running);
-                this.currentModel = runningModels.length > 0 ? runningModels[0] : null;
+                this.currentModel = this.resolveCurrentModelFromSummary(data);
             } else {
                 this.currentModel = null;
             }
@@ -729,13 +751,23 @@ export class GPUMonitorModule {
         if (!container) return;
 
         const t = this.i18n.t.bind(this.i18n);
-        const currentModelName = typeof this.currentModel === 'object' ? this.currentModel.name : this.currentModel;
+        const currentModel = typeof this.currentModel === 'object' ? this.currentModel : { name: this.currentModel };
+        const currentModelName = currentModel?.name;
+        const meta = [];
+
+        if (currentModel?.port) {
+            meta.push(`<span class="current-model-meta"><i class="fas fa-server"></i> ${currentModel.port}</span>`);
+        }
+        if (currentModel?.required_memory || currentModel?.memory) {
+            meta.push(`<span class="current-model-meta"><i class="fas fa-memory"></i> ${currentModel.required_memory || currentModel.memory}</span>`);
+        }
 
         container.innerHTML = `
             <div class="current-model-info">
                 <div class="current-model-label">${t('gpuMonitor.currentModel')}</div>
                 <div class="current-model-value">
                     ${currentModelName ? `<span class="model-name">${currentModelName}</span>` : `<span class="no-model">-</span>`}
+                    ${meta.join('')}
                 </div>
             </div>
         `;
@@ -928,6 +960,50 @@ export class GPUMonitorModule {
         container.innerHTML = `<div class="model-status-grid">${items}</div>`;
     }
 
+    normalizeModelsForWorkbench(models) {
+        if (!models) return [];
+
+        const list = Array.isArray(models)
+            ? models
+            : Object.entries(models).map(([name, status]) => ({ name, ...status }));
+
+        return list.map((model, index) => {
+            const safeName = model.name || model.model_name || `model-${index}`;
+            const activeRequests = Number(model.active_requests ?? model.activeRequests ?? 0);
+            const port = model.port ?? model.modelPort ?? '-';
+            const memory = model.required_memory ?? model.memory ?? model.modelMemory ?? '-';
+            const description = model.description || model.desc || '';
+            const preloaded = model.preloaded ?? model.warmup ?? false;
+            const running = Boolean(model.running);
+            const queueInfo = this.lastQueueData?.[safeName];
+
+            return {
+                name: safeName,
+                running,
+                port,
+                memory,
+                description,
+                preloaded,
+                activeRequests,
+                canAccept: queueInfo?.can_accept ?? model.can_accept ?? null,
+                concurrencyLimit: queueInfo?.concurrency_limit ?? model.concurrency_limit ?? null,
+                remainingSlots: queueInfo ? queueInfo.concurrency_limit - queueInfo.active_requests : null
+            };
+        }).sort((left, right) => {
+            if (left.running === right.running) {
+                return left.name.localeCompare(right.name);
+            }
+            return left.running ? -1 : 1;
+        });
+    }
+
+    renderUnifiedModels() {
+        const container = document.getElementById('quickSwitchContent');
+        if (!container) return;
+
+        this.renderQuickSwitch(this.lastModelsData, container);
+    }
+
     async refreshQueueStatus() {
         const container = document.getElementById('queueStatusContent');
         if (!container) return;
@@ -1078,7 +1154,11 @@ export class GPUMonitorModule {
 
     renderModelControls(data, container) {
         const t = this.i18n.t.bind(this.i18n);
-        if (!data || Object.keys(data).length === 0) {
+        const modelEntries = Array.isArray(data)
+            ? data.map(model => [model.name, model])
+            : Object.entries(data || {});
+
+        if (modelEntries.length === 0) {
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-info-circle"></i>
@@ -1088,11 +1168,13 @@ export class GPUMonitorModule {
             return;
         }
 
-        const controls = Object.entries(data).map(([name, status]) => `
+        const currentModelName = typeof this.currentModel === 'object' ? this.currentModel?.name : this.currentModel;
+
+        const controls = modelEntries.map(([name, status]) => `
             <div class="control-item">
                 <span class="model-name">${name}</span>
                 <div class="control-btn-group">
-                    ${status.running ? `
+                    ${(currentModelName === name || status.running) ? `
                         <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${name}')">
                             <i class="fas fa-stop"></i> ${t('gpuMonitor.stop')}
                         </button>
@@ -1817,7 +1899,8 @@ export class GPUMonitorModule {
 
     renderQuickSwitch(models, container) {
         const t = this.i18n.t.bind(this.i18n);
-        if (!models || Object.keys(models).length === 0) {
+        const modelList = Array.isArray(models) ? models : Object.entries(models || {}).map(([name, status]) => ({ name, ...status }));
+        if (modelList.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
                     <i class="fas fa-cubes"></i>
@@ -1828,7 +1911,13 @@ export class GPUMonitorModule {
             return;
         }
 
-        const items = Object.entries(models).map(([name, status]) => `
+        const currentModelName = typeof this.currentModel === 'object' ? this.currentModel?.name : this.currentModel;
+
+        const items = modelList.map((model) => {
+            const name = model.name;
+            const isCurrentModel = currentModelName === name;
+            const status = model;
+            return `
             <div class="model-switch-item">
                 <div class="model-switch-header">
                     <div class="model-switch-info">
@@ -1838,12 +1927,16 @@ export class GPUMonitorModule {
                             <span class="model-switch-memory"><i class="fas fa-memory"></i> ${status.memory || '-'}</span>
                         </div>
                     </div>
-                    <span class="model-switch-status ${status.running ? 'status-running' : 'status-stopped'}">
-                        ${status.running ? t('gpuMonitor.running') : t('gpuMonitor.stopped')}
+                    <span class="model-switch-status ${(isCurrentModel || status.running) ? 'status-running' : 'status-stopped'}">
+                        ${isCurrentModel ? t('gpuMonitor.currentModel') : (status.running ? t('gpuMonitor.running') : t('gpuMonitor.stopped'))}
                     </span>
                 </div>
                 <div class="model-switch-actions">
-                    ${status.running ? `
+                    ${isCurrentModel ? `
+                        <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${name}')">
+                            <i class="fas fa-stop"></i> ${t('gpuMonitor.stop')}
+                        </button>
+                    ` : status.running ? `
                         <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${name}')">
                             <i class="fas fa-stop"></i> ${t('gpuMonitor.stop')}
                         </button>
@@ -1857,7 +1950,8 @@ export class GPUMonitorModule {
                     `}
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
         container.innerHTML = `<div class="models-switch-list">${items}</div>`;
     }

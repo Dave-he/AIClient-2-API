@@ -61,3 +61,4 @@ export class MonitorCache {
 }
 
 export const monitorCache = new MonitorCache();
+window.monitorCache = monitorCache;

@@ -816,6 +816,7 @@ async def switch_to_model(model_name: str):
 
     success = await scheduler.switch_model(model_name)
     if success:
+        scheduler.mark_model_selected(model_name)
         return {"status": "switched", "model": model_name}
     else:
         raise HTTPException(status_code=503, detail=f"Failed to switch to model {model_name}, insufficient memory")
@@ -1240,7 +1241,11 @@ async def models_summary():
             "required_memory": config.get("required_memory", "") if config else "",
             "port": scheduler.get_model_port(model)
         })
-    return {"models": summary, "total": len(summary)}
+    return {
+        "models": summary,
+        "total": len(summary),
+        "running_model": scheduler.get_current_model_name()
+    }
 
 class TestRequest(BaseModel):
     model_name: str
@@ -1411,6 +1416,8 @@ async def switch_and_test_model(model_name: str):
                 "message": f"Failed to switch to model {model_name}",
                 "report": None
             }
+
+        scheduler.mark_model_selected(model_name)
         
         await asyncio.sleep(5)
         

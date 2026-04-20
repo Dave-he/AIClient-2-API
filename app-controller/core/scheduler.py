@@ -179,6 +179,33 @@ class Scheduler:
     
     def get_model_last_used(self, model_name: str) -> Optional[datetime]:
         return self.model_last_used.get(model_name)
+
+    def mark_model_selected(self, model_name: str):
+        """Record the model most recently selected by an explicit switch action."""
+        self.model_last_used[model_name] = datetime.now()
+
+    def get_current_model_name(self) -> Optional[str]:
+        """Return the most recently selected running model, if any."""
+        running_models = [model for model in self.get_available_models() if self.is_model_running(model)]
+        if not running_models:
+            return None
+
+        used_running_models = [
+            model for model in running_models
+            if self.model_last_used.get(model)
+        ]
+        if used_running_models:
+            return max(used_running_models, key=lambda model: self.model_last_used.get(model))
+
+        with self._model_lock:
+            tracked_running_models = [
+                model for model in running_models
+                if self.running_models.get(model)
+            ]
+            if tracked_running_models:
+                return max(tracked_running_models, key=lambda model: self.running_models.get(model))
+
+        return running_models[0]
     
     def get_preloaded_models(self) -> List[str]:
         return list(self.preloaded_models)
@@ -416,13 +443,17 @@ class Scheduler:
             return False
         
         if self.is_model_running(target_model_name):
+            self.mark_model_selected(target_model_name)
             return True
         
         success = await self._free_up_memory(target_model_name)
         if not success:
             return False
-        
-        return await self.start_model(target_model_name)
+
+        success = await self.start_model(target_model_name)
+        if success:
+            self.mark_model_selected(target_model_name)
+        return success
     
     async def preload_models(self):
         """预热所有配置为预加载的模型"""

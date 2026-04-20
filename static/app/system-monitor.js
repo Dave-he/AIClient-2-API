@@ -1,4 +1,6 @@
 const API_BASE_URL = '/api/python';
+const DASHBOARD_POLL_INTERVAL_MS = 10000;
+const TOKEN_POLL_INTERVAL_MS = 120000;
 
 let systemMonitorInstance = null;
 
@@ -31,6 +33,8 @@ export class SystemMonitor {
         this.currentTokenTimeRange = 'hour';
         this.tokenChartData = {};
         this.tokenDataPollingInterval = null;
+        this.isRefreshing = false;
+        this.lastPythonGpuHistorySampleAt = 0;
         
         this.modelsList = [];
         this.currentModel = null;
@@ -76,13 +80,13 @@ export class SystemMonitor {
 
             this.isInitialized = true;
             this.setupEventListeners();
-            this.loadGpuHistoryFromServer();
             this.startPolling();
             
             // 延迟初始化图表，确保DOM已完全渲染
             setTimeout(() => {
                 this.ensureChartInitialized();
-                this.ensureGpuChartInitialized();
+                this.ensurePythonGpuChartInitialized();
+                this.ensureTokenChartInitialized();
             }, 500);
         };
 
@@ -100,17 +104,6 @@ export class SystemMonitor {
     }
 
     setupEventListeners() {
-        const chartTabs = document.querySelectorAll('.chart-tab');
-        chartTabs.forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                chartTabs.forEach(t => t.classList.remove('active'));
-                e.target.classList.add('active');
-                this.currentChartType = e.target.dataset.chartType;
-                this.updateLegend();
-                this.updateChart();
-            });
-        });
-
         const pythonChartTabs = document.querySelectorAll('.chart-type-tab');
         pythonChartTabs.forEach(tab => {
             tab.addEventListener('click', (e) => {
@@ -128,18 +121,14 @@ export class SystemMonitor {
                 gpuTimeRangeTabs.forEach(t => t.classList.remove('active'));
                 e.target.classList.add('active');
                 this.currentPythonGpuTimeRange = e.target.dataset.pythonTimeRange;
-                this.loadGpuHistoryFromServer();
+                this.resetPythonGpuHistory();
+                this.loadGpuHistoryFromServer(true);
             });
         });
 
-        const refreshBtn = document.getElementById('refreshGpuStatusBtn');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => this.refreshGpuStatus());
-        }
-
         const refreshPythonGpuBtn = document.getElementById('refreshPythonGpuBtn');
         if (refreshPythonGpuBtn) {
-            refreshPythonGpuBtn.addEventListener('click', () => this.refreshPythonGpuStatus());
+            refreshPythonGpuBtn.addEventListener('click', () => this.refreshPythonGpuStatus({ forceRefresh: true, forceSample: true }));
         }
 
         const refreshProviderBtn = document.getElementById('refreshProviderStatusBtn');
@@ -149,35 +138,31 @@ export class SystemMonitor {
             });
         }
 
-        const refreshModelsListBtn = document.getElementById('refreshModelsListBtn');
-        if (refreshModelsListBtn) {
-            refreshModelsListBtn.addEventListener('click', () => this.loadModelsAndRender());
-        }
-
-        const timeRangeTabs = document.querySelectorAll('.time-range-tab');
+        const timeRangeTabs = document.querySelectorAll('.token-trend-panel .time-range-tab[data-time-range]');
         timeRangeTabs.forEach(tab => {
             tab.addEventListener('click', (e) => {
                 timeRangeTabs.forEach(t => t.classList.remove('active'));
                 e.target.classList.add('active');
                 this.currentTokenTimeRange = e.target.dataset.timeRange;
+                this.loadTokenUsageData();
                 this.updateTokenChart();
             });
         });
 
         document.addEventListener('section-change', (event) => {
             if (event.detail.section === 'dashboard') {
-                this.refreshAllStatus();
+                this.refreshAllStatus({ force: true });
                 this.ensureChartInitialized();
                 this.ensurePythonGpuChartInitialized();
                 this.ensureTokenChartInitialized();
                 this.loadTokenUsageData();
-                this.loadGpuHistoryFromServer();
-            } else if (event.detail.section === 'gpu-monitor') {
-                this.loadModelsAndRender();
-                this.refreshGpuStatus();
-                this.loadGpuHistoryFromServer();
-                this.ensureGpuChartInitialized();
-                this.updateGpuChart();
+            }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (this.shouldPollDashboard()) {
+                this.refreshAllStatus({ force: true });
+                this.loadTokenUsageData();
             }
         });
 
@@ -185,7 +170,6 @@ export class SystemMonitor {
             this.ensureChartInitialized();
             this.ensurePythonGpuChartInitialized();
             this.ensureTokenChartInitialized();
-            this.ensureGpuChartInitialized();
         });
     }
 
@@ -210,16 +194,69 @@ export class SystemMonitor {
         });
     }
 
+    isCurrentSection(sectionId) {
+        const activeSection = document.querySelector('.section.active');
+        return activeSection?.id === sectionId;
+    }
+
+    shouldPollDashboard() {
+        return document.visibilityState === 'visible' && this.isCurrentSection('dashboard');
+    }
+
+    getPythonGpuMaxDataPoints() {
+        switch (this.currentPythonGpuTimeRange) {
+            case 'day':
+                return 144;
+            case 'week':
+                return 168;
+            default:
+                return 120;
+        }
+    }
+
+    resetPythonGpuHistory() {
+        this.pythonGpuUtilizationHistory = [];
+        this.pythonGpuMemoryHistory = [];
+        this.pythonGpuTempHistory = [];
+        this.lastPythonGpuHistorySampleAt = 0;
+        this.updatePythonGpuChart();
+    }
+
+    appendPythonGpuHistoryPoint(data, { force = false } = {}) {
+        if (!data) return;
+
+        const now = Date.now();
+        if (!force && this.lastPythonGpuHistorySampleAt && (now - this.lastPythonGpuHistorySampleAt) < (DASHBOARD_POLL_INTERVAL_MS - 1000)) {
+            return;
+        }
+
+        const totalMemory = Number(data.total_memory || 0);
+        const usedMemory = Number(data.used_memory || 0);
+        const maxPoints = this.getPythonGpuMaxDataPoints();
+        const utilization = Number(data.utilization || data.gpu_utilization || 0);
+        const memoryUtilization = Number(
+            data.memory_utilization ||
+            (totalMemory > 0 ? Math.round((usedMemory / totalMemory) * 100) : 0)
+        );
+        const temperature = Number(data.temperature || 0);
+
+        this.addToHistory(this.pythonGpuUtilizationHistory, utilization, maxPoints);
+        this.addToHistory(this.pythonGpuMemoryHistory, memoryUtilization, maxPoints);
+        this.addToHistory(this.pythonGpuTempHistory, temperature, maxPoints);
+        this.lastPythonGpuHistorySampleAt = now;
+    }
+
     startPolling() {
         this.stopPolling();
-        this.refreshAllStatus();
+        this.refreshAllStatus({ force: true });
+        this.loadTokenUsageData();
         this.pollingInterval = setInterval(() => {
-            this.refreshAllStatus();
-        }, 2000);
+            if (this.shouldPollDashboard()) {
+                this.refreshAllStatus();
+            }
+        }, DASHBOARD_POLL_INTERVAL_MS);
         
         this.startTokenDataPolling();
-        this.loadGpuHistoryFromServer();
-        this.startGpuHistoryPolling();
     }
 
     stopPolling() {
@@ -228,14 +265,15 @@ export class SystemMonitor {
             this.pollingInterval = null;
         }
         this.stopTokenDataPolling();
-        this.stopGpuHistoryPolling();
     }
 
     startTokenDataPolling() {
         this.stopTokenDataPolling();
         this.tokenDataPollingInterval = setInterval(() => {
-            this.loadTokenUsageData();
-        }, 60000);
+            if (this.shouldPollDashboard()) {
+                this.loadTokenUsageData();
+            }
+        }, TOKEN_POLL_INTERVAL_MS);
     }
 
     stopTokenDataPolling() {
@@ -245,42 +283,38 @@ export class SystemMonitor {
         }
     }
 
-    startGpuHistoryPolling() {
-        this.stopGpuHistoryPolling();
-        this.gpuHistoryPollingInterval = setInterval(() => {
-            this.loadGpuHistoryFromServer();
-        }, 30000);
-    }
+    async refreshAllStatus({ force = false } = {}) {
+        if (!force && !this.shouldPollDashboard()) {
+            return;
+        }
 
-    stopGpuHistoryPolling() {
-        if (this.gpuHistoryPollingInterval) {
-            clearInterval(this.gpuHistoryPollingInterval);
-            this.gpuHistoryPollingInterval = null;
+        if (this.isRefreshing) {
+            return;
+        }
+
+        this.isRefreshing = true;
+        try {
+            await Promise.all([
+                this.updateSystemStatsFromServer(),
+                this.refreshPythonGpuStatus({ forceRefresh: force })
+            ]);
+            
+            this.ensureChartInitialized();
+            this.updateChart();
+            this.ensurePythonGpuChartInitialized();
+            this.updatePythonGpuChart();
+        } finally {
+            this.isRefreshing = false;
         }
     }
 
-    async refreshAllStatus() {
-        await Promise.all([
-            this.updateSystemStatsFromServer(),
-            this.refreshGpuStatus(),
-            this.refreshPythonGpuStatus()
-        ]);
-        
-        this.ensureChartInitialized();
-        this.updateChart();
-        this.ensurePythonGpuChartInitialized();
-        this.updatePythonGpuChart();
-        this.ensureGpuChartInitialized();
-        this.updateGpuChart();
-    }
-
-    async refreshPythonGpuStatus() {
+    async refreshPythonGpuStatus({ forceRefresh = false, forceSample = false } = {}) {
         const container = document.getElementById('pythonGpuConnectionStatus');
         if (!container) return;
 
         try {
             const { monitorCache } = await import('./monitor-cache.js');
-            const result = await monitorCache.getSummary();
+            const result = await monitorCache.getSummary(forceRefresh);
 
             if (!result || !result.success) {
                 throw new Error(result?.error || 'Failed to get monitor summary');
@@ -309,21 +343,15 @@ export class SystemMonitor {
             this.updatePythonGpuVisibility(true);
 
             if (this.pythonGpuConnected) {
-                const utilization = data.utilization || 0;
-                const memoryUtil = data.memory_utilization || 0;
-                const temperature = data.temperature || 0;
-
-                this.addToHistory(this.pythonGpuUtilizationHistory, utilization);
-                this.addToHistory(this.pythonGpuMemoryHistory, memoryUtil);
-                this.addToHistory(this.pythonGpuTempHistory, temperature);
+                this.appendPythonGpuHistoryPoint(data, { force: forceRefresh || forceSample });
             }
         } catch (error) {
             console.log('[SystemMonitor] Using fallback API:', error.message);
-            await this.refreshPythonGpuStatusFallback();
+            await this.refreshPythonGpuStatusFallback({ forceSample });
         }
     }
 
-    async refreshPythonGpuStatusFallback() {
+    async refreshPythonGpuStatusFallback({ forceSample = false } = {}) {
         const container = document.getElementById('pythonGpuConnectionStatus');
         if (!container) return;
 
@@ -355,13 +383,7 @@ export class SystemMonitor {
             this.updatePythonGpuVisibility(true);
 
             if (this.pythonGpuConnected) {
-                const utilization = data.utilization || 0;
-                const memoryUtil = data.memory_utilization || 0;
-                const temperature = data.temperature || 0;
-
-                this.addToHistory(this.pythonGpuUtilizationHistory, utilization);
-                this.addToHistory(this.pythonGpuMemoryHistory, memoryUtil);
-                this.addToHistory(this.pythonGpuTempHistory, temperature);
+                this.appendPythonGpuHistoryPoint(data, { force: forceSample });
             }
         } catch (error) {
             this.pythonGpuConnected = false;
@@ -689,10 +711,10 @@ export class SystemMonitor {
         this.addToHistory(this.memoryHistoryData, parseFloat(memoryInfo.usagePercent));
     }
 
-    addToHistory(history, value) {
+    addToHistory(history, value, maxPoints = this.maxDataPoints) {
         if (!isNaN(value)) {
             history.push(value);
-            if (history.length > this.maxDataPoints) {
+            if (history.length > maxPoints) {
                 history.shift();
             }
         }
@@ -860,35 +882,9 @@ export class SystemMonitor {
         }
     }
 
-    async loadGpuHistoryFromServer() {
+    async loadGpuHistoryFromServer(forceRefresh = false) {
         try {
-            const token = window.authManager ? window.authManager.getToken() : null;
-            const headers = {};
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-
-            const response = await fetch(`/api/python/gpu/history?count=1000&time_range=${this.currentPythonGpuTimeRange}`, {
-                method: 'GET',
-                headers,
-                timeout: 5000
-            });
-
-            if (!response.ok) {
-                console.log('[SystemMonitor] GPU history API not available');
-                return;
-            }
-
-            const data = await response.json();
-            
-            if (data.history && data.history.length > 0) {
-                this.pythonGpuUtilizationHistory = data.history.map(item => item.utilization || 0);
-                this.pythonGpuMemoryHistory = data.history.map(item => item.memory_utilization || 0);
-                this.pythonGpuTempHistory = data.history.map(item => item.temperature || 0);
-                this.pythonGpuHistoryTimestamp = Date.now();
-                this.updatePythonGpuChart();
-                console.log('[SystemMonitor] GPU history loaded from server:', this.pythonGpuUtilizationHistory.length, 'time_range:', this.currentPythonGpuTimeRange);
-            }
+            await this.refreshPythonGpuStatus({ forceRefresh, forceSample: true });
         } catch (error) {
             console.log('[SystemMonitor] Failed to load GPU history:', error);
         }
@@ -1289,7 +1285,9 @@ export class SystemMonitor {
         const value = dataset.data[lastIndex];
         if (value <= 0) return;
 
-        const x = padding.left + (chartWidth / (dataLength - 1)) * lastIndex;
+        const x = dataLength === 1
+            ? padding.left + chartWidth / 2
+            : padding.left + (chartWidth / (dataLength - 1)) * lastIndex;
         const y = padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight;
 
         ctx.beginPath();
@@ -1895,6 +1893,8 @@ export class SystemMonitor {
 
             const data = await response.json();
             this.currentModel = { name: modelName, ...data };
+            const { monitorCache } = await import('./monitor-cache.js');
+            monitorCache.invalidateCache();
             this.renderQuickSwitchPanel();
             this.showToast('模型切换成功', 'success');
         } catch (error) {

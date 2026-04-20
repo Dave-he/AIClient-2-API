@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
+from datetime import datetime
 from core.scheduler import Scheduler, _parse_memory_size
 from core.monitor import GPUMonitor
 from core.sys_ctl import SystemController
@@ -177,6 +178,14 @@ class TestScheduler:
     def test_release_request(self, scheduler):
         scheduler.acquire_request("gemma-4-31b")
         scheduler.release_request("gemma-4-31b")
+
+    def test_get_current_model_name_prefers_latest_selected_running_model(self, scheduler):
+        scheduler.running_models["gemma-4-31b"] = datetime(2026, 1, 1, 10, 0, 0)
+        scheduler.running_models["llama-3-8b"] = datetime(2026, 1, 1, 9, 0, 0)
+        scheduler.mark_model_selected("llama-3-8b")
+        scheduler.mark_model_selected("gemma-4-31b")
+
+        assert scheduler.get_current_model_name() == "gemma-4-31b"
 
     def test_get_active_requests(self, scheduler):
         scheduler.acquire_request("gemma-4-31b")

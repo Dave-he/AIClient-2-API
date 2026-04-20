@@ -546,10 +546,18 @@ async function getCurrentRunningModel() {
         const { monitorCache } = await import('./monitor-cache.js');
         const cachedData = monitorCache.getCachedData();
 
-        if (cachedData && cachedData.summary && cachedData.summary.models) {
-            const runningModels = cachedData.summary.models.filter(m => m.running);
-            if (runningModels.length > 0) {
-                return runningModels[0].name;
+        if (cachedData && cachedData.summary) {
+            if (cachedData.summary.running_model) {
+                return typeof cachedData.summary.running_model === 'string'
+                    ? cachedData.summary.running_model
+                    : cachedData.summary.running_model.name || null;
+            }
+
+            if (cachedData.summary.models) {
+                const runningModels = cachedData.summary.models.filter(m => m.running);
+                if (runningModels.length > 0) {
+                    return runningModels[0].name;
+                }
             }
         }
 

@@ -104,6 +104,11 @@ import {
 import { SystemMonitor } from './system-monitor.js';
 import { GPUMonitorModule } from './gpu-monitor.js';
 
+function isSectionVisible(sectionId) {
+    const activeSection = document.querySelector('.section.active');
+    return document.visibilityState === 'visible' && activeSection?.id === sectionId;
+}
+
 /**
  * 加载初始数据
  */
@@ -238,9 +243,6 @@ function initProviderSwitcher() {
     // 初始加载
     loadProviderList();
     
-    // 定期刷新提供商列表
-    setInterval(loadProviderList, REFRESH_INTERVALS.SYSTEM_INFO);
-    
     // 点击按钮时刷新列表
     providerSwitchBtn.addEventListener('click', () => {
         if (providerDropdown.classList.contains('show')) {
@@ -300,7 +302,9 @@ function initApp() {
     
     // 定期刷新系统信息
     setInterval(() => {
-        loadProviders();
+        if (isSectionVisible('dashboard') || isSectionVisible('providers')) {
+            loadProviders();
+        }
 
         if (providerStats.activeProviders > 0) {
             const stats = getProviderStats(providerStats);

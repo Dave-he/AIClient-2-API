@@ -25,6 +25,17 @@ const monitorSummaryCache = {
     ttl: 5000
 };
 
+function invalidateControllerCaches() {
+    gpuCache.data = null;
+    gpuCache.timestamp = 0;
+    queueCache.data = null;
+    queueCache.timestamp = 0;
+    modelsCache.data = null;
+    modelsCache.timestamp = 0;
+    monitorSummaryCache.data = null;
+    monitorSummaryCache.timestamp = 0;
+}
+
 function buildHeaders(req) {
     const headers = {};
     
@@ -176,6 +187,7 @@ export async function handleStartModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
         const data = await callPythonController(`/manage/models/${encodeURIComponent(modelName)}/start`, 'POST', null, headers);
+        invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
@@ -189,6 +201,7 @@ export async function handleStopModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
         const data = await callPythonController(`/manage/models/${encodeURIComponent(modelName)}/stop`, 'POST', null, headers);
+        invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
@@ -202,6 +215,7 @@ export async function handleSwitchModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
         const data = await callPythonController(`/manage/models/${encodeURIComponent(modelName)}/switch`, 'POST', null, headers);
+        invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
@@ -342,6 +356,7 @@ export async function handleSwitchAndTestModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
         const data = await callPythonController(`/v1/test/model/${encodeURIComponent(modelName)}/switch-and-test`, 'POST', null, headers);
+        invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
