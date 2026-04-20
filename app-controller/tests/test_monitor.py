@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import Mock, patch
 from core.monitor import GPUMonitor
 
+GPU_OUTPUT = "NVIDIA RTX 4090, 24564, 5000, 19564, 65, 30, 100, 450, 40, 2100, 10000"
+
 class TestGPUMonitor:
     @patch('subprocess.run')
     def test_check_nvidia_smi_available(self, mock_run):
@@ -18,7 +20,7 @@ class TestGPUMonitor:
     @patch('subprocess.run')
     def test_get_gpu_status_success(self, mock_run):
         mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = "NVIDIA RTX 4090, 24564, 5000, 19564, 65, 30"
+        mock_run.return_value.stdout = GPU_OUTPUT
         
         monitor = GPUMonitor()
         monitor._nvidia_smi_available = True
@@ -38,8 +40,7 @@ class TestGPUMonitor:
     @patch('subprocess.run')
     def test_get_gpu_status_multiple_gpus(self, mock_run):
         mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = """NVIDIA RTX 4090, 24564, 5000, 19564, 65, 30
-NVIDIA RTX 3090, 24564, 8000, 16564, 70, 40"""
+        mock_run.return_value.stdout = f"{GPU_OUTPUT}\nNVIDIA RTX 3090, 24564, 8000, 16564, 70, 40, 120, 350, 50, 1800, 9500"
         
         monitor = GPUMonitor()
         monitor._nvidia_smi_available = True
@@ -61,9 +62,25 @@ NVIDIA RTX 3090, 24564, 8000, 16564, 70, 40"""
         assert status is None
 
     @patch('subprocess.run')
+    def test_get_gpu_status_uses_cache(self, mock_run):
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = GPU_OUTPUT
+
+        monitor = GPUMonitor()
+        monitor._nvidia_smi_available = True
+        mock_run.reset_mock()
+
+        first = monitor.get_gpu_status()
+        second = monitor.get_gpu_status()
+
+        assert first is not None
+        assert second is not None
+        assert mock_run.call_count == 1
+
+    @patch('subprocess.run')
     def test_get_memory_usage(self, mock_run):
         mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = "NVIDIA RTX 4090, 24564, 5000, 19564, 65, 30"
+        mock_run.return_value.stdout = GPU_OUTPUT
         
         monitor = GPUMonitor()
         monitor._nvidia_smi_available = True
@@ -78,7 +95,7 @@ NVIDIA RTX 3090, 24564, 8000, 16564, 70, 40"""
     @patch('subprocess.run')
     def test_is_memory_available(self, mock_run):
         mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = "NVIDIA RTX 4090, 24564, 5000, 19564, 65, 30"
+        mock_run.return_value.stdout = GPU_OUTPUT
         
         monitor = GPUMonitor()
         monitor._nvidia_smi_available = True

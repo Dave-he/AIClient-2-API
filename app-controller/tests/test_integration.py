@@ -91,14 +91,14 @@ class TestIntegration:
                 assert data["status"] == "starting"
 
     def test_stop_model(self, client):
-        with patch('core.sys_ctl.SystemController.is_service_running') as mock_is_running:
+        with patch('core.scheduler.Scheduler.is_model_running') as mock_is_running:
             mock_is_running.return_value = True
-            
-            with patch('core.sys_ctl.SystemController.stop_service') as mock_stop:
+
+            with patch('core.scheduler.Scheduler.stop_model', new_callable=AsyncMock) as mock_stop:
                 mock_stop.return_value = True
-                
+
                 response = client.post("/manage/models/gemma-4-31b/stop")
-                
+
                 assert response.status_code == 200
                 data = response.json()
                 assert data["status"] == "stopped"

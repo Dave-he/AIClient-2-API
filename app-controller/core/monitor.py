@@ -9,13 +9,18 @@ from typing import Dict, Optional, List
 class GPUMonitor:
     def __init__(self):
         self._last_flush_time = datetime.now()
-        self._flush_interval = 300  # 5分钟
-        self._memory_strategy = "balanced"  # conservative, balanced, aggressive
+        self._flush_interval = 300
+        self._memory_strategy = "balanced"
         self._fragmentation_history: List[float] = []
         self._nvidia_smi_available = self._check_nvidia_smi()
         self._redis_client = None
         self._history_enabled = True
         self._max_history_days = 30
+        self._status_cache: Optional[Dict] = None
+        self._status_cache_time: Optional[datetime] = None
+        self._status_cache_ttl = timedelta(seconds=1)
+        self._last_history_cleanup = datetime.min
+        self._history_cleanup_interval = timedelta(minutes=5)
     
     def _check_nvidia_smi(self) -> bool:
         try:
@@ -28,8 +33,47 @@ class GPUMonitor:
         except FileNotFoundError:
             return False
     
+    def _cache_valid(self) -> bool:
+        return (
+            self._status_cache is not None
+            and self._status_cache_time is not None
+            and datetime.now() - self._status_cache_time < self._status_cache_ttl
+        )
+    
+    def _parse_gpu_line(self, line: str) -> Optional[Dict]:
+        parts = [part.strip() for part in line.split(',')]
+        if len(parts) < 6:
+            return None
+        total_mb = int(parts[1])
+        used_mb = int(parts[2])
+        free_mb = int(parts[3])
+        temperature = int(parts[4])
+        utilization = int(parts[5])
+        power_draw = float(parts[6]) if len(parts) > 6 and parts[6] else 0
+        power_limit = float(parts[7]) if len(parts) > 7 and parts[7] else 0
+        fan_speed = int(parts[8]) if len(parts) > 8 and parts[8].isdigit() else 0
+        clock_sm = int(parts[9]) if len(parts) > 9 and parts[9].isdigit() else 0
+        clock_mem = int(parts[10]) if len(parts) > 10 and parts[10].isdigit() else 0
+        return {
+            "name": parts[0],
+            "total_memory": total_mb * 1024 ** 2,
+            "used_memory": used_mb * 1024 ** 2,
+            "available_memory": free_mb * 1024 ** 2,
+            "temperature": temperature,
+            "utilization": utilization,
+            "power_draw": int(power_draw),
+            "power_limit": int(power_limit),
+            "power_percent": int(power_draw / power_limit * 100) if power_limit > 0 else 0,
+            "fan_speed": fan_speed,
+            "clock_sm": clock_sm,
+            "clock_mem": clock_mem,
+            "memory_utilization": int(used_mb / total_mb * 100) if total_mb > 0 else 0
+        }
+    
     def get_gpu_status(self) -> Optional[Dict]:
-        if not self._check_nvidia_smi():
+        if self._cache_valid():
+            return self._status_cache
+        if not self._nvidia_smi_available:
             return None
         
         try:
@@ -46,41 +90,15 @@ class GPUMonitor:
             if not output:
                 return None
             
-            lines = output.split('\n')
             gpus = []
-            
-            for line in lines:
-                parts = line.split(',')
-                if len(parts) >= 11:
-                    total_mb = int(parts[1].strip())
-                    used_mb = int(parts[2].strip())
-                    free_mb = int(parts[3].strip())
-                    power_draw = float(parts[6].strip())
-                    power_limit = float(parts[7].strip())
-                    fan_speed = int(parts[8].strip()) if parts[8].strip().isdigit() else 0
-                    clock_sm = int(parts[9].strip()) if parts[9].strip().isdigit() else 0
-                    clock_mem = int(parts[10].strip()) if parts[10].strip().isdigit() else 0
-                    
-                    gpu_info = {
-                        "name": parts[0].strip(),
-                        "total_memory": total_mb * 1024 ** 2,
-                        "used_memory": used_mb * 1024 ** 2,
-                        "available_memory": free_mb * 1024 ** 2,
-                        "temperature": int(parts[4].strip()),
-                        "utilization": int(parts[5].strip()),
-                        "power_draw": int(power_draw),
-                        "power_limit": int(power_limit),
-                        "power_percent": int(power_draw / power_limit * 100) if power_limit > 0 else 0,
-                        "fan_speed": fan_speed,
-                        "clock_sm": clock_sm,
-                        "clock_mem": clock_mem,
-                        "memory_utilization": int(used_mb / total_mb * 100) if total_mb > 0 else 0
-                    }
+            for line in output.split('\n'):
+                gpu_info = self._parse_gpu_line(line)
+                if gpu_info:
                     gpus.append(gpu_info)
             
             if gpus:
                 primary_gpu = gpus[0]
-                return {
+                status = {
                     "status": "available",
                     "gpu_count": len(gpus),
                     "name": primary_gpu["name"],
@@ -99,9 +117,12 @@ class GPUMonitor:
                     "primary": primary_gpu,
                     "all_gpus": gpus
                 }
+                self._status_cache = status
+                self._status_cache_time = datetime.now()
+                return status
             return None
         
-        except Exception as e:
+        except Exception:
             return None
     
     def get_memory_usage(self) -> Optional[Dict[str, int]]:
@@ -121,7 +142,6 @@ class GPUMonitor:
         return False
     
     def detect_fragmentation(self) -> float:
-        """检测显存碎片率"""
         status = self.get_gpu_status()
         if not status:
             return 0.0
@@ -138,23 +158,19 @@ class GPUMonitor:
         return fragmentation
     
     def get_average_fragmentation(self) -> float:
-        """获取平均碎片率"""
         if not self._fragmentation_history:
             return 0.0
         return sum(self._fragmentation_history) / len(self._fragmentation_history)
     
     def set_memory_strategy(self, strategy: str):
-        """设置显存策略"""
         valid_strategies = ["conservative", "balanced", "aggressive"]
         if strategy in valid_strategies:
             self._memory_strategy = strategy
     
     def get_memory_strategy(self) -> str:
-        """获取当前显存策略"""
         return self._memory_strategy
     
     def get_recommended_utilization(self) -> float:
-        """根据策略返回推荐的显存利用率"""
         strategies = {
             "conservative": 0.80,
             "balanced": 0.90,
@@ -177,15 +193,13 @@ class GPUMonitor:
         return False
     
     async def _flush_vllm_cache(self, port: int):
-        """刷新vLLM缓存"""
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 await client.post(f"http://localhost:{port}/v1/cache/flush")
-        except Exception as e:
+        except Exception:
             pass
     
     async def optimize_memory_for_model(self, required_memory: int, vllm_port: int = 8000) -> bool:
-        """为加载模型优化显存"""
         mem_info = self.get_memory_usage()
         if not mem_info:
             return False
@@ -197,11 +211,12 @@ class GPUMonitor:
         await self._flush_vllm_cache(vllm_port)
         await asyncio.sleep(2)
         
+        self._status_cache = None
+        self._status_cache_time = None
         mem_info = self.get_memory_usage()
         return mem_info and mem_info.get("available", 0) >= required_memory
     
     def get_memory_optimization_status(self) -> Dict:
-        """获取显存优化状态"""
         return {
             "strategy": self._memory_strategy,
             "fragmentation": self.detect_fragmentation(),
@@ -212,17 +227,14 @@ class GPUMonitor:
         }
     
     def set_redis_client(self, redis_client):
-        """设置Redis客户端"""
         self._redis_client = redis_client
     
     def _calculate_max_history_points(self, interval_seconds: int = 5) -> int:
-        """根据最大保留天数计算最大历史记录数"""
         seconds_per_day = 24 * 60 * 60
         total_seconds = self._max_history_days * seconds_per_day
         return int(total_seconds / interval_seconds)
     
     def save_gpu_history(self, max_points: Optional[int] = None):
-        """保存GPU状态到Redis历史记录，默认保留30天"""
         if not self._history_enabled:
             return False
         
@@ -253,14 +265,15 @@ class GPUMonitor:
             self._redis_client.lpush("gpu:history", json.dumps(history_entry))
             self._redis_client.ltrim("gpu:history", 0, max_points - 1)
             
-            self._clean_old_history()
+            if datetime.now() - self._last_history_cleanup >= self._history_cleanup_interval:
+                self._clean_old_history()
+                self._last_history_cleanup = datetime.now()
             
             return True
-        except Exception as e:
+        except Exception:
             return False
     
     def _clean_old_history(self):
-        """清理超过保留天数的历史记录"""
         try:
             history_data = self._redis_client.lrange("gpu:history", 0, -1)
             if not history_data:
@@ -286,32 +299,19 @@ class GPUMonitor:
             pass
     
     def set_history_enabled(self, enabled: bool):
-        """设置是否启用历史记录"""
         self._history_enabled = enabled
     
     def get_history_enabled(self) -> bool:
-        """获取历史记录是否启用"""
         return self._history_enabled
     
     def set_max_history_days(self, days: int):
-        """设置最大保留天数"""
         if days > 0:
             self._max_history_days = days
     
     def get_max_history_days(self) -> int:
-        """获取最大保留天数"""
         return self._max_history_days
     
     def get_gpu_history(self, count: int = 60, time_range: str = None) -> List[Dict]:
-        """获取GPU历史记录
-        
-        Args:
-            count: 最大记录数
-            time_range: 时间范围 ('hour', 'day', 'week', None)
-                       hour: 最近1小时 (5秒间隔，约720条)
-                       day: 最近1天 (5秒间隔，约17280条，但实际限制为1000条)
-                       week: 最近1周 (5秒间隔，约120960条，但实际限制为1000条)
-        """
         if self._redis_client is None:
             return []
         
@@ -323,11 +323,7 @@ class GPUMonitor:
                 None: count
             }
             actual_count = min(count, max_counts.get(time_range, count))
-            
-            if time_range and time_range != 'all':
-                history_data = self._redis_client.lrange("gpu:history", 0, actual_count - 1)
-            else:
-                history_data = self._redis_client.lrange("gpu:history", 0, actual_count - 1)
+            history_data = self._redis_client.lrange("gpu:history", 0, actual_count - 1)
             
             history = []
             for item in history_data:
@@ -336,11 +332,10 @@ class GPUMonitor:
                 except:
                     pass
             return history[::-1]
-        except Exception as e:
+        except Exception:
             return []
     
     def get_gpu_summary(self) -> Dict:
-        """获取GPU状态摘要，包含当前状态和历史数据"""
         status = self.get_gpu_status()
         history = self.get_gpu_history(60)
         

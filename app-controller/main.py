@@ -57,7 +57,7 @@ config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
 config_watcher = ConfigWatcher(config_path)
 
 # 加载配置以获取日志路径
-config = config_watcher.load_config()
+config = config_watcher.load_config() or {}
 log_dir = config.get('settings', {}).get('logging', {}).get('log_dir', None)
 
 # 初始化日志器
@@ -145,7 +145,7 @@ def on_config_changed(new_config: Dict):
     scheduler.config = new_config
 
 config_watcher.register_callback(on_config_changed)
-config_watcher.start_watching()
+_background_tasks: List[asyncio.Task] = []
 
 @app.middleware("http")
 async def request_tracking_middleware(request: Request, call_next):
@@ -212,14 +212,21 @@ async def startup_event():
         gpu_monitor.set_redis_client(redis_client)
     else:
         logger.warning("Failed to connect to Redis")
-    
-    asyncio.create_task(broadcast_status_loop())
-    asyncio.create_task(save_history_loop())
+
+    config_watcher.start_watching()
+    _background_tasks.clear()
+    _background_tasks.append(asyncio.create_task(broadcast_status_loop()))
+    _background_tasks.append(asyncio.create_task(save_history_loop()))
     structured_logger.info("AI Controller service started", action="startup")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     config_watcher.stop_watching()
+    for task in _background_tasks:
+        task.cancel()
+    if _background_tasks:
+        await asyncio.gather(*_background_tasks, return_exceptions=True)
+    _background_tasks.clear()
     structured_logger.info("AI Controller service stopped", action="shutdown")
 
 class ChatCompletionRequest(BaseModel):
