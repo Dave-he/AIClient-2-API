@@ -942,6 +942,7 @@ async function handleGetUsageStats(req, res) {
             promptTokens: data.promptTokens || 0,
             completionTokens: data.completionTokens || 0,
             totalTokens: data.totalTokens || 0,
+            total: data.totalTokens || 0,
             cachedTokens: data.cachedTokens || 0
         }));
 
