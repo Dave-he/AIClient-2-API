@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import http from 'http';
+import { getPluginManager } from '../core/plugin-manager.js';
+import logger from '../utils/logger.js';
 
 // Import UI modules
 import * as auth from '../ui-modules/auth.js';
@@ -62,18 +64,39 @@ export async function serveVueFiles(pathParam, res) {
  * @param {Object} [currentConfig] - The current configuration object (optional)
  */
 export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
+    const pluginManager = getPluginManager();
     const staticPathPrefixes = ['/static/', '/assets/', '/app/', '/components/'];
     const isStaticPath = staticPathPrefixes.some(prefix => pathParam.startsWith(prefix)) ||
-                         pathParam === '/' || pathParam === '/index.html' || pathParam === '/login.html' || pathParam === '/favicon.ico';
+                         pathParam === '/' || pathParam === '/index.html' || pathParam === '/login.html' || pathParam === '/favicon.ico' ||
+                         pluginManager.isPluginStaticPath(pathParam);
 
     if (!isStaticPath) {
         return false;
     }
 
     let filePath;
+    const staticContentTypes = {
+        '.html': 'text/html',
+        '.css': 'text/css',
+        '.js': 'application/javascript',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.ico': 'image/x-icon',
+        '.svg': 'image/svg+xml'
+    };
 
     if (pathParam === '/' || pathParam === '/index.html' || pathParam === '/login.html') {
         filePath = path.join(process.cwd(), 'static', pathParam === '/' ? 'index.html' : pathParam);
+    } else if (pluginManager.isPluginStaticPath(pathParam)) {
+        const plugin = pluginManager.getPluginByStaticPath(pathParam);
+        if (plugin && plugin._enabled === false) {
+            res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>插件未启用</title></head><body><h1>插件未启用：${plugin.name}</h1><p>请先在插件管理中启用该插件。</p></body></html>`);
+            return true;
+        }
+
+        const strippedPath = pathParam.replace(/^\//, '');
+        filePath = path.join(process.cwd(), 'static', strippedPath);
     } else {
         let strippedPath = pathParam;
         if (strippedPath.startsWith('/static/')) {
@@ -90,15 +113,7 @@ export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
 
     if (existsSync(filePath)) {
         const ext = path.extname(filePath);
-        const contentType = {
-            '.html': 'text/html',
-            '.css': 'text/css',
-            '.js': 'application/javascript',
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.ico': 'image/x-icon',
-            '.svg': 'image/svg+xml'
-        }[ext] || 'text/plain';
+        const contentType = staticContentTypes[ext] || 'text/plain';
 
         let content = readFileSync(filePath);
 
@@ -198,6 +213,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
     // Get system monitor data
     if (method === 'GET' && pathParam === '/api/system/monitor') {
         return await systemApi.handleGetSystemMonitor(req, res);
+    }
+
+    // Browser-friendly GPU status endpoint used by both legacy and Vue UIs.
+    if (method === 'GET' && pathParam === '/api/gpu/status') {
+        return await handleGetBrowserGpuStatus(req, res);
     }
 
     // Get provider pools summary
@@ -407,8 +427,9 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await usageApi.handleGetProviderUsage(req, res, currentConfig, providerPoolManager, providerType);
     }
 
-    // Get aggregate usage stats (totalRequests, totalTokens, etc.) from model-usage-stats
-    if (method === 'GET' && pathParam === '/api/usage/stats') {
+    // Get aggregate usage stats (totalRequests, totalTokens, trend points, etc.) from model-usage-stats.
+    // /api/token-stats is kept as a lightweight compatibility alias for dashboard widgets.
+    if (method === 'GET' && (pathParam === '/api/usage/stats' || pathParam === '/api/token-stats')) {
         return await handleGetUsageStats(req, res);
     }
 
@@ -721,67 +742,175 @@ async function handlePythonGpuStatus(req, res, currentConfig) {
     }
 }
 
+function toNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+}
+
+function bytesToGB(bytes) {
+    const value = toNumber(bytes);
+    if (!value) return 0;
+    return value / (1024 ** 3);
+}
+
+function formatGB(bytes) {
+    const gb = bytesToGB(bytes);
+    if (!gb) return '--';
+    return `${gb.toFixed(1)}GB`;
+}
+
+function normalizeGpuDevice(device = {}) {
+    const totalMemory = toNumber(device.total_memory ?? device.totalMemory ?? device.memory_total);
+    const usedMemory = toNumber(device.used_memory ?? device.usedMemory ?? device.memory_used);
+    const availableMemory = toNumber(device.available_memory ?? device.memoryAvailable ?? device.free_memory ?? Math.max(totalMemory - usedMemory, 0));
+    const memoryUsage = device.memory_utilization ?? device.memoryUsage ?? (totalMemory > 0 ? (usedMemory / totalMemory) * 100 : 0);
+
+    return {
+        name: device.name || device.model || 'GPU',
+        status: device.status || (device.status === 'unavailable' ? 'unavailable' : 'healthy'),
+        memoryUsage: Math.round(toNumber(memoryUsage)),
+        memoryUsed: device.memoryUsed || formatGB(usedMemory),
+        memoryTotal: device.memoryTotal || formatGB(totalMemory),
+        memoryAvailable: device.memoryAvailable || formatGB(availableMemory),
+        utilization: Math.round(toNumber(device.utilization ?? device.util ?? device.gpu_utilization)),
+        temperature: toNumber(device.temperature ?? device.temp),
+        power: device.power ?? device.power_draw ?? 0
+    };
+}
+
+function normalizeGpuDevices(data = {}) {
+    if (Array.isArray(data.devices)) {
+        return data.devices.map(normalizeGpuDevice);
+    }
+
+    if (Array.isArray(data.gpus)) {
+        return data.gpus.map(normalizeGpuDevice);
+    }
+
+    if (data.primary) {
+        return [normalizeGpuDevice(data.primary)];
+    }
+
+    if (data.name || data.status === 'available' || data.utilization !== undefined || data.total_memory !== undefined) {
+        return [normalizeGpuDevice(data)];
+    }
+
+    return [];
+}
+
+async function handleGetBrowserGpuStatus(req, res) {
+    try {
+        const gpuData = await pythonControllerApi.getGPUStatusData(req);
+        const devices = normalizeGpuDevices(gpuData);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: true,
+            devices,
+            timestamp: new Date().toISOString()
+        }));
+        return true;
+    } catch (error) {
+        logger.warn('[UI API] Failed to get browser GPU status:', error.message);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: false,
+            devices: [],
+            error: { message: error.message },
+            timestamp: new Date().toISOString()
+        }));
+        return true;
+    }
+}
+
+function addUsage(target, data = {}) {
+    target.requestCount += data.requestCount || 0;
+    target.promptTokens += data.promptTokens || 0;
+    target.completionTokens += data.completionTokens || 0;
+    target.totalTokens += data.totalTokens || 0;
+    target.cachedTokens += data.cachedTokens || 0;
+}
+
+function formatTrendLabel(date, range) {
+    if (range === 'hour') {
+        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+
+    if (range === 'day' || range === 'today') {
+        return `${String(date.getHours()).padStart(2, '0')}:00`;
+    }
+
+    return date.toISOString().slice(0, 10);
+}
+
+function getTrendBuckets(stats, range) {
+    const now = new Date();
+    const buckets = [];
+
+    if (range === 'hour') {
+        for (let i = 59; i >= 0; i--) {
+            const date = new Date(now.getTime() - i * 60 * 1000);
+            const key = date.toISOString().slice(0, 16);
+            buckets.push({ key, label: formatTrendLabel(date, range), data: stats.minuteData?.[key] || {} });
+        }
+        return buckets;
+    }
+
+    if (range === 'day' || range === 'today') {
+        for (let i = 23; i >= 0; i--) {
+            const date = new Date(now.getTime() - i * 60 * 60 * 1000);
+            const key = date.toISOString().slice(0, 13);
+            buckets.push({ key, label: formatTrendLabel(date, range), data: stats.hourly?.[key] || {} });
+        }
+        return buckets;
+    }
+
+    const dayCount = range === 'week' ? 7 : range === 'month' ? 31 : range === 'year' ? 12 : 7;
+
+    if (range === 'year') {
+        for (let i = 11; i >= 0; i--) {
+            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const monthKey = date.toISOString().slice(0, 7);
+            const data = { requestCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, cachedTokens: 0 };
+            for (const [day, dayData] of Object.entries(stats.daily || {})) {
+                if (day.startsWith(monthKey)) {
+                    addUsage(data, dayData);
+                }
+            }
+            buckets.push({ key: monthKey, label: monthKey, data });
+        }
+        return buckets;
+    }
+
+    for (let i = dayCount - 1; i >= 0; i--) {
+        const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        const key = date.toISOString().slice(0, 10);
+        buckets.push({ key, label: formatTrendLabel(date, range), data: stats.daily?.[key] || {} });
+    }
+
+    return buckets;
+}
+
+function aggregateBuckets(buckets) {
+    return buckets.reduce((acc, bucket) => {
+        addUsage(acc, bucket.data);
+        return acc;
+    }, { requestCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, cachedTokens: 0 });
+}
+
 async function handleGetUsageStats(req, res) {
     try {
         const url = new URL(req.url, `http://${req.headers.host}`);
         const range = url.searchParams.get('range') || 'day';
 
         const stats = await getModelUsageStats();
+        const trendBuckets = getTrendBuckets(stats, range);
+        const aggregated = aggregateBuckets(trendBuckets);
 
-        const now = new Date();
-        let startTime;
-        switch (range) {
-            case 'today':
-                startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                break;
-            case 'week':
-                startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                break;
-            case 'month':
-                startTime = new Date(now.getFullYear(), now.getMonth(), 1);
-                break;
-            case 'year':
-                startTime = new Date(now.getFullYear(), 0, 1);
-                break;
-            default:
-                startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        }
-        const startKey = startTime.toISOString().slice(0, 10);
-
-        let filteredStats = stats;
-        let hourlyData = [];
-        if (stats.daily) {
-            const dailyEntries = Object.entries(stats.daily)
-                .filter(([date]) => date >= startKey)
-                .sort(([a], [b]) => a.localeCompare(b));
-
-            const aggregated = dailyEntries.reduce((acc, [, data]) => {
-                acc.requestCount += data.requestCount || 0;
-                acc.promptTokens += data.promptTokens || 0;
-                acc.completionTokens += data.completionTokens || 0;
-                acc.totalTokens += data.totalTokens || 0;
-                acc.cachedTokens += data.cachedTokens || 0;
-                return acc;
-            }, { requestCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, cachedTokens: 0 });
-
-            filteredStats = { ...stats, summary: aggregated };
-        }
-
-        if (stats.hourly) {
-            const hourStartKey = startKey + 'T';
-            const hourEntries = Object.entries(stats.hourly)
-                .filter(([hour]) => hour >= hourStartKey)
-                .sort(([a], [b]) => a.localeCompare(b));
-            hourlyData = hourEntries.map(([hour, data]) => ({
-                hour: hour,
-                tokens: data.totalTokens || 0
-            }));
-        }
-
-        const totalRequests = filteredStats.summary?.requestCount || 0;
-        const totalTokens = filteredStats.summary?.totalTokens || 0;
-        const inputTokens = filteredStats.summary?.promptTokens || 0;
-        const outputTokens = filteredStats.summary?.completionTokens || 0;
+        const totalRequests = aggregated.requestCount || 0;
+        const totalTokens = aggregated.totalTokens || 0;
+        const inputTokens = aggregated.promptTokens || 0;
+        const outputTokens = aggregated.completionTokens || 0;
 
         const topModels = [];
         if (stats.providers) {
@@ -806,15 +935,40 @@ async function handleGetUsageStats(req, res) {
             tokens: m.tokens
         }));
 
+        const trend = trendBuckets.map(({ key, label, data }) => ({
+            key,
+            label,
+            requestCount: data.requestCount || 0,
+            promptTokens: data.promptTokens || 0,
+            completionTokens: data.completionTokens || 0,
+            totalTokens: data.totalTokens || 0,
+            cachedTokens: data.cachedTokens || 0
+        }));
+
+        const hourlyData = trend.map(point => ({
+            hour: point.key,
+            label: point.label,
+            tokens: point.totalTokens,
+            promptTokens: point.promptTokens,
+            completionTokens: point.completionTokens,
+            totalTokens: point.totalTokens,
+            requests: point.requestCount
+        }));
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             totalRequests,
             totalTokens,
+            total: totalTokens,
             inputTokens,
+            input: inputTokens,
             outputTokens,
+            output: outputTokens,
             cost: 0,
             topModels: top5Models,
             hourlyData,
+            trend,
+            history: trend,
             modelDistribution,
             range
         }));

@@ -140,7 +140,8 @@ export function createRequestHandler(config, providerPoolManager) {
                 // 只提供static目录下的旧界面静态文件
                 if (path === '/' || path === '/index.html' || path === '/login.html' ||
                     path.startsWith('/static/') || path.startsWith('/app/') ||
-                    path.startsWith('/components/') || path.startsWith('/assets/') || path === '/favicon.ico') {
+                    path.startsWith('/components/') || path.startsWith('/assets/') || path === '/favicon.ico' ||
+                    pluginManager.isPluginStaticPath(path)) {
                     const served = await serveStaticFiles(path, res, currentConfig);
                     if (served) return;
                 }

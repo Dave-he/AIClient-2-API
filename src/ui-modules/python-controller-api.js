@@ -70,6 +70,19 @@ async function callPythonController(endpoint, method = 'GET', body = null, heade
     }
 }
 
+export async function getGPUStatusData(req) {
+    const now = Date.now();
+    if (gpuCache.data && (now - gpuCache.timestamp) < gpuCache.ttl) {
+        return gpuCache.data;
+    }
+
+    const headers = buildHeaders(req);
+    const data = await callPythonController('/manage/gpu', 'GET', null, headers);
+    gpuCache.data = data;
+    gpuCache.timestamp = now;
+    return data;
+}
+
 export async function handleGetVLLMModels(req, res) {
     try {
         const headers = buildHeaders(req);
@@ -200,18 +213,9 @@ export async function handleSwitchModel(req, res, modelName) {
 
 export async function handleGetGPUStatus(req, res) {
     try {
-        const now = Date.now();
-        if (gpuCache.data && (now - gpuCache.timestamp) < gpuCache.ttl) {
-            res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
-            res.end(JSON.stringify({ success: true, ...gpuCache.data }));
-            return true;
-        }
-
-        const headers = buildHeaders(req);
-        const data = await callPythonController('/manage/gpu', 'GET', null, headers);
-        gpuCache.data = data;
-        gpuCache.timestamp = now;
-        res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'MISS' });
+        const hadCache = gpuCache.data && (Date.now() - gpuCache.timestamp) < gpuCache.ttl;
+        const data = await getGPUStatusData(req);
+        res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': hadCache ? 'HIT' : 'MISS' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
