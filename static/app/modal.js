@@ -3,6 +3,7 @@
 import { escapeHtml, showToast, getFieldLabel, getProviderTypeFields } from './utils.js';
 import { handleProviderPasswordToggle } from './event-handlers.js';
 import { t } from './i18n.js';
+import { refreshModels } from './models-manager.js';
 
 const MANAGED_MODEL_LIST_PROVIDERS = new Set(['openai-custom', 'openaiResponses-custom', 'claude-custom']);
 
@@ -2446,6 +2447,8 @@ async function switchModel(modelName) {
             if (window.providerManager?.loadProviders) {
                 window.providerManager.loadProviders();
             }
+            // 刷新模型列表缓存，确保模型列表与新切换的模型同步
+            await refreshModels();
         } else {
             throw new Error(data.error?.message || '切换失败');
         }
