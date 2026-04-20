@@ -1,7 +1,7 @@
 // 提供商管理功能模块
 
 import { providerStats, updateProviderStats } from './constants.js';
-import { showToast, formatUptime, getProviderConfigs, getBaseProviderConfigs } from './utils.js';
+import { showToast, formatUptime, getProviderConfigs, getBaseProviderConfigs, getCurrentRunningModel } from './utils.js';
 import { fileUploadHandler } from './file-upload.js';
 import { t, getCurrentLanguage } from './i18n.js';
 import { renderRoutingExamples } from './routing-examples.js';
@@ -557,9 +557,18 @@ function renderProviderStatusOverview(providers, configMap, sortedProviderTypes)
     panel.style.display = 'block';
     grid.innerHTML = '';
 
-    validProviderTypes.forEach(type => {
+    validProviderTypes.forEach(async (type) => {
         const accounts = providers[type];
         const displayName = configMap[type]?.name || type;
+        
+        let currentModelInfo = '';
+        if (type === 'local-model') {
+            const currentModel = await getCurrentRunningModel();
+            if (currentModel) {
+                currentModelInfo = `<span class="current-model-badge" style="font-size: 0.7rem; background: var(--success-color); color: white; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">${currentModel}</span>`;
+            }
+        }
+        
         const card = document.createElement('div');
         card.className = 'provider-status-card';
         card.style.cursor = 'pointer';
@@ -583,6 +592,7 @@ function renderProviderStatusOverview(providers, configMap, sortedProviderTypes)
         card.innerHTML = `
             <div class="provider-info">
                 <span class="provider-name" title="${displayName}">${displayName}</span>
+                ${currentModelInfo}
                 <span class="provider-count" style="font-size: 0.75rem; color: var(--text-secondary);">${healthyCount}/${totalCount}</span>
             </div>
             

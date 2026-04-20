@@ -310,7 +310,7 @@ export const requestConfig = {
   enableDeduplication: true,
   defaultCacheDuration: CACHE_DURATION,
   cacheableMethods: ['get'],
-  excludedPaths: ['/api/system/monitor', '/api/python-gpu/status', '/api/python/gpu/status'],
+  excludedPaths: [],
   maxCacheSize: MAX_CACHE_SIZE
 };
 

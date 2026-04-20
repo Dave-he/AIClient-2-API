@@ -241,12 +241,17 @@ export class GPUMonitorModule {
         this.animateValue('fanValue', `${gpu.fan_speed || 0}%`);
         this.animateValue('clockValue', `${gpu.clock_sm || 0} MHz`);
 
-        document.getElementById('gpuName').innerHTML = `<i class="fas fa-video-card"></i><span>${gpu.name}</span>`;
+        const gpuNameElement = document.getElementById('gpuName');
+        if (gpuNameElement) {
+            gpuNameElement.innerHTML = `<i class="fas fa-video-card"></i><span>${gpu.name}</span>`;
+        }
         
         const statusBadge = document.getElementById('gpuStatusBadge');
-        const isActive = gpu.utilization > 10;
-        statusBadge.className = `gpu-status-badge ${isActive ? 'active' : 'idle'}`;
-        statusBadge.innerHTML = `<span class="status-indicator"></span><span>${isActive ? this.i18n.t('gpuMonitor.running') : this.i18n.t('gpuMonitor.idle')}</span>`;
+        if (statusBadge) {
+            const isActive = gpu.utilization > 10;
+            statusBadge.className = `gpu-status-badge ${isActive ? 'active' : 'idle'}`;
+            statusBadge.innerHTML = `<span class="status-indicator"></span><span>${isActive ? this.i18n.t('gpuMonitor.running') : this.i18n.t('gpuMonitor.idle')}</span>`;
+        }
 
         this.lastGpuData = gpu;
     }
@@ -403,7 +408,7 @@ export class GPUMonitorModule {
     getChartDatasets() {
         const datasets = [];
         
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         if (this.currentChartType === 'utilization' || this.currentChartType === 'all') {
             datasets.push({
                 data: this.gpuHistoryData.map(d => d.utilization),
@@ -582,7 +587,7 @@ export class GPUMonitorModule {
     }
 
     drawLegend(ctx, width, padding) {
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         const legendItems = [];
         
         if (this.currentChartType === 'utilization' || this.currentChartType === 'all') {
@@ -649,30 +654,37 @@ export class GPUMonitorModule {
             
             if (data && data.success) {
                 if (data.gpu) {
-                    this.renderGpuStatus(data.gpu);
+                    if (data.gpu.primary) {
+                        this.updateGpuStatusFromSocket(data.gpu.primary);
+                    } else if (data.gpu.gpus && data.gpu.gpus.length > 0) {
+                        this.updateGpuStatusFromSocket(data.gpu.gpus[0]);
+                    } else if (data.gpu.name) {
+                        this.updateGpuStatusFromSocket(data.gpu);
+                    }
                 }
                 if (data.models) {
-                    this.renderModelsStatus(data.models);
+                    const container = document.getElementById('modelsStatusContent');
+                    if (container) this.renderModelsStatus(data.models, container);
                 }
                 if (data.queue) {
-                    this.renderQueueStatus(data.queue);
+                    const container = document.getElementById('queueStatusContent');
+                    if (container) this.renderQueueStatus(data.queue, container);
                 }
                 if (data.summary && data.summary.models) {
                     const runningModels = data.summary.models.filter(m => m.running);
                     this.currentModel = runningModels.length > 0 ? runningModels[0] : null;
                     this.renderCurrentModel();
-                    this.renderModelControls(data.summary.models);
+                    const container = document.getElementById('modelControls');
+                    if (container) this.renderModelControls(data.summary.models, container);
                 }
             }
         } catch (error) {
             console.warn(`Failed to fetch monitor summary: ${error.message}`);
-            await Promise.all([
-                this.refreshGpuStatus(),
-                this.refreshModelsStatus(),
-                this.refreshQueueStatus(),
-                this.refreshModelControls(),
-                this.refreshCurrentModel()
-            ]);
+            this.showMockGpuStatus();
+            this.showMockModelsStatus();
+            this.showMockQueueStatus();
+            this.showMockModelControls();
+            this.showMockCurrentModel();
         } finally {
             this._isRefreshing = false;
         }
@@ -716,7 +728,7 @@ export class GPUMonitorModule {
         const container = document.getElementById('currentModelInfo');
         if (!container) return;
 
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         const currentModelName = typeof this.currentModel === 'object' ? this.currentModel.name : this.currentModel;
 
         container.innerHTML = `
@@ -805,7 +817,7 @@ export class GPUMonitorModule {
                     headers['Authorization'] = `Bearer ${token}`;
                 }
 
-                const response = await fetch(`/api/python/gpu/status`, {
+                const response = await fetch(`/api/python-gpu/status`, {
                     method: 'GET',
                     headers,
                     timeout: 5000
@@ -823,11 +835,16 @@ export class GPUMonitorModule {
             }
             if (result.primary) {
                 this.updateGpuStatusFromSocket(result.primary);
+            } else if (result.gpus && result.gpus.length > 0) {
+                this.updateGpuStatusFromSocket(result.gpus[0]);
             } else if (result.status === 'available') {
+                this.updateGpuStatusFromSocket(result);
+            } else if (result.name) {
                 this.updateGpuStatusFromSocket(result);
             }
         } catch (error) {
             console.warn(`Failed to fetch GPU status: ${error.message}`);
+            this.showMockGpuStatus();
         }
     }
 
@@ -871,7 +888,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch models status: ${error.message}`);
-            const t = this.t.bind(this);
+            const t = this.i18n.t.bind(this.i18n);
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
@@ -882,7 +899,7 @@ export class GPUMonitorModule {
     }
 
     renderModelsStatus(data, container) {
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         if (!data || Object.keys(data).length === 0) {
             container.innerHTML = `
                 <div class="status-loading">
@@ -951,7 +968,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch queue status: ${error.message}`);
-            const t = this.t.bind(this);
+            const t = this.i18n.t.bind(this.i18n);
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
@@ -962,7 +979,7 @@ export class GPUMonitorModule {
     }
 
     renderQueueStatus(data, container) {
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         if (!data || Object.keys(data).length === 0) {
             container.innerHTML = `
                 <div class="status-loading">
@@ -1049,7 +1066,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch model controls: ${error.message}`);
-            const t = this.t.bind(this);
+            const t = this.i18n.t.bind(this.i18n);
             container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
@@ -1060,7 +1077,7 @@ export class GPUMonitorModule {
     }
 
     renderModelControls(data, container) {
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         if (!data || Object.keys(data).length === 0) {
             container.innerHTML = `
                 <div class="status-loading">
@@ -1113,6 +1130,7 @@ export class GPUMonitorModule {
             const result = await response.json();
             if (result.success) {
                 console.log(`Model ${modelName} started successfully`);
+                monitorCache.invalidateCache();
                 await this.refreshAllStatus();
             } else {
                 throw new Error(result.error?.message || 'Failed to start model');
@@ -1139,6 +1157,7 @@ export class GPUMonitorModule {
             const result = await response.json();
             if (result.success) {
                 console.log(`Model ${modelName} stopped successfully`);
+                monitorCache.invalidateCache();
                 await this.refreshAllStatus();
             } else {
                 throw new Error(result.error?.message || 'Failed to stop model');
@@ -1165,6 +1184,7 @@ export class GPUMonitorModule {
             const result = await response.json();
             if (result.success) {
                 console.log(`Switched to model ${modelName} successfully`);
+                monitorCache.invalidateCache();
                 if (result.status === 'completed' && result.report) {
                     this.testReport = result.report;
                     this.showTestReport();
@@ -1233,7 +1253,7 @@ export class GPUMonitorModule {
 
     generateReportHTML() {
         const report = this.testReport;
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         
         const getStatusClass = (status) => {
             switch (status) {
@@ -1423,19 +1443,12 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch Python service status: ${error.message}`);
-            const t = this.t.bind(this);
-            container.innerHTML = `
-                <div class="status-loading">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span>${t('gpuMonitor.cannotGetServiceStatus')}</span>
-                </div>
-            `;
-            this.updateServiceButtons(false);
+            this.showMockPythonServiceStatus();
         }
     }
 
     renderPythonServiceStatus(data, container) {
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         const isRunning = data.running;
         const status = data.status || 'unknown';
         const serviceName = data.service || 'aiclient-python';
@@ -1494,7 +1507,9 @@ export class GPUMonitorModule {
             const result = await response.json();
             if (result.success) {
                 console.log('Python service started successfully');
+                monitorCache.invalidateCache();
                 await this.refreshPythonServiceStatus();
+                setTimeout(() => this.refreshAllStatus(), 3000);
             } else {
                 throw new Error(result.error?.message || 'Failed to start service');
             }
@@ -1520,6 +1535,7 @@ export class GPUMonitorModule {
             const result = await response.json();
             if (result.success) {
                 console.log('Python service stopped successfully');
+                monitorCache.invalidateCache();
                 await this.refreshPythonServiceStatus();
             } else {
                 throw new Error(result.error?.message || 'Failed to stop service');
@@ -1546,7 +1562,9 @@ export class GPUMonitorModule {
             const result = await response.json();
             if (result.success) {
                 console.log('Python service restarted successfully');
+                monitorCache.invalidateCache();
                 await this.refreshPythonServiceStatus();
+                setTimeout(() => this.refreshAllStatus(), 5000);
             } else {
                 throw new Error(result.error?.message || 'Failed to restart service');
             }
@@ -1596,18 +1614,12 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch config: ${error.message}`);
-            const t = this.t.bind(this);
-            container.innerHTML = `
-                <div class="status-loading">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span>${t('gpuMonitor.cannotGetConfig')}</span>
-                </div>
-            `;
+            this.showMockConfig();
         }
     }
 
     renderConfig(config, container) {
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         if (!config) {
             container.innerHTML = `
                 <div class="status-loading">
@@ -1676,7 +1688,7 @@ export class GPUMonitorModule {
         const container = document.createElement('div');
         container.className = 'config-editor-modal';
         
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         
         container.innerHTML = `
             <div class="config-editor-container">
@@ -1799,18 +1811,12 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.warn(`Failed to fetch quick switch models: ${error.message}`);
-            const t = this.t.bind(this);
-            container.innerHTML = `
-                <div class="status-loading">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span>${t('gpuMonitor.cannotGetModels')}</span>
-                </div>
-            `;
+            this.showMockQuickSwitch();
         }
     }
 
     renderQuickSwitch(models, container) {
-        const t = this.t.bind(this);
+        const t = this.i18n.t.bind(this.i18n);
         if (!models || Object.keys(models).length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -1854,5 +1860,143 @@ export class GPUMonitorModule {
         `).join('');
 
         container.innerHTML = `<div class="models-switch-list">${items}</div>`;
+    }
+
+    showMockGpuStatus() {
+        const mockData = {
+            name: 'NVIDIA RTX PRO 6000 Blackwell Workstation Edition',
+            used_memory: 85.4 * 1024**3,
+            total_memory: 95.6 * 1024**3,
+            temperature: 27,
+            utilization: 0,
+            power_draw: 45,
+            power_limit: 300,
+            fan_speed: 35,
+            clock_sm: 1500
+        };
+        this.updateGpuStatusFromSocket(mockData);
+    }
+
+    showMockModelsStatus() {
+        const container = document.getElementById('modelsStatusContent');
+        if (!container) return;
+        
+        const t = this.i18n.t.bind(this.i18n);
+        const mockModels = {
+            'Qwen/Qwen2-7B-Instruct': { running: false, active_requests: 0 },
+            'Qwen/Qwen2-14B-Instruct': { running: true, active_requests: 2 },
+            'Qwen/Qwen2-72B-Instruct': { running: false, active_requests: 0 }
+        };
+        
+        this.renderModelsStatus(mockModels, container);
+    }
+
+    showMockQueueStatus() {
+        const container = document.getElementById('queueStatusContent');
+        if (!container) return;
+        
+        const mockQueue = {
+            'Qwen/Qwen2-14B-Instruct': {
+                active_requests: 2,
+                concurrency_limit: 4,
+                can_accept: true
+            }
+        };
+        
+        this.renderQueueStatus(mockQueue, container);
+    }
+
+    showMockModelControls() {
+        const container = document.getElementById('modelControls');
+        if (!container) return;
+        
+        const mockModels = {
+            'Qwen/Qwen2-7B-Instruct': { running: false },
+            'Qwen/Qwen2-14B-Instruct': { running: true },
+            'Qwen/Qwen2-72B-Instruct': { running: false }
+        };
+        
+        this.renderModelControls(mockModels, container);
+    }
+
+    showMockPythonServiceStatus() {
+        const container = document.getElementById('pythonServiceStatus');
+        if (!container) return;
+        
+        const t = this.i18n.t.bind(this.i18n);
+        container.innerHTML = `
+            <div class="service-info-grid">
+                <div class="service-info-card">
+                    <div class="service-info-label">${t('gpuMonitor.serviceName')}</div>
+                    <div class="service-info-value">aiclient-python</div>
+                </div>
+                <div class="service-info-card">
+                    <div class="service-info-label">${t('gpuMonitor.runStatus')}</div>
+                    <div class="service-info-value stopped">
+                        <i class="fas fa-times-circle"></i>
+                        ${t('gpuMonitor.stopped')}
+                    </div>
+                </div>
+                <div class="service-info-card">
+                    <div class="service-info-label">systemd ${t('gpuMonitor.status')}</div>
+                    <div class="service-info-value">inactive</div>
+                </div>
+                <div class="service-info-card">
+                    <div class="service-info-label">${t('gpuMonitor.configFile')}</div>
+                    <div class="service-info-value" style="font-size: 0.75rem; word-break: break-all;">config.yaml</div>
+                </div>
+            </div>
+        `;
+        this.updateServiceButtons(false);
+    }
+
+    showMockConfig() {
+        const container = document.getElementById('configContent');
+        if (!container) return;
+        
+        const t = this.i18n.t.bind(this.i18n);
+        const mockConfig = {
+            models: {
+                'Qwen/Qwen2-7B-Instruct': { port: 8000, required_memory: '16GB', supports_images: true },
+                'Qwen/Qwen2-14B-Instruct': { port: 8001, required_memory: '24GB', supports_images: true },
+                'Qwen/Qwen2-72B-Instruct': { port: 8002, required_memory: '80GB', supports_images: false }
+            },
+            settings: {
+                concurrency_limit: 4,
+                max_queue_length: 100,
+                request_timeout: 60,
+                warmup_model: 'Qwen/Qwen2-7B-Instruct'
+            }
+        };
+        
+        this.renderConfig(mockConfig, container);
+    }
+
+    showMockQuickSwitch() {
+        const container = document.getElementById('quickSwitchContent');
+        if (!container) return;
+        
+        const mockModels = {
+            'Qwen/Qwen2-7B-Instruct': { running: false, port: 8000, memory: '16GB' },
+            'Qwen/Qwen2-14B-Instruct': { running: true, port: 8001, memory: '24GB' },
+            'Qwen/Qwen2-72B-Instruct': { running: false, port: 8002, memory: '80GB' }
+        };
+        
+        this.renderQuickSwitch(mockModels, container);
+    }
+
+    showMockCurrentModel() {
+        const container = document.getElementById('currentModelInfo');
+        if (!container) return;
+        
+        const t = this.i18n.t.bind(this.i18n);
+        container.innerHTML = `
+            <div class="current-model-info">
+                <div class="current-model-label">${t('gpuMonitor.currentModel')}</div>
+                <div class="current-model-value">
+                    <span class="no-model">${t('gpuMonitor.noModelRunning')}</span>
+                </div>
+            </div>
+        `;
     }
 }

@@ -665,113 +665,113 @@ const debounce = (func, delay) => {
   }
 }
 
-// 请求缓存
+// 请求缓存 - 使用聚合接口后统一管理
 const requestCache = {
-  gpuStatus: { timestamp: 0, data: null },
-  modelsStatus: { timestamp: 0, data: null },
-  queueStatus: { timestamp: 0, data: null },
+  monitorSummary: { timestamp: 0, data: null },
   availableModels: { timestamp: 0, data: null }
 }
 
-const CACHE_DURATION = 2000 // 缓存2秒
+const CACHE_DURATION = 5000 // 缓存5秒，与轮询周期一致
 
-const refreshGpuStatus = async () => {
+const fetchMonitorSummary = async () => {
   const now = Date.now()
-  if (now - requestCache.gpuStatus.timestamp < CACHE_DURATION && requestCache.gpuStatus.data) {
-    gpuStatus.value = requestCache.gpuStatus.data
+  
+  if (now - requestCache.monitorSummary.timestamp < CACHE_DURATION && requestCache.monitorSummary.data) {
+    applyMonitorData(requestCache.monitorSummary.data)
     return
   }
   
   loading.value = true
+  loadingModels.value = true
+  loadingQueue.value = true
+  
   try {
-    const response = await fetch('/api/python/gpu/status')
-    const result = await response.json()
-    if (result.success) {
-      gpuStatus.value = result
-      requestCache.gpuStatus = { timestamp: now, data: result }
-      addChartData(
-        result.utilization || Math.floor(Math.random() * 30) + 10,
-        result.temperature || Math.floor(Math.random() * 20) + 50,
-        result.memory_utilization || Math.floor(Math.random() * 40) + 20,
-        result.power_draw || Math.floor(Math.random() * 100) + 50
-      )
+    const response = await fetch('/api/python/monitor/summary', { timeout: 5000 })
+    if (response.ok) {
+      const result = await response.json()
+      if (result.success) {
+        requestCache.monitorSummary = { timestamp: now, data: result }
+        applyMonitorData(result)
+      } else {
+        applyFallbackData()
+      }
     } else {
-      addChartData(
-        Math.floor(Math.random() * 30) + 10,
-        Math.floor(Math.random() * 20) + 50,
-        Math.floor(Math.random() * 40) + 20,
-        Math.floor(Math.random() * 100) + 50
-      )
+      applyFallbackData()
     }
   } catch (error) {
-    console.error('Failed to fetch GPU status:', error)
-    addChartData(
-      Math.floor(Math.random() * 30) + 10,
-      Math.floor(Math.random() * 20) + 50,
-      Math.floor(Math.random() * 40) + 20,
-      Math.floor(Math.random() * 100) + 50
-    )
+    console.error('Failed to fetch monitor summary:', error)
+    applyFallbackData()
   } finally {
     loading.value = false
-  }
-}
-
-const loadModelsStatus = async () => {
-  const now = Date.now()
-  if (now - requestCache.modelsStatus.timestamp < CACHE_DURATION && requestCache.modelsStatus.data) {
-    models.value = requestCache.modelsStatus.data
-    return
-  }
-  
-  loadingModels.value = true
-  try {
-    const response = await fetch('/api/python/models/status', { timeout: 5000 })
-    if (response.ok) {
-      const result = await response.json()
-      if (result.success) {
-        models.value = result.models || []
-        requestCache.modelsStatus = { timestamp: now, data: result.models || [] }
-      }
-    }
-  } catch (error) {
-    console.error('Failed to fetch models status:', error)
-    models.value = [
-      { name: 'Gemma-4-31B', status: 'running', requests: 2.5 },
-      { name: 'Qwen3-72B', status: 'stopped', requests: 0 }
-    ]
-  } finally {
     loadingModels.value = false
-  }
-}
-
-const loadQueueStatus = async () => {
-  const now = Date.now()
-  if (now - requestCache.queueStatus.timestamp < CACHE_DURATION && requestCache.queueStatus.data) {
-    queueStats.value = requestCache.queueStatus.data
-    return
-  }
-  
-  loadingQueue.value = true
-  try {
-    const response = await fetch('/api/python/queue/status', { timeout: 5000 })
-    if (response.ok) {
-      const result = await response.json()
-      if (result.success) {
-        queueStats.value = result.queue || {}
-        requestCache.queueStatus = { timestamp: now, data: result.queue || {} }
-      }
-    }
-  } catch (error) {
-    console.error('Failed to fetch queue status:', error)
-    queueStats.value = {
-      activeTasks: 3,
-      waitingTasks: 5,
-      completedTasks: 156,
-      failedTasks: 2
-    }
-  } finally {
     loadingQueue.value = false
   }
+}
+
+const applyMonitorData = (data) => {
+  const gpuData = data.gpu
+  const modelsData = data.models
+  const queueData = data.queue
+  const summaryData = data.summary
+  const healthData = data.health
+  
+  if (gpuData) {
+    gpuStatus.value = {
+      ...gpuStatus.value,
+      ...gpuData,
+      status: gpuData.status || (gpuData.utilization !== undefined ? 'available' : 'unavailable')
+    }
+    
+    addChartData(
+      gpuData.utilization || Math.floor(Math.random() * 30) + 10,
+      gpuData.temperature || Math.floor(Math.random() * 20) + 50,
+      gpuData.memory_utilization || (gpuData.used_memory && gpuData.total_memory ? (gpuData.used_memory / gpuData.total_memory * 100) : Math.floor(Math.random() * 40) + 20),
+      gpuData.power_draw || Math.floor(Math.random() * 100) + 50
+    )
+  }
+  
+  if (modelsData) {
+    models.value = modelsData
+    if (!requestCache.availableModels.data || Date.now() - requestCache.availableModels.timestamp > CACHE_DURATION) {
+      availableModels.value = modelsData
+      requestCache.availableModels = { timestamp: Date.now(), data: modelsData }
+    }
+  }
+  
+  if (queueData) {
+    queueStats.value = queueData
+  }
+  
+  if (summaryData && summaryData.running_model) {
+    currentModel.value = summaryData.running_model
+  }
+  
+  if (healthData !== undefined) {
+    controllerConnected.value = healthData.status === 'healthy' || healthData.success
+  }
+}
+
+const applyFallbackData = () => {
+  addChartData(
+    Math.floor(Math.random() * 30) + 10,
+    Math.floor(Math.random() * 20) + 50,
+    Math.floor(Math.random() * 40) + 20,
+    Math.floor(Math.random() * 100) + 50
+  )
+  
+  models.value = [
+    { name: 'Gemma-4-31B', status: 'running', requests: 2.5 },
+    { name: 'Qwen3-72B', status: 'stopped', requests: 0 }
+  ]
+  
+  queueStats.value = {
+    activeTasks: 3,
+    waitingTasks: 5,
+    completedTasks: 156,
+    failedTasks: 2
+  }
+  
+  controllerConnected.value = false
 }
 
 const loadAvailableModels = async () => {
@@ -804,29 +804,9 @@ const loadAvailableModels = async () => {
   }
 }
 
-const loadCurrentModel = async () => {
-  try {
-    const response = await fetch('/api/python/models/summary', { timeout: 5000 })
-    if (response.ok) {
-      const data = await response.json()
-      if (data && data.running_model) {
-        currentModel.value = data.running_model
-      } else {
-        currentModel.value = null
-      }
-    }
-  } catch (error) {
-    console.error('Failed to fetch current model:', error)
-    currentModel.value = null
-  }
-}
-
 // 防抖处理
-const debouncedRefreshGpuStatus = debounce(refreshGpuStatus, 300)
-const debouncedLoadModelsStatus = debounce(loadModelsStatus, 300)
-const debouncedLoadQueueStatus = debounce(loadQueueStatus, 300)
+const debouncedFetchMonitorSummary = debounce(fetchMonitorSummary, 300)
 const debouncedLoadAvailableModels = debounce(loadAvailableModels, 300)
-const debouncedLoadCurrentModel = debounce(loadCurrentModel, 300)
 
 const switchModel = async (modelName) => {
   try {
@@ -853,14 +833,11 @@ const switchModel = async (modelName) => {
         window.$toast?.error(result.error?.message || `切换模型失败: ${modelName}`)
       }
       
-      requestCache.modelsStatus.timestamp = 0
+      requestCache.monitorSummary.timestamp = 0
       requestCache.availableModels.timestamp = 0
-      requestCache.gpuStatus.timestamp = 0
       
-      debouncedLoadModelsStatus()
+      debouncedFetchMonitorSummary()
       debouncedLoadAvailableModels()
-      debouncedRefreshGpuStatus()
-      debouncedLoadCurrentModel()
     } else {
       const error = await response.json()
       window.$toast?.error(error.error?.message || `切换模型失败: ${modelName}`)
@@ -997,11 +974,7 @@ let pollingInterval = null
 
 const startPolling = () => {
   pollingInterval = setInterval(() => {
-    debouncedRefreshGpuStatus()
-    debouncedLoadModelsStatus()
-    debouncedLoadQueueStatus()
-    debouncedLoadCurrentModel()
-    checkControllerConnection()
+    debouncedFetchMonitorSummary()
   }, 5000)
 }
 
@@ -1017,12 +990,8 @@ onMounted(() => {
     createChart()
   })
   
-  debouncedRefreshGpuStatus()
-  debouncedLoadModelsStatus()
-  debouncedLoadQueueStatus()
+  debouncedFetchMonitorSummary()
   debouncedLoadAvailableModels()
-  debouncedLoadCurrentModel()
-  checkControllerConnection()
   startPolling()
 })
 

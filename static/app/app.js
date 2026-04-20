@@ -8,7 +8,8 @@ import {
 
 import {
     showToast,
-    getProviderStats
+    getProviderStats,
+    getCurrentRunningModel
 } from './utils.js';
 
 import { t } from './i18n.js';
@@ -169,7 +170,7 @@ function initProviderSwitcher() {
             
             providerList.innerHTML = '';
             
-            providerTypes.forEach(providerType => {
+            providerTypes.forEach(async (providerType) => {
                 const accounts = providers[providerType] || [];
                 const healthyCount = accounts.filter(acc => acc.isHealthy && !acc.isDisabled).length;
                 const totalCount = accounts.length;
@@ -181,8 +182,16 @@ function initProviderSwitcher() {
                 
                 const displayName = configMap[providerType]?.name || providerType;
                 
+                let modelBadge = '';
+                if (providerType === 'local-model') {
+                    const currentModel = await getCurrentRunningModel();
+                    if (currentModel) {
+                        modelBadge = `<span class="model-badge" style="font-size: 0.7rem; background: var(--success-color); color: white; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">${currentModel}</span>`;
+                    }
+                }
+                
                 providerItem.innerHTML = `
-                    <span class="provider-name">${displayName}</span>
+                    <span class="provider-name">${displayName}${modelBadge}</span>
                     <span class="provider-status ${isHealthy ? 'status-healthy' : 'status-unhealthy'}">
                         ${healthyCount}/${totalCount}
                     </span>

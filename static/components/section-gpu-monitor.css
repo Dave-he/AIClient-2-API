@@ -15,24 +15,36 @@
 }
 
 .gpu-monitor-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: 1.25rem;
-    margin-bottom: 1.5rem;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1.25rem;
+	margin-bottom: 1.5rem;
+	max-width: 1400px;
+	margin-left: auto;
+	margin-right: auto;
 }
 
 .gpu-status-panel {
-    grid-column: 1 / 2;
-    max-width: 400px;
+	grid-column: 1 / 2;
+	max-width: 420px;
+	justify-self: start;
 }
 
 .gpu-charts-panel {
-    grid-column: 1 / -1;
-    min-height: 400px;
+	grid-column: 1 / -1;
+	min-height: 400px;
 }
 
 .model-switch-panel {
-    grid-column: 1 / -1;
+	grid-column: 1 / -1;
+}
+
+.python-service-panel {
+	grid-column: 1 / -1;
+}
+
+.config-management-panel {
+	grid-column: 1 / -1;
 }
 
 .gpu-monitor-container > div {
@@ -788,14 +800,15 @@
     font-size: 0.75rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
     .gpu-monitor-container {
         grid-template-columns: 1fr;
     }
     
     .gpu-status-panel {
         grid-column: 1 / -1;
-        max-width: none;
+        max-width: 100%;
+        justify-self: stretch;
     }
     
     .models-status-panel {
@@ -812,6 +825,57 @@
     
     .gpu-metrics-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .queue-info-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .iframe-container {
+        height: 400px;
+    }
+    
+    .chart-legend {
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    
+    .gpu-chart-content {
+        height: 280px;
+    }
+    
+    .metric-card.compact {
+        flex-direction: row;
+        align-items: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .gpu-monitor-container {
+        grid-template-columns: 1fr;
+        padding: 0 0.75rem;
+    }
+    
+    .gpu-status-panel {
+        grid-column: 1 / -1;
+        max-width: 100%;
+        justify-self: stretch;
+    }
+    
+    .models-status-panel {
+        grid-column: 1 / -1;
+    }
+    
+    .queue-status-panel {
+        grid-column: 1 / -1;
+    }
+    
+    .model-controls {
+        grid-column: 1 / -1;
+    }
+    
+    .gpu-metrics-grid {
+        grid-template-columns: 1fr;
     }
     
     .queue-info-grid {
@@ -832,8 +896,19 @@
     }
     
     .metric-card.compact {
+        flex-direction: row;
+        align-items: center;
+    }
+    
+    .gpu-header {
         flex-direction: column;
+        gap: 0.5rem;
         align-items: flex-start;
+    }
+    
+    .service-control-buttons {
+        flex-direction: column;
+        gap: 0.5rem;
     }
 }
 

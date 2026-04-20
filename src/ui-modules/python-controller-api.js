@@ -19,6 +19,12 @@ const modelsCache = {
     ttl: 5000
 };
 
+const monitorSummaryCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 5000
+};
+
 function buildHeaders(req) {
     const headers = {};
     
@@ -79,8 +85,19 @@ export async function handleGetVLLMModels(req, res) {
 
 export async function handleGetMonitorSummary(req, res) {
     try {
+        const now = Date.now();
+        
+        if (monitorSummaryCache.data && (now - monitorSummaryCache.timestamp) < monitorSummaryCache.ttl) {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
+            res.end(JSON.stringify({
+                ...monitorSummaryCache.data,
+                timestamp: now
+            }));
+            return true;
+        }
+
         const headers = buildHeaders(req);
-        const controllerBaseUrl = process.env.CONTROLLER_BASE_URL || 'http://localhost:5000';
+        const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
         
         const [gpuData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
             callPythonController('/manage/gpu', 'GET', null, headers).catch(() => null),
@@ -91,10 +108,9 @@ export async function handleGetMonitorSummary(req, res) {
             callPythonController('/manage/service/status', 'GET', null, headers).catch(() => null)
         ]);
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
+        const result = {
             success: true,
-            timestamp: Date.now(),
+            timestamp: now,
             gpu: gpuData,
             models: modelsData,
             queue: queueData,
@@ -102,7 +118,13 @@ export async function handleGetMonitorSummary(req, res) {
             health: healthData,
             service: serviceData,
             controllerUrl: controllerBaseUrl
-        }));
+        };
+
+        monitorSummaryCache.data = result;
+        monitorSummaryCache.timestamp = now;
+
+        res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'MISS' });
+        res.end(JSON.stringify(result));
     } catch (error) {
         logger.error(`[Python Controller API] Error getting monitor summary: ${error.message}`);
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -263,7 +285,7 @@ export async function handleGetHealthStatus(req, res) {
     try {
         const headers = buildHeaders(req);
         const data = await callPythonController('/health', 'GET', null, headers);
-        const controllerBaseUrl = process.env.CONTROLLER_BASE_URL || 'http://localhost:5000';
+        const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data, controllerUrl: controllerBaseUrl }));
     } catch (error) {

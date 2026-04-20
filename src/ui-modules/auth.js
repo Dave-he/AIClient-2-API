@@ -144,6 +144,11 @@ async function writeTokenStore(tokenStore) {
         const tempFile = TOKEN_STORE_FILE + '.tmp';
         const content = JSON.stringify(tokenStore, null, 2);
         await fs.writeFile(tempFile, content, 'utf8');
+        
+        if (!existsSync(TOKEN_STORE_FILE)) {
+            await fs.writeFile(TOKEN_STORE_FILE, JSON.stringify({ tokens: {} }, null, 2), 'utf8');
+        }
+        
         await fs.rename(tempFile, TOKEN_STORE_FILE);
     } catch (error) {
         logger.error('[Token Store] Failed to write token store file:', error);
