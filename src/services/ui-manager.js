@@ -32,7 +32,7 @@ export async function serveVueFiles(pathParam, res) {
     let filePath;
     
     const strippedPath = pathParam.replace('/vue/', '');
-    filePath = path.join(process.cwd(), 'vue-dist', strippedPath || 'index.html');
+    filePath = path.join(process.cwd(), 'dist', strippedPath || 'index.html');
 
     if (existsSync(filePath)) {
         const ext = path.extname(filePath);

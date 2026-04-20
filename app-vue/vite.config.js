@@ -50,7 +50,7 @@ export default defineConfig(({ mode }) => {
       ]
     },
     build: {
-      outDir: 'vue-dist',
+      outDir: 'dist',
       sourcemap: mode === 'development',
       minify: mode === 'production' ? 'terser' : false,
       rollupOptions: {
