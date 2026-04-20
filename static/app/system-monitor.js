@@ -279,18 +279,11 @@ export class SystemMonitor {
         if (!container) return;
 
         try {
-            const response = await fetch('/api/python/monitor/summary', {
-                method: 'GET',
-                timeout: 10000
-            });
+            const { monitorCache } = await import('./monitor-cache.js');
+            const result = await monitorCache.getSummary();
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
-            if (!result.success) {
-                throw new Error(result.error || 'Failed to get monitor summary');
+            if (!result || !result.success) {
+                throw new Error(result?.error || 'Failed to get monitor summary');
             }
 
             const gpuData = result.gpu || {};

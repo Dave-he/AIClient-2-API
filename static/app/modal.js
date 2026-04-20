@@ -2277,41 +2277,55 @@ async function loadModelsListForSwitch(modal) {
     if (!container) return;
 
     try {
-        const response = await fetch(`/api/python/models/status`, {
-            method: 'GET',
-            timeout: 10000
-        });
+        let modelsObj = {};
+        let currentModel = null;
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        const { monitorCache } = await import('./monitor-cache.js');
+        const cachedData = monitorCache.getCachedData();
+
+        if (cachedData && cachedData.models) {
+            modelsObj = cachedData.models;
+        } else {
+            const response = await fetch(`/api/python/models/status`, {
+                method: 'GET',
+                timeout: 10000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            modelsObj = data?.models || {};
         }
 
-        const data = await response.json();
-        const modelsObj = data?.models || {};
         const modelsList = Object.entries(modelsObj).map(([name, status]) => ({
             name,
             ...status
         }));
-        
-        // 获取当前运行的模型
-        let currentModel = null;
-        try {
-            const summaryResponse = await fetch(`/api/python/models/summary`, {
-            method: 'GET',
-            timeout: 5000
-        });
-            if (summaryResponse.ok) {
-                const summaryData = await summaryResponse.json();
-                currentModel = summaryData?.running_model;
+
+        if (cachedData && cachedData.summary && cachedData.summary.models) {
+            const runningModels = cachedData.summary.models.filter(m => m.running);
+            currentModel = runningModels.length > 0 ? runningModels[0].name : null;
+        } else {
+            try {
+                const summaryResponse = await fetch(`/api/python/models/summary`, {
+                    method: 'GET',
+                    timeout: 5000
+                });
+                if (summaryResponse.ok) {
+                    const summaryData = await summaryResponse.json();
+                    currentModel = summaryData?.running_model;
+                }
+            } catch (e) {
+                console.log('[ModelSwitch] Failed to load current model:', e.message);
             }
-        } catch (e) {
-            console.log('[ModelSwitch] Failed to load current model:', e.message);
         }
 
         renderModelSwitchPanel(container, modelsList, currentModel);
     } catch (error) {
-            console.log('[ModelSwitch] Failed to load models list:', error.message);
-            container.innerHTML = `
+        console.log('[ModelSwitch] Failed to load models list:', error.message);
+        container.innerHTML = `
                 <div class="status-loading">
                     <i class="fas fa-exclamation-circle"></i>
                     <span>${t('modal.provider.loadModelsFailed')}</span>
