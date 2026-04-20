@@ -18,6 +18,10 @@ import {
     fileUploadHandler
 } from './file-upload.js';
 
+import {
+    refreshModels
+} from './models-manager.js';
+
 import { 
     initNavigation 
 } from './navigation.js';
@@ -205,6 +209,9 @@ function initProviderSwitcher() {
                         // 重新加载配置和提供商数据
                         loadConfiguration();
                         loadProviders(true);
+                        
+                        // 刷新模型列表缓存，确保模型列表与新提供商同步
+                        await refreshModels();
                     } catch (error) {
                         console.error('Failed to switch provider:', error);
                         showToast(t('common.error'), '切换Provider失败', 'error');

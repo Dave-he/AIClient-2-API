@@ -4,6 +4,7 @@ import { showToast, formatUptime, copyToClipboard } from './utils.js';
 import { handleProviderChange, handleGeminiCredsTypeChange, handleKiroCredsTypeChange } from './event-handlers.js';
 import { loadProviders } from './provider-manager.js';
 import { t } from './i18n.js';
+import { refreshModels } from './models-manager.js';
 
 // 提供商配置缓存
 let currentProviderConfigs = null;
@@ -557,6 +558,9 @@ async function saveConfiguration() {
         
         await window.apiClient.post('/reload-config');
         showToast(t('common.success'), t('common.configSaved'), 'success');
+        
+        // 刷新模型列表缓存，确保模型列表与新配置同步
+        await refreshModels();
         
         // 检查当前是否在提供商池管理页面，如果是则刷新数据
         const providersSection = document.getElementById('providers');
