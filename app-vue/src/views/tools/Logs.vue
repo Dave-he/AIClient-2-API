@@ -12,7 +12,10 @@
         </select>
       </div>
       <button class="btn btn-danger" @click="clearLogs">
-        <i class="fas fa-trash"></i> 清空日志
+        <i class="fas fa-trash"></i> 清空当日日志
+      </button>
+      <button class="btn btn-danger" @click="clearAllLogs">
+        <i class="fas fa-broom"></i> 清空所有日志
       </button>
       <button class="btn btn-secondary" @click="downloadLogs">
         <i class="fas fa-download"></i> 下载日志
@@ -110,6 +113,25 @@ const clearLogs = async () => {
     }
   } catch (error) {
     logger.error('Failed to clear logs:', error)
+  }
+}
+
+const clearAllLogs = async () => {
+  try {
+    const response = await fetch('/api/system/clear-all-logs', {
+      method: 'POST'
+    })
+    if (response.ok) {
+      const result = await response.json()
+      logger.info(`Cleared ${result.clearedCount} log files`)
+      logs.value = []
+      await fetchLogs()
+    } else {
+      const error = await response.json()
+      logger.error('Failed to clear all logs:', error)
+    }
+  } catch (error) {
+    logger.error('Failed to clear all logs:', error)
   }
 }
 

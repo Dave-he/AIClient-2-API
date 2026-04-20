@@ -262,9 +262,53 @@ export function clearCache() {
     logger.info('[Python Controller] Cache cleared');
 }
 
-export function getCacheStats() {
+export async function getCacheStats() {
     return {
         entries: cacheStore.size,
         pendingRequests: pendingRequests.size
     };
+}
+
+export async function callPythonControllerRaw(endpoint, method = 'GET', body = null, options = {}) {
+    const url = `${controllerUrl}${endpoint}`;
+    const {
+        timeout = DEFAULT_TIMEOUT,
+        maxRetries = DEFAULT_MAX_RETRIES,
+        retryDelay = DEFAULT_RETRY_DELAY
+    } = options;
+
+    const requestPromise = retryAsync(async () => {
+        const controller = new AbortController();
+        const timeoutId = timeout ? setTimeout(() => controller.abort(), timeout) : null;
+        
+        const fetchOptions = {
+            method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            signal: controller.signal
+        };
+
+        if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+            fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
+        }
+
+        try {
+            const response = await fetch(url, fetchOptions);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                const error = new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+                error.status = response.status;
+                throw error;
+            }
+
+            const data = await response.json();
+            return data;
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId);
+        }
+    }, maxRetries, retryDelay, `${method} ${url}`);
+
+    return requestPromise;
 }

@@ -169,6 +169,48 @@ export async function handleClearTodayLog(req, res) {
 }
 
 /**
+ * 清理所有日志文件
+ */
+export async function handleClearAllLogs(req, res) {
+    try {
+        const result = await logger.clearAllLogs();
+        
+        if (result.success) {
+            // 广播日志清空事件
+            const { broadcastEvent } = await import('./event-broadcast.js');
+            broadcastEvent('logs_cleared', {
+                action: 'logs_cleared',
+                timestamp: new Date().toISOString(),
+                message: 'All log files have been cleared',
+                clearedCount: result.clearedCount
+            });
+            
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: true,
+                message: result.message,
+                clearedCount: result.clearedCount
+            }));
+        } else {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: { message: result.error || '清理所有日志失败' }
+            }));
+        }
+        return true;
+    } catch (error) {
+        logger.error('[UI API] Failed to clear all logs:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: false,
+            error: { message: 'Failed to clear all logs: ' + error.message }
+        }));
+        return true;
+    }
+}
+
+/**
  * 获取系统监控历史数据
  */
 export async function handleGetSystemMonitor(req, res) {

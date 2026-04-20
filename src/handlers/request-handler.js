@@ -151,9 +151,11 @@ export function createRequestHandler(config, providerPoolManager) {
                 // 只提供static目录下的旧界面静态文件
                 // 同时处理 SPA 路由回退（没有扩展名且不是 API/健康检查等路径）
                 const hasExtension = path.includes('.');
-                const isApiOrSpecialPath = path.startsWith('/api/') || path === '/health' || 
+                // 所有模型调用接口路径，都不应被当作 SPA 路由处理
+                const isApiOrSpecialPath = path.startsWith('/api/') || path === '/health' || path.startsWith('/metrics') ||
                                           path.startsWith('/provider_health') || path.startsWith('/manage/') ||
-                                          path.startsWith('/vllm/') || path === '/api/grok/assets';
+                                          path.startsWith('/vllm/') || path.startsWith('/v1/') || path.startsWith('/v1beta/') ||
+                                          path === '/api/grok/assets' || path === '/v1/messages' || path.startsWith('/count_tokens');
                 
                 if (path === '/' || path === '/index.html' || path === '/login.html' ||
                     path.startsWith('/static/') || path.startsWith('/app/') ||

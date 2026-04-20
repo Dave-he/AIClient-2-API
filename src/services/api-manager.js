@@ -5,6 +5,7 @@ import {
     ENDPOINT_TYPE
 } from '../utils/common.js';
 import { getProviderPoolManager } from './service-manager.js';
+import { handleModelSwitchRequest } from '../utils/model-switch-lock.js';
 import logger from '../utils/logger.js';
 /**
  * Handle API authentication and routing
@@ -59,8 +60,7 @@ export async function handleAPIRequests(method, path, req, res, currentConfig, a
         }
         // vLLM model management endpoints
         if (path === '/vllm/model/switch') {
-            await handleContentGenerationRequest(req, res, apiService, ENDPOINT_TYPE.OPENAI_CHAT, currentConfig, promptLogFilename, providerPoolManager, currentConfig.uuid, path);
-            return true;
+            return await handleModelSwitchRequest(req, res);
         }
         if (path === '/vllm/service/start' || path === '/vllm/service/stop' || path === '/vllm/service/restart') {
             await handleContentGenerationRequest(req, res, apiService, ENDPOINT_TYPE.OPENAI_CHAT, currentConfig, promptLogFilename, providerPoolManager, currentConfig.uuid, path);

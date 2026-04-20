@@ -71,14 +71,16 @@ export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
     const hasExtension = path.extname(pathParam) !== '';
     const isApiPath = pathParam.startsWith('/api/');
     const isHealthPath = pathParam === '/health';
+    const isMetricsPath = pathParam.startsWith('/metrics');
     const isProviderPath = pathParam.startsWith('/provider_health') || pathParam.startsWith('/manage/');
     const isVllmPath = pathParam.startsWith('/vllm/');
     const isGrokAssetsPath = pathParam === '/api/grok/assets';
+    const isModelApiPath = pathParam.startsWith('/v1/') || pathParam.startsWith('/v1beta/') || pathParam === '/v1/messages' || pathParam.startsWith('/count_tokens');
 
     const isStaticPath = staticPathPrefixes.some(prefix => pathParam.startsWith(prefix)) ||
                          pathParam === '/' || pathParam === '/index.html' || pathParam === '/login.html' || pathParam === '/favicon.ico' ||
                          pluginManager.isPluginStaticPath(pathParam) ||
-                         (!hasExtension && !isApiPath && !isHealthPath && !isProviderPath && !isVllmPath && !isGrokAssetsPath);
+                         (!hasExtension && !isApiPath && !isHealthPath && !isMetricsPath && !isProviderPath && !isVllmPath && !isGrokAssetsPath && !isModelApiPath);
 
     if (!isStaticPath) {
         return false;
@@ -227,6 +229,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
     // Clear today's log file
     if (method === 'POST' && pathParam === '/api/system/clear-log') {
         return await systemApi.handleClearTodayLog(req, res);
+    }
+
+    // Clear all log files
+    if (method === 'POST' && pathParam === '/api/system/clear-all-logs') {
+        return await systemApi.handleClearAllLogs(req, res);
     }
 
     // Get system monitor data

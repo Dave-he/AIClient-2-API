@@ -46,6 +46,20 @@ export function useLogs() {
     logs.value = [];
   };
 
+  const clearAllLogs = async () => {
+    try {
+      const response = await apiClient.post('/api/system/clear-all-logs');
+      if (response.data.success) {
+        logs.value = [];
+        await fetchLogs();
+        window.$toast?.success('所有日志文件已清空');
+      }
+    } catch (err) {
+      logger.error('Failed to clear all logs', err);
+      window.$toast?.error('清空所有日志失败');
+    }
+  };
+
   const downloadLogs = async () => {
     try {
       const response = await apiClient.get('/api/logs/download');
@@ -71,6 +85,7 @@ export function useLogs() {
     filteredLogs,
     fetchLogs,
     clearLogs,
+    clearAllLogs,
     downloadLogs
   };
 }

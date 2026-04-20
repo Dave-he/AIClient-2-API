@@ -694,6 +694,71 @@ class Logger {
     }
   }
 
+  async clearAllLogs() {
+    if (isBrowser) {
+      return { success: false, error: 'Not available in browser' };
+    }
+    
+    try {
+      this.ensureLogDirSync();
+      
+      if (!existsSync(this.logDir)) {
+        return { success: true, message: 'Log directory does not exist', clearedCount: 0 };
+      }
+      
+      const currentLogFile = this.getLogFilePath();
+      const currentStructuredLogFile = this.getStructuredLogFilePath();
+      
+      // 关闭当前写入流
+      if (this._writeStream) {
+        this._writeStream.end();
+        this._writeStream = null;
+      }
+      
+      const files = readdirSync(this.logDir).filter(f => f.endsWith('.log'));
+      let clearedCount = 0;
+      const errors = [];
+      
+      for (const file of files) {
+        const filePath = `${this.logDir}/${file}`;
+        try {
+          // 如果是当前日志文件，清空内容而不是删除
+          if (filePath === currentLogFile || filePath === currentStructuredLogFile) {
+            writeFileSync(filePath, '');
+          } else {
+            unlinkSync(filePath);
+          }
+          clearedCount++;
+        } catch (err) {
+          errors.push({ file, error: err.message });
+        }
+      }
+      
+      // 重置日志大小
+      this.currentLogSize = 0;
+      
+      // 重新创建写入流，确保后续日志能正常写入
+      if (currentLogFile) {
+        this._writeStream = createWriteStream(currentLogFile, { flags: 'a' });
+        this._writeStream.on('error', (err) => {
+          console.error('Log stream error:', err.message);
+          this._writeStream = null;
+        });
+        this.currentLogFile = currentLogFile;
+      }
+      
+      return {
+        success: true,
+        message: `Cleared ${clearedCount} log files`,
+        clearedCount,
+        errors: errors.length > 0 ? errors : undefined
+      };
+    } catch (error) {
+      console.error('Failed to clear all logs:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
   async cleanupOldLogs() {
     if (isBrowser) {
       return;

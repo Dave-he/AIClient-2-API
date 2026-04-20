@@ -701,6 +701,12 @@ const translations = {
         'logs.clear.success.title': '清空成功',
         'logs.clear.success.msg': '前端实时日志和服务器当日日志文件已全部清空',
         'logs.clear.failed': '清空日志失败',
+        'logs.clearToday': '清空当日日志',
+        'logs.clearAll': '清空所有日志',
+        'logs.clearAll.confirm.msg': '此操作将清空所有日志文件！\n\n• 所有历史日志文件将被删除\n• 当日日志文件内容将被清空\n• 此操作不可恢复\n\n确定要继续吗？',
+        'logs.clearAll.success.title': '清空成功',
+        'logs.clearAll.success.msg': '所有日志文件已清空',
+        'logs.clearAll.failed': '清空所有日志失败',
         
         // Plugins
         'plugins.title': '插件管理',
