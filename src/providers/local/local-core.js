@@ -185,17 +185,31 @@ export class LocalApiService {
 
     async listModels() {
         try {
+            // Use a separate axios request without Authorization header for health check
+            // This avoids 403 errors when the vLLM server has different auth requirements
+            const headers = {
+                'Content-Type': 'application/json'
+            };
             const axiosConfig = {
                 method: 'get',
-                url: '/v1/models'
+                url: '/v1/models',
+                headers,
+                baseURL: this.baseUrl,
+                timeout: 10000,
+                proxy: !this.useSystemProxy ? false : undefined
             };
-            this._applySidecar(axiosConfig);
-            const response = await this.axiosInstance.request(axiosConfig);
+            if (this.useSystemProxy) {
+                configureAxiosProxy(axiosConfig, this.config, this.config.MODEL_PROVIDER || MODEL_PROVIDER.LOCAL_MODEL);
+            }
+            const response = await axios.request(axiosConfig);
             return response.data;
         } catch (error) {
             const status = error.response?.status;
             const data = error.response?.data;
-            logger.error(`Error listing Local models (Status: ${status}):`, data || error.message);
+            // Only log if it's not a 401/403 (common for health checks with no auth)
+            if (status !== 401 && status !== 403) {
+                logger.error(`Error listing Local models (Status: ${status}):`, data || error.message);
+            }
             return { data: [] };
         }
     }

@@ -1899,7 +1899,7 @@ export class GPUMonitorModule {
 
     renderQuickSwitch(models, container) {
         const t = this.i18n.t.bind(this.i18n);
-        const modelList = Array.isArray(models) ? models : Object.entries(models || {}).map(([name, status]) => ({ name, ...status }));
+        const modelList = this.normalizeModelsForWorkbench(models);
         if (modelList.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -1916,36 +1916,70 @@ export class GPUMonitorModule {
         const items = modelList.map((model) => {
             const name = model.name;
             const isCurrentModel = currentModelName === name;
-            const status = model;
             return `
-            <div class="model-switch-item">
+            <div class="model-switch-item ${model.running ? 'is-running' : ''}">
                 <div class="model-switch-header">
-                    <div class="model-switch-info">
+                    <div>
                         <div class="model-switch-name">${name}</div>
-                        <div class="model-switch-details">
-                            <span class="model-switch-port"><i class="fas fa-server"></i> ${status.port || '-'}</span>
-                            <span class="model-switch-memory"><i class="fas fa-memory"></i> ${status.memory || '-'}</span>
-                        </div>
+                        ${model.description ? `<div class="model-switch-subtitle">${model.description}</div>` : ''}
                     </div>
-                    <span class="model-switch-status ${(isCurrentModel || status.running) ? 'status-running' : 'status-stopped'}">
-                        ${isCurrentModel ? t('gpuMonitor.currentModel') : (status.running ? t('gpuMonitor.running') : t('gpuMonitor.stopped'))}
+                    <span class="model-switch-status ${(isCurrentModel || model.running) ? 'status-running' : 'status-stopped'}">
+                        <i class="fas ${(isCurrentModel || model.running) ? 'fa-circle-play' : 'fa-circle'}"></i>
+                        ${isCurrentModel ? t('gpuMonitor.currentModel') : (model.running ? t('gpuMonitor.running') : t('gpuMonitor.stopped'))}
                     </span>
                 </div>
+
+                <div class="model-switch-details">
+                    <div class="model-detail-pill">
+                        <span class="model-detail-label">${t('gpuMonitor.port')}</span>
+                        <span class="model-detail-value">${model.port}</span>
+                    </div>
+                    <div class="model-detail-pill">
+                        <span class="model-detail-label">${t('gpuMonitor.memory')}</span>
+                        <span class="model-detail-value">${model.memory}</span>
+                    </div>
+                    <div class="model-detail-pill">
+                        <span class="model-detail-label">${t('gpuMonitor.activeRequests')}</span>
+                        <span class="model-detail-value">${model.activeRequests}</span>
+                    </div>
+                    <div class="model-detail-pill">
+                        <span class="model-detail-label">${t('gpuMonitor.concurrencyLimit')}</span>
+                        <span class="model-detail-value">${model.concurrencyLimit ?? '-'}</span>
+                    </div>
+                    <div class="model-detail-pill">
+                        <span class="model-detail-label">${t('gpuMonitor.remainingSlots')}</span>
+                        <span class="model-detail-value">${model.remainingSlots ?? '-'}</span>
+                    </div>
+                    <div class="model-detail-pill">
+                        <span class="model-detail-label">${t('gpuMonitor.preloaded')}</span>
+                        <span class="model-detail-value">${model.preloaded ? t('gpuMonitor.yes') : t('gpuMonitor.no')}</span>
+                    </div>
+                </div>
+
                 <div class="model-switch-actions">
                     ${isCurrentModel ? `
                         <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${name}')">
                             <i class="fas fa-stop"></i> ${t('gpuMonitor.stop')}
                         </button>
-                    ` : status.running ? `
+                        <button class="btn btn-info btn-sm" onclick="window.GPUMonitor.runModelTest('${name}')">
+                            <i class="fas fa-flask"></i> ${t('gpuMonitor.test')}
+                        </button>
+                    ` : model.running ? `
                         <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${name}')">
                             <i class="fas fa-stop"></i> ${t('gpuMonitor.stop')}
                         </button>
                         <button class="btn btn-primary btn-sm" onclick="window.GPUMonitor.switchModel('${name}')">
                             <i class="fas fa-exchange-alt"></i> ${t('gpuMonitor.switch')}
                         </button>
+                        <button class="btn btn-info btn-sm" onclick="window.GPUMonitor.runModelTest('${name}')">
+                            <i class="fas fa-flask"></i> ${t('gpuMonitor.test')}
+                        </button>
                     ` : `
                         <button class="btn btn-success btn-sm" onclick="window.GPUMonitor.startModel('${name}')">
                             <i class="fas fa-play"></i> ${t('gpuMonitor.start')}
+                        </button>
+                        <button class="btn btn-outline btn-sm" onclick="window.GPUMonitor.switchModel('${name}')">
+                            <i class="fas fa-right-left"></i> ${t('gpuMonitor.switchAndTest')}
                         </button>
                     `}
                 </div>
@@ -1972,17 +2006,12 @@ export class GPUMonitorModule {
     }
 
     showMockModelsStatus() {
-        const container = document.getElementById('modelsStatusContent');
-        if (!container) return;
-        
-        const t = this.i18n.t.bind(this.i18n);
-        const mockModels = {
+        this.lastModelsData = {
             'Qwen/Qwen2-7B-Instruct': { running: false, active_requests: 0 },
-            'Qwen/Qwen2-14B-Instruct': { running: true, active_requests: 2 },
-            'Qwen/Qwen2-72B-Instruct': { running: false, active_requests: 0 }
+            'Qwen/Qwen2-14B-Instruct': { running: true, active_requests: 2, port: 8001, preloaded: true, required_memory: '24GB' },
+            'Qwen/Qwen2-72B-Instruct': { running: false, active_requests: 0, port: 8002, preloaded: false, required_memory: '80GB' }
         };
-        
-        this.renderModelsStatus(mockModels, container);
+        this.renderUnifiedModels();
     }
 
     showMockQueueStatus() {
@@ -1996,21 +2025,8 @@ export class GPUMonitorModule {
                 can_accept: true
             }
         };
-        
+        this.lastQueueData = mockQueue;
         this.renderQueueStatus(mockQueue, container);
-    }
-
-    showMockModelControls() {
-        const container = document.getElementById('modelControls');
-        if (!container) return;
-        
-        const mockModels = {
-            'Qwen/Qwen2-7B-Instruct': { running: false },
-            'Qwen/Qwen2-14B-Instruct': { running: true },
-            'Qwen/Qwen2-72B-Instruct': { running: false }
-        };
-        
-        this.renderModelControls(mockModels, container);
     }
 
     showMockPythonServiceStatus() {
@@ -2067,16 +2083,12 @@ export class GPUMonitorModule {
     }
 
     showMockQuickSwitch() {
-        const container = document.getElementById('quickSwitchContent');
-        if (!container) return;
-        
-        const mockModels = {
+        this.lastModelsData = {
             'Qwen/Qwen2-7B-Instruct': { running: false, port: 8000, memory: '16GB' },
             'Qwen/Qwen2-14B-Instruct': { running: true, port: 8001, memory: '24GB' },
             'Qwen/Qwen2-72B-Instruct': { running: false, port: 8002, memory: '80GB' }
         };
-        
-        this.renderQuickSwitch(mockModels, container);
+        this.renderUnifiedModels();
     }
 
     showMockCurrentModel() {
