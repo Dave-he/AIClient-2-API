@@ -5,8 +5,8 @@ ROOT_DIR="$(dirname "$DIR")"
 
 cd "$ROOT_DIR"
 
-PNPM="/root/.nvm/versions/node/v24.15.0/bin/pnpm"
-NODE="/root/.nvm/versions/node/v24.15.0/bin/node"
+PNPM="$HOME/.nvm/versions/node/v24.12.0/bin/pnpm"
+NODE="$HOME/.nvm/versions/node/v24.12.0/bin/node"
 
 echo "=== Starting AIClient2API Service ==="
 
