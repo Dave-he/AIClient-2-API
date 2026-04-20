@@ -4,6 +4,8 @@ import path from 'path';
 import { getCpuUsagePercent } from './system-monitor.js';
 import { getGPUStatus } from '../utils/python-controller.js';
 import os from 'os';
+import { getProviderPoolManager } from '../services/service-manager.js';
+import { getProviderModels } from '../providers/provider-models.js';
 
 let systemMonitorHistory = {
     cpu: [],
@@ -323,5 +325,289 @@ export async function handleRestartService(req, res) {
             }
         }));
         return true;
+    }
+}
+
+const dashboardCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 3000
+};
+
+/**
+ * Dashboard聚合API - 单次请求获取所有dashboard数据
+ */
+export async function handleGetDashboard(req, res) {
+    const now = Date.now();
+    
+    if (dashboardCache.data && (now - dashboardCache.timestamp) < dashboardCache.ttl) {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
+        res.end(JSON.stringify(dashboardCache.data));
+        return true;
+    }
+
+    try {
+        const [systemInfo, systemMonitor, pythonGpuStatus, providerStatus, models, tokenStats] = await Promise.all([
+            fetchSystemInfo(),
+            fetchSystemMonitorData(),
+            fetchPythonGpuData(),
+            fetchProviderStatusData(),
+            fetchModelsData(),
+            fetchTokenStatsData(req)
+        ]);
+
+        const result = {
+            systemInfo,
+            systemMonitor,
+            pythonGpuStatus,
+            providerStatus,
+            models,
+            tokenStats,
+            timestamp: now
+        };
+
+        dashboardCache.data = result;
+        dashboardCache.timestamp = now;
+
+        res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'MISS' });
+        res.end(JSON.stringify(result));
+        return true;
+    } catch (error) {
+        logger.error('[UI API] Failed to fetch dashboard data:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: false,
+            error: { message: 'Failed to fetch dashboard data: ' + error.message }
+        }));
+        return true;
+    }
+}
+
+async function fetchSystemInfo() {
+    const memUsage = process.memoryUsage();
+    let appVersion = 'unknown';
+    
+    try {
+        const versionFilePath = path.join(process.cwd(), 'VERSION');
+        if (existsSync(versionFilePath)) {
+            appVersion = readFileSync(versionFilePath, 'utf8').trim();
+        }
+    } catch (error) {
+        logger.warn('[UI API] Failed to read VERSION file:', error.message);
+    }
+
+    return {
+        appVersion,
+        nodeVersion: process.version,
+        serverTime: new Date().toISOString(),
+        memoryUsage: `${Math.round(memUsage.heapUsed / 1024 / 1024)} MB / ${Math.round(memUsage.heapTotal / 1024 / 1024)} MB`,
+        cpuUsage: getCpuUsagePercent(),
+        uptime: process.uptime(),
+        platform: process.platform,
+        pid: process.pid
+    };
+}
+
+async function fetchSystemMonitorData() {
+    const total = os.totalmem();
+    const free = os.freemem();
+    const used = total - free;
+
+    const formatBytes = (bytes) => {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
+    let gpuData = {
+        usage: 0,
+        temperature: 0,
+        history: systemMonitorHistory.gpu
+    };
+
+    try {
+        const gpuStatus = await getGPUStatus();
+        if (gpuStatus) {
+            if (gpuStatus.utilization !== undefined) {
+                gpuData.usage = parseFloat(gpuStatus.utilization);
+            } else if (gpuStatus.devices && gpuStatus.devices.length > 0) {
+                const firstDevice = gpuStatus.devices[0];
+                gpuData.usage = parseFloat(firstDevice.utilization || firstDevice.util || 0);
+                gpuData.temperature = parseFloat(firstDevice.temperature || 0);
+            }
+            if (gpuStatus.temperature !== undefined) {
+                gpuData.temperature = parseFloat(gpuStatus.temperature);
+            }
+        }
+    } catch (error) {
+        logger.warn('[UI API] Failed to get GPU status:', error.message);
+    }
+
+    return {
+        cpu: {
+            usage: parseFloat(getCpuUsagePercent()),
+            cores: os.cpus().length,
+            history: systemMonitorHistory.cpu
+        },
+        memory: {
+            total: formatBytes(total),
+            used: formatBytes(used),
+            free: formatBytes(free),
+            usagePercent: parseFloat(((used / total) * 100).toFixed(1)),
+            history: systemMonitorHistory.memory
+        },
+        gpu: gpuData,
+        timestamp: systemMonitorHistory.timestamp
+    };
+}
+
+async function fetchPythonGpuData() {
+    try {
+        const { CONFIG } = await import('../core/config-manager.js');
+        const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
+        
+        const pythonUrl = new URL('/manage/gpu', controllerBaseUrl);
+        
+        const options = {
+            hostname: pythonUrl.hostname,
+            port: pythonUrl.port,
+            path: pythonUrl.pathname,
+            method: 'GET',
+            timeout: 5000,
+            headers: {}
+        };
+        
+        const response = await new Promise((resolve, reject) => {
+            const req = require('http').request(options, (res) => {
+                let data = '';
+                res.on('data', (chunk) => { data += chunk; });
+                res.on('end', () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch (e) {
+                        reject(new Error('Invalid response from Python controller'));
+                    }
+                });
+            });
+            
+            req.on('error', reject);
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Timeout'));
+            });
+            req.setTimeout(5000);
+            req.end();
+        });
+        
+        if (response) {
+            return {
+                success: true,
+                utilization: response.utilization || response.gpu_utilization || 0,
+                memoryUsage: response.memory_utilization || 0,
+                temperature: response.temperature || 0,
+                power: response.power_draw || response.power || 0,
+                name: response.name || '--',
+                memoryTotal: response.total_memory ? `${(response.total_memory / (1024 ** 3)).toFixed(1)} GB` : '--',
+                memoryUsed: response.used_memory ? `${(response.used_memory / (1024 ** 3)).toFixed(1)} GB` : '--',
+                memoryAvailable: response.available_memory ? `${(response.available_memory / (1024 ** 3)).toFixed(1)} GB` : '--',
+                serverTime: new Date().toISOString()
+            };
+        }
+    } catch (error) {
+        logger.warn('[UI API] Failed to get Python GPU status:', error.message);
+    }
+    
+    return { success: false };
+}
+
+async function fetchProviderStatusData() {
+    try {
+        const poolManager = getProviderPoolManager();
+        if (poolManager && poolManager.providers) {
+            const providers = [];
+            for (const [type, items] of Object.entries(poolManager.providers)) {
+                if (Array.isArray(items) && items.length > 0) {
+                    const healthyCount = items.filter(p => p.isHealthy !== false).length;
+                    const status = healthyCount === items.length ? 'healthy' :
+                                   healthyCount > 0 ? 'warning' : 'error';
+                    
+                    providers.push({
+                        name: type.replace(/-/g, ' '),
+                        status,
+                        accounts: items.length,
+                        requests: items.reduce((sum, p) => sum + (p.requestCount || 0), 0)
+                    });
+                }
+            }
+            return providers;
+        }
+    } catch (error) {
+        logger.warn('[UI API] Failed to get provider status:', error.message);
+    }
+    
+    return [];
+}
+
+async function fetchModelsData() {
+    try {
+        const models = await getProviderModels();
+        const modelSet = new Set();
+        for (const typeModels of Object.values(models)) {
+            if (Array.isArray(typeModels)) {
+                typeModels.forEach(model => modelSet.add(model));
+            }
+        }
+        return Array.from(modelSet).sort();
+    } catch (error) {
+        logger.warn('[UI API] Failed to get models:', error.message);
+    }
+    
+    return [];
+}
+
+async function fetchTokenStatsData(req) {
+    try {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const range = url.searchParams.get('range') || 'hour';
+        
+        const tokenStatsUrl = new URL(`/api/token-stats?range=${range}`, `http://localhost:${process.env.PORT || 3000}`);
+        
+        const options = {
+            hostname: tokenStatsUrl.hostname,
+            port: tokenStatsUrl.port,
+            path: tokenStatsUrl.pathname + tokenStatsUrl.search,
+            method: 'GET',
+            timeout: 5000,
+            headers: {}
+        };
+        
+        const response = await new Promise((resolve, reject) => {
+            const req = require('http').request(options, (res) => {
+                let data = '';
+                res.on('data', (chunk) => { data += chunk; });
+                res.on('end', () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch (e) {
+                        reject(new Error('Invalid response'));
+                    }
+                });
+            });
+            
+            req.on('error', reject);
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Timeout'));
+            });
+            req.setTimeout(5000);
+            req.end();
+        });
+        
+        return response;
+    } catch (error) {
+        logger.warn('[UI API] Failed to get token stats:', error.message);
+        return { total: 0, input: 0, output: 0, history: [] };
     }
 }

@@ -6,6 +6,7 @@ import logging
 import shutil
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+from core.cache_service import cache_service
 
 logger = logging.getLogger("ai_controller.sys_ctl")
 
@@ -61,13 +62,19 @@ class SystemController:
         return result.returncode == 0
     
     def get_service_status(self, service_name: str) -> str:
+        cache_key = f"ai_controller:cache:service_status:{service_name}"
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+        
         if not self._supports_systemctl():
             logger.warning("systemctl unsupported when checking service: %s", service_name)
             return 'inactive'
         result = self._run_command(['systemctl', 'is-active', service_name])
-        if result.returncode == 0:
-            return result.stdout.strip()
-        return 'inactive'
+        status = result.stdout.strip() if result.returncode == 0 else 'inactive'
+        
+        cache_service.set(cache_key, status, ttl_seconds=5)
+        return status
     
     def is_service_running(self, service_name: str) -> bool:
         status = self.get_service_status(service_name)
@@ -115,6 +122,11 @@ class SystemController:
         return []
     
     def get_process_info(self, port: int) -> Optional[Dict[str, Any]]:
+        cache_key = f"ai_controller:cache:process_info:{port}"
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+        
         try:
             result = subprocess.run(
                 ['lsof', '-i', f':{port}', '-s', 'TCP:LISTEN', '-F', 'pc'],
@@ -131,7 +143,9 @@ class SystemController:
                     elif line.startswith('c'):
                         cmd = line[1:]
                 if pid:
-                    return {'pid': pid, 'command': cmd}
+                    info = {'pid': pid, 'command': cmd}
+                    cache_service.set(cache_key, info, ttl_seconds=10)
+                    return info
         except Exception:
             logger.exception("Failed to get process info for port: %s", port)
         return None

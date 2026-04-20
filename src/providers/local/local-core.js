@@ -20,6 +20,9 @@ export class LocalApiService {
         this.useSystemProxy = config?.USE_SYSTEM_PROXY_LOCAL ?? false;
         
         logger.info(`[Local Model] Base URL: ${this.baseUrl}, System proxy ${this.useSystemProxy ? 'enabled' : 'disabled'}`);
+        
+        this._modelSwitchLock = false;
+        this._modelSwitchQueue = [];
 
         const httpAgent = new http.Agent({
             keepAlive: true,
@@ -185,32 +188,25 @@ export class LocalApiService {
 
     async listModels() {
         try {
-            // Use a separate axios request without Authorization header for health check
-            // This avoids 403 errors when the vLLM server has different auth requirements
-            const headers = {
-                'Content-Type': 'application/json'
-            };
-            const axiosConfig = {
-                method: 'get',
-                url: '/v1/models',
-                headers,
-                baseURL: this.baseUrl,
-                timeout: 10000,
-                proxy: !this.useSystemProxy ? false : undefined
-            };
-            if (this.useSystemProxy) {
-                configureAxiosProxy(axiosConfig, this.config, this.config.MODEL_PROVIDER || MODEL_PROVIDER.LOCAL_MODEL);
+            const currentModel = await this.getCurrentModel();
+            
+            if (!currentModel) {
+                logger.info('[Local Model] No current model is running');
+                return { object: 'list', data: [] };
             }
-            const response = await axios.request(axiosConfig);
-            return response.data;
+
+            return {
+                object: 'list',
+                data: [{
+                    id: currentModel,
+                    object: 'model',
+                    created: Math.floor(Date.now() / 1000),
+                    owned_by: 'local'
+                }]
+            };
         } catch (error) {
-            const status = error.response?.status;
-            const data = error.response?.data;
-            // Only log if it's not a 401/403 (common for health checks with no auth)
-            if (status !== 401 && status !== 403) {
-                logger.error(`Error listing Local models (Status: ${status}):`, data || error.message);
-            }
-            return { data: [] };
+            logger.error(`Error listing Local models:`, error.message);
+            return { object: 'list', data: [] };
         }
     }
 
@@ -326,12 +322,33 @@ export class LocalApiService {
     }
 
     async switchModel(targetModelName, options = {}) {
+        return new Promise((resolve) => {
+            const request = {
+                targetModelName,
+                options,
+                resolve
+            };
+
+            if (this._modelSwitchLock) {
+                logger.info(`Model switch to ${targetModelName} queued: another switch is in progress`);
+                this._modelSwitchQueue.push(request);
+                return;
+            }
+
+            this._processModelSwitchQueue(request);
+        });
+    }
+
+    async _processModelSwitchQueue(request) {
+        const { targetModelName, options, resolve } = request;
         const { 
             testAfterSwitch = true, 
             rollbackOnFailure = true, 
             testTimeout = 30000,
             maxRetries = 2 
         } = options;
+
+        this._modelSwitchLock = true;
 
         const startTime = Date.now();
         const currentModel = await this.getCurrentModel();
@@ -352,126 +369,140 @@ export class LocalApiService {
         let retries = 0;
         let lastError = null;
 
-        while (retries <= maxRetries) {
-            try {
-                result.steps.push({ 
-                    step: 'switching', 
-                    message: `Attempting to switch to ${targetModelName} (attempt ${retries + 1}/${maxRetries + 1})` 
-                });
-
-                const switchResponse = await this.callApi(
-                    '/manage/models/switch', 
-                    { model: targetModelName },
-                    false,
-                    0
-                );
-
-                if (!switchResponse || switchResponse.status !== 'switched') {
-                    throw new Error(switchResponse?.error || 'Switch command failed');
-                }
-
-                result.steps.push({ step: 'switched', message: `Model switched to ${targetModelName}` });
-
-                if (testAfterSwitch) {
-                    result.steps.push({ step: 'testing', message: `Testing ${targetModelName}...` });
-
-                    const waitInterval = 2000;
-                    const maxWaitTime = 60000;
-                    let waited = 0;
-                    let testSuccess = false;
-
-                    while (waited < maxWaitTime) {
-                        const testResult = await this._testModel(targetModelName, testTimeout);
-                        
-                        if (testResult.success) {
-                            testSuccess = true;
-                            result.testResult = testResult;
-                            break;
-                        }
-
-                        if (waited >= maxWaitTime - waitInterval) {
-                            throw new Error(`Model test failed after ${maxWaitTime}ms: ${testResult.error}`);
-                        }
-
-                        await new Promise(resolve => setTimeout(resolve, waitInterval));
-                        waited += waitInterval;
-                    }
-
-                    if (!testSuccess) {
-                        throw new Error('Model test failed');
-                    }
-
+        try {
+            while (retries <= maxRetries) {
+                try {
                     result.steps.push({ 
-                        step: 'test_passed', 
-                        message: `Model ${targetModelName} test passed in ${result.testResult.latency}ms` 
-                    });
-                }
-
-                result.success = true;
-                result.duration = Date.now() - startTime;
-                logger.info(`Successfully switched to ${targetModelName} in ${result.duration}ms`);
-                return result;
-
-            } catch (error) {
-                lastError = error;
-                result.error = error.message;
-                result.steps.push({ step: 'failed', message: error.message });
-
-                if (rollbackOnFailure && currentModel && currentModel !== targetModelName) {
-                    result.steps.push({ 
-                        step: 'rollback', 
-                        message: `Switch failed, rolling back to ${currentModel}` 
+                        step: 'switching', 
+                        message: `Attempting to switch to ${targetModelName} (attempt ${retries + 1}/${maxRetries + 1})` 
                     });
 
-                    try {
-                        await this.callApi(
-                            '/manage/models/switch', 
-                            { model: currentModel },
-                            false,
-                            0
-                        );
+                    const switchResponse = await this.callApi(
+                        '/manage/models/switch', 
+                        { model: targetModelName },
+                        false,
+                        0
+                    );
 
-                        await new Promise(resolve => setTimeout(resolve, 3000));
+                    if (!switchResponse || switchResponse.status !== 'switched') {
+                        throw new Error(switchResponse?.error || 'Switch command failed');
+                    }
 
-                        const rollbackTest = await this._testModel(currentModel, 15000);
-                        if (rollbackTest.success) {
-                            result.rollbackPerformed = true;
-                            result.steps.push({ 
-                                step: 'rollback_success', 
-                                message: `Successfully rolled back to ${currentModel}` 
-                            });
-                            logger.info(`Successfully rolled back to ${currentModel}`);
-                        } else {
+                    result.steps.push({ step: 'switched', message: `Model switched to ${targetModelName}` });
+
+                    if (testAfterSwitch) {
+                        result.steps.push({ step: 'testing', message: `Testing ${targetModelName}...` });
+
+                        const waitInterval = 2000;
+                        const maxWaitTime = 60000;
+                        let waited = 0;
+                        let testSuccess = false;
+
+                        while (waited < maxWaitTime) {
+                            const testResult = await this._testModel(targetModelName, testTimeout);
+                            
+                            if (testResult.success) {
+                                testSuccess = true;
+                                result.testResult = testResult;
+                                break;
+                            }
+
+                            if (waited >= maxWaitTime - waitInterval) {
+                                throw new Error(`Model test failed after ${maxWaitTime}ms: ${testResult.error}`);
+                            }
+
+                            await new Promise(resolve => setTimeout(resolve, waitInterval));
+                            waited += waitInterval;
+                        }
+
+                        if (!testSuccess) {
+                            throw new Error('Model test failed');
+                        }
+
+                        result.steps.push({ 
+                            step: 'test_passed', 
+                            message: `Model ${targetModelName} test passed in ${result.testResult.latency}ms` 
+                        });
+                    }
+
+                    result.success = true;
+                    result.duration = Date.now() - startTime;
+                    logger.info(`Successfully switched to ${targetModelName} in ${result.duration}ms`);
+                    resolve(result);
+                    return;
+
+                } catch (error) {
+                    lastError = error;
+                    result.error = error.message;
+                    result.steps.push({ step: 'failed', message: error.message });
+
+                    if (rollbackOnFailure && currentModel && currentModel !== targetModelName) {
+                        result.steps.push({ 
+                            step: 'rollback', 
+                            message: `Switch failed, rolling back to ${currentModel}` 
+                        });
+
+                        try {
+                            await this.callApi(
+                                '/manage/models/switch', 
+                                { model: currentModel },
+                                false,
+                                0
+                            );
+
+                            await new Promise(resolve => setTimeout(resolve, 3000));
+
+                            const rollbackTest = await this._testModel(currentModel, 15000);
+                            if (rollbackTest.success) {
+                                result.rollbackPerformed = true;
+                                result.steps.push({ 
+                                    step: 'rollback_success', 
+                                    message: `Successfully rolled back to ${currentModel}` 
+                                });
+                                logger.info(`Successfully rolled back to ${currentModel}`);
+                            } else {
+                                result.steps.push({ 
+                                    step: 'rollback_failed', 
+                                    message: `Rollback to ${currentModel} failed: ${rollbackTest.error}` 
+                                });
+                                logger.error(`Rollback to ${currentModel} failed:`, rollbackTest.error);
+                            }
+                        } catch (rollbackError) {
                             result.steps.push({ 
                                 step: 'rollback_failed', 
-                                message: `Rollback to ${currentModel} failed: ${rollbackTest.error}` 
+                                message: `Rollback to ${currentModel} failed: ${rollbackError.message}` 
                             });
-                            logger.error(`Rollback to ${currentModel} failed:`, rollbackTest.error);
+                            logger.error(`Rollback to ${currentModel} failed:`, rollbackError.message);
                         }
-                    } catch (rollbackError) {
+                    }
+
+                    retries++;
+                    if (retries <= maxRetries) {
+                        const delay = Math.pow(2, retries) * 1000;
                         result.steps.push({ 
-                            step: 'rollback_failed', 
-                            message: `Rollback to ${currentModel} failed: ${rollbackError.message}` 
+                            step: 'retry', 
+                            message: `Retrying in ${delay}ms (attempt ${retries + 1})` 
                         });
-                        logger.error(`Rollback to ${currentModel} failed:`, rollbackError.message);
+                        await new Promise(resolve => setTimeout(resolve, delay));
                     }
                 }
-
-                retries++;
-                if (retries <= maxRetries) {
-                    const delay = Math.pow(2, retries) * 1000;
-                    result.steps.push({ 
-                        step: 'retry', 
-                        message: `Retrying in ${delay}ms (attempt ${retries + 1})` 
-                    });
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
             }
-        }
 
-        result.duration = Date.now() - startTime;
-        result.error = lastError?.message || 'Unknown error';
-        logger.error(`Failed to switch to ${targetModelName} after ${maxRetries + 1} attempts:`, result.error);
-        return result;
+            result.duration = Date.now() - startTime;
+            result.error = lastError?.message || 'Unknown error';
+            logger.error(`Failed to switch to ${targetModelName} after ${maxRetries + 1} attempts:`, result.error);
+            resolve(result);
+        } finally {
+            this._modelSwitchLock = false;
+            this._processNextSwitchRequest();
+        }
+    }
+
+    _processNextSwitchRequest() {
+        if (this._modelSwitchQueue.length > 0) {
+            const nextRequest = this._modelSwitchQueue.shift();
+            logger.info(`Processing next queued model switch to ${nextRequest.targetModelName}`);
+            this._processModelSwitchQueue(nextRequest);
+        }
     }
 }

@@ -432,9 +432,45 @@ function getStatus() {
 }
 
 /**
- * 创建主进程管理 HTTP 服务器
+ * 检查端口是否被占用
  */
-function createMasterServer() {
+function isPortInUse(port) {
+    return new Promise((resolve) => {
+        const server = http.createServer();
+        server.once('error', () => resolve(true));
+        server.once('listening', () => {
+            server.close(() => resolve(false));
+        });
+        server.listen(port);
+    });
+}
+
+/**
+ * 创建管理服务器
+ */
+async function createMasterServer() {
+    const port = config.masterPort;
+    
+    const inUse = await isPortInUse(port);
+    if (inUse) {
+        logger.warn(`[Master] Port ${port} is already in use, attempting to find existing master...`);
+        
+        try {
+            const response = await fetch(`http://localhost:${port}/master/status`);
+            if (response.ok) {
+                const status = await response.json();
+                logger.warn(`[Master] Found existing master process, PID: ${status.pid || 'unknown'}`);
+                logger.warn(`[Master] This instance will exit to avoid conflicts`);
+                process.exit(1);
+            }
+        } catch {
+            logger.warn(`[Master] Port ${port} occupied but no response from existing master`);
+        }
+        
+        logger.error(`[Master] Cannot start: port ${port} is already in use`);
+        process.exit(1);
+    }
+    
     const server = http.createServer((req, res) => {
         const url = new URL(req.url, `http://${req.headers.host}`);
         const path = url.pathname;
@@ -613,7 +649,7 @@ async function main() {
     setupSignalHandlers();
 
     // 创建管理服务器
-    createMasterServer();
+    await createMasterServer();
 
     // 启动子进程
     startWorker();

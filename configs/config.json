@@ -2,7 +2,7 @@
   "REQUIRED_API_KEY": "sk-2e3513944ecac08f466a2e01872ba91d",
   "SERVER_PORT": 30000,
   "HOST": "0.0.0.0",
-  "CONTROLLER_BASE_URL": "http://ssh.hamr.top:27145",
+  "CONTROLLER_BASE_URL": "http://localhost:5000",
   "MODEL_PROVIDER": "local-model",
   "DEFAULT_MODEL_PROVIDERS": [
     "local-model",

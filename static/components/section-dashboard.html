@@ -9,7 +9,7 @@
                     <i class="fas fa-clock"></i>
                 </div>
                 <div class="stat-info">
-                    <h3 id="uptime">--</h3>
+                    <h3 id="uptime" class="skeleton-text" style="width: 100px; height: 2rem; font-size: 2rem; margin-bottom: 0.25rem;">--</h3>
                     <p data-i18n="dashboard.uptime">运行时间</p>
                 </div>
             </div>
@@ -33,38 +33,30 @@
         <!-- Python GPU 统计卡片 -->
         <div class="python-gpu-stats">
             <div class="python-stat-item">
-                <div class="python-stat-icon gpu">
-                    <i class="fas fa-microchip"></i>
-                </div>
+                <div class="python-stat-icon gpu skeleton" style="width: 40px; height: 40px;"></div>
                 <div class="python-stat-content">
-                    <span class="python-stat-value" id="pythonGpuUtilization">--</span>
+                    <span class="python-stat-value skeleton-text" id="pythonGpuUtilization" style="width: 60px; height: 1.25rem;">--</span>
                     <span class="python-stat-label" data-i18n="dashboard.gpuUtilization">GPU使用率</span>
                 </div>
             </div>
             <div class="python-stat-item">
-                <div class="python-stat-icon memory">
-                    <i class="fas fa-memory"></i>
-                </div>
+                <div class="python-stat-icon memory skeleton" style="width: 40px; height: 40px;"></div>
                 <div class="python-stat-content">
-                    <span class="python-stat-value" id="pythonGpuMemory">--</span>
+                    <span class="python-stat-value skeleton-text" id="pythonGpuMemory" style="width: 60px; height: 1.25rem;">--</span>
                     <span class="python-stat-label" data-i18n="dashboard.gpuMemory">显存使用</span>
                 </div>
             </div>
             <div class="python-stat-item">
-                <div class="python-stat-icon temp">
-                    <i class="fas fa-thermometer-half"></i>
-                </div>
+                <div class="python-stat-icon temp skeleton" style="width: 40px; height: 40px;"></div>
                 <div class="python-stat-content">
-                    <span class="python-stat-value" id="pythonGpuTemp">--</span>
+                    <span class="python-stat-value skeleton-text" id="pythonGpuTemp" style="width: 60px; height: 1.25rem;">--</span>
                     <span class="python-stat-label" data-i18n="dashboard.gpuTemperature">温度</span>
                 </div>
             </div>
             <div class="python-stat-item">
-                <div class="python-stat-icon power">
-                    <i class="fas fa-bolt"></i>
-                </div>
+                <div class="python-stat-icon power skeleton" style="width: 40px; height: 40px;"></div>
                 <div class="python-stat-content">
-                    <span class="python-stat-value" id="pythonGpuPower">--</span>
+                    <span class="python-stat-value skeleton-text" id="pythonGpuPower" style="width: 60px; height: 1.25rem;">--</span>
                     <span class="python-stat-label" data-i18n="dashboard.gpuPower">功耗</span>
                 </div>
             </div>
@@ -99,21 +91,21 @@
                 <div class="info-row">
                     <div class="info-item">
                         <span class="info-label"><i class="fas fa-tag"></i> <span data-i18n="dashboard.gpuName">GPU型号</span></span>
-                        <span class="info-value" id="pythonGpuName">--</span>
+                        <span class="info-value skeleton-text" id="pythonGpuName" style="width: 150px;">--</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label"><i class="fas fa-hdd"></i> <span data-i18n="dashboard.totalMemory">总显存</span></span>
-                        <span class="info-value" id="pythonGpuTotalMemory">--</span>
+                        <span class="info-value skeleton-text" id="pythonGpuTotalMemory" style="width: 80px;">--</span>
                     </div>
                 </div>
                 <div class="info-row">
                     <div class="info-item">
                         <span class="info-label"><i class="fas fa-chart-bar"></i> <span data-i18n="dashboard.usedMemory">已用显存</span></span>
-                        <span class="info-value" id="pythonGpuUsedMemory">--</span>
+                        <span class="info-value skeleton-text" id="pythonGpuUsedMemory" style="width: 80px;">--</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label"><i class="fas fa-chart-line"></i> <span data-i18n="dashboard.availableMemory">可用显存</span></span>
-                        <span class="info-value" id="pythonGpuAvailableMemory">--</span>
+                        <span class="info-value skeleton-text" id="pythonGpuAvailableMemory" style="width: 80px;">--</span>
                     </div>
                 </div>
             </div>
@@ -180,7 +172,7 @@
                     <i class="fas fa-tag"></i> <span data-i18n="dashboard.version">版本号</span>
                 </span>
                 <div class="version-display-wrapper">
-                    <span class="info-value" id="appVersion">--</span>
+                    <span class="info-value skeleton-text" id="appVersion" style="width: 80px;">--</span>
                     <span class="update-badge" id="updateBadge" style="display: none;">
                         <i class="fas fa-arrow-up"></i> <span id="latestVersionText">--</span>
                     </span>
@@ -191,7 +183,7 @@
                     <i class="fas fa-code"></i> <span data-i18n="dashboard.nodeVersion">Node.js版本</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value" id="nodeVersion">--</span>
+                <span class="info-value skeleton-text" id="nodeVersion" style="width: 80px;">--</span>
                 </div>
             </div>
             <div class="info-item">
@@ -199,7 +191,7 @@
                     <i class="fas fa-clock"></i> <span data-i18n="dashboard.serverTime">服务器时间</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value" id="serverTime">--</span>
+                <span class="info-value skeleton-text" id="serverTime" style="width: 150px;">--</span>
                 </div>
             </div>
             <div class="info-item">
@@ -207,7 +199,7 @@
                     <i class="fas fa-desktop"></i> <span data-i18n="dashboard.platform">操作系统</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value" id="platformInfo">--</span>
+                <span class="info-value skeleton-text" id="platformInfo" style="width: 100px;">--</span>
                 </div>
             </div>
             <div class="info-item">
@@ -215,7 +207,7 @@
                     <i class="fas fa-memory"></i> <span data-i18n="dashboard.memoryUsage">内存使用</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value" id="memoryUsage">--</span>
+                <span class="info-value skeleton-text" id="memoryUsage" style="width: 120px;">--</span>
                 </div>
             </div>
             <div class="info-item">
@@ -223,7 +215,7 @@
                     <i class="fas fa-microchip"></i> <span data-i18n="dashboard.cpuUsage">CPU 使用</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value" id="cpuUsage">--</span>
+                <span class="info-value skeleton-text" id="cpuUsage" style="width: 60px;">--</span>
                 </div>
             </div>
             <div class="info-item">
@@ -231,7 +223,7 @@
                     <i class="fas fa-cogs"></i> <span data-i18n="dashboard.serviceMode">运行模式</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value" id="serviceMode">--</span>
+                <span class="info-value skeleton-text" id="serviceMode" style="width: 80px;">--</span>
                 </div>
             </div>
             <div class="info-item">
@@ -239,7 +231,7 @@
                     <i class="fas fa-microchip"></i> <span data-i18n="dashboard.processPid">进程 PID</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value" id="processPid">--</span>
+                <span class="info-value skeleton-text" id="processPid" style="width: 60px;">--</span>
                 </div>
             </div>
         </div>

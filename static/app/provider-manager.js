@@ -237,7 +237,7 @@ async function loadProvidersDynamic() {
         const data = await window.monitorCache.getProvidersDynamic();
         if (!data || !data.providers) return;
 
-        renderProviders(data.providers, cachedSupportedProviders);
+        renderProviders(data.providers, cachedSupportedProviders || []);
     } catch (error) {
         console.error('Failed to load providers dynamic data:', error);
     }

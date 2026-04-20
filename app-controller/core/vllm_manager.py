@@ -4,6 +4,7 @@ vLLM 模型管理模块
 - 管理 vLLM 服务状态（启动/停止/重启/切换）
 - 提供模型信息（显存需求、路径、支持的功能等）
 - 模型切换后自动自测验证
+- 使用互斥锁防止并发切换
 """
 
 import os
@@ -13,6 +14,13 @@ import asyncio
 import httpx
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+from core.cache_service import cache_service
+
+# 模型切换互斥锁，防止并发切换
+model_switch_lock = asyncio.Lock()
+
+# 标记是否正在切换中（用于同步函数的检查）
+_switching_in_progress = False
 
 # 模型扫描路径
 MODEL_BASE_PATH = "/mnt/pve_models"
@@ -44,6 +52,10 @@ def get_available_models() -> List[Dict[str, Any]]:
     """
     扫描可用模型目录，返回模型列表
     """
+    cached = cache_service.get("ai_controller:cache:model_list")
+    if cached is not None:
+        return cached
+    
     models = []
     if not os.path.exists(MODEL_BASE_PATH):
         return models
@@ -72,7 +84,8 @@ def get_available_models() -> List[Dict[str, Any]]:
         }
         
         models.append(model_info)
-
+    
+    cache_service.set("ai_controller:cache:model_list", models, ttl_seconds=60)
     return models
 
 
@@ -260,44 +273,59 @@ def switch_vllm_model(model_name: str) -> Dict[str, Any]:
     1. 更新启动脚本
     2. 重启 vLLM 服务
     """
-    model_path = os.path.join(MODEL_BASE_PATH, model_name)
-
-    # 检查模型是否存在
-    if not os.path.exists(model_path):
+    global _switching_in_progress
+    
+    # 检查是否正在切换中
+    if _switching_in_progress:
         return {
             "success": False,
-            "error": f"Model not found: {model_name}",
-            "model_path": model_path
+            "error": "Model switch is already in progress, please wait for it to complete",
+            "model_path": os.path.join(MODEL_BASE_PATH, model_name)
         }
 
-    # 更新启动脚本
-    script_updated = _update_vllm_script(model_path)
-    if not script_updated:
+    _switching_in_progress = True
+    
+    try:
+        model_path = os.path.join(MODEL_BASE_PATH, model_name)
+
+        # 检查模型是否存在
+        if not os.path.exists(model_path):
+            return {
+                "success": False,
+                "error": f"Model not found: {model_name}",
+                "model_path": model_path
+            }
+
+        # 更新启动脚本
+        script_updated = _update_vllm_script(model_path)
+        if not script_updated:
+            return {
+                "success": False,
+                "error": "Failed to update vLLM start script",
+                "model_path": model_path
+            }
+
+        # 重启服务
+        service_restarted = restart_vllm_service()
+        if not service_restarted:
+            return {
+                "success": False,
+                "error": "Failed to restart vLLM service",
+                "model_path": model_path
+            }
+
         return {
-            "success": False,
-            "error": "Failed to update vLLM start script",
-            "model_path": model_path
+            "success": True,
+            "model": model_name,
+            "model_path": model_path,
+            "service": VLLM_SERVICE_NAME,
+            "status": "restarting"
         }
-
-    # 重启服务
-    service_restarted = restart_vllm_service()
-    if not service_restarted:
-        return {
-            "success": False,
-            "error": "Failed to restart vLLM service",
-            "model_path": model_path
-        }
-
-    return {
-        "success": True,
-        "model": model_name,
-        "model_path": model_path,
-        "service": VLLM_SERVICE_NAME,
-        "status": "restarting"
-    }
+    finally:
+        _switching_in_progress = False
 
 
-async def switch_vllm_model_with_test(model_name: str, test_enabled: bool = True) -> Dict[str, Any]:
+async def switch_vllm_model_with_test(model_name: str, test_enabled: bool = True, model_path: str = None) -> Dict[str, Any]:
     """
     切换到指定模型并进行自测：
     1. 更新启动脚本
@@ -306,9 +334,33 @@ async def switch_vllm_model_with_test(model_name: str, test_enabled: bool = True
     4. 执行自测验证模型是否可用
     :param model_name: 模型名称
     :param test_enabled: 是否启用自测
+    :param model_path: 模型路径（可选，用于测试场景）
     :return: 切换结果字典，包含自测结果
     """
-    model_path = os.path.join(MODEL_BASE_PATH, model_name)
+    global _switching_in_progress
+    
+    # 尝试获取锁，如果正在切换则立即返回
+    if not model_switch_lock.locked():
+        async with model_switch_lock:
+            _switching_in_progress = True
+            try:
+                return await _do_switch_vllm_model(model_name, test_enabled, model_path)
+            finally:
+                _switching_in_progress = False
+    else:
+        return {
+            "success": False,
+            "error": "Model switch is already in progress, please wait for it to complete",
+            "model_path": model_path if model_path else os.path.join(MODEL_BASE_PATH, model_name)
+        }
+
+
+async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, model_path: str = None) -> Dict[str, Any]:
+    """
+    实际执行模型切换的内部函数
+    """
+    if model_path is None:
+        model_path = os.path.join(MODEL_BASE_PATH, model_name)
 
     # 检查模型是否存在
     if not os.path.exists(model_path):

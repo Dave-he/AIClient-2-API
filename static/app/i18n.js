@@ -2360,10 +2360,81 @@ export function initI18n() {
     });
 }
 
+export function translateElement(element) {
+    if (!element) return;
+    
+    const attributes = ['placeholder', 'title', 'aria-label'];
+    attributes.forEach(attr => {
+        const attrKey = element.getAttribute(`data-i18n-${attr}`);
+        if (attrKey) {
+            const params = element.getAttribute(`data-i18n-${attr}-params`);
+            const parsedParams = params ? JSON.parse(params) : {};
+            if (attr === 'aria-label') {
+                element.setAttribute('aria-label', t(attrKey, parsedParams));
+            } else {
+                element[attr] = t(attrKey, parsedParams);
+            }
+        }
+    });
+
+    const key = element.getAttribute('data-i18n');
+    if (key) {
+        const params = element.getAttribute('data-i18n-params');
+        const parsedParams = params ? JSON.parse(params) : {};
+        
+        if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+            if (!element.hasAttribute('data-i18n-placeholder')) {
+                element.placeholder = t(key, parsedParams);
+            }
+        } else {
+            element.textContent = t(key, parsedParams);
+        }
+    }
+
+    element.querySelectorAll('[data-i18n], [data-i18n-placeholder], [data-i18n-title], [data-i18n-aria-label]').forEach(child => {
+        const childKey = child.getAttribute('data-i18n');
+        const childAttrs = ['placeholder', 'title', 'aria-label'];
+        
+        childAttrs.forEach(attr => {
+            const attrKey = child.getAttribute(`data-i18n-${attr}`);
+            if (attrKey) {
+                const params = child.getAttribute(`data-i18n-${attr}-params`);
+                const parsedParams = params ? JSON.parse(params) : {};
+                if (attr === 'aria-label') {
+                    child.setAttribute('aria-label', t(attrKey, parsedParams));
+                } else {
+                    child[attr] = t(attrKey, parsedParams);
+                }
+            }
+        });
+
+        if (childKey) {
+            const params = child.getAttribute('data-i18n-params');
+            const parsedParams = params ? JSON.parse(params) : {};
+            
+            if (child.tagName === 'INPUT' || child.tagName === 'TEXTAREA') {
+                if (!child.hasAttribute('data-i18n-placeholder')) {
+                    child.placeholder = t(childKey, parsedParams);
+                }
+            } else {
+                child.textContent = t(childKey, parsedParams);
+            }
+        }
+    });
+
+    element.querySelectorAll('[data-i18n-html]').forEach(child => {
+        const childKey = child.getAttribute('data-i18n-html');
+        const params = child.getAttribute('data-i18n-params');
+        const parsedParams = params ? JSON.parse(params) : {};
+        child.innerHTML = t(childKey, parsedParams);
+    });
+}
+
 // 导出所有函数
 export default {
     t,
     setLanguage,
     getCurrentLanguage,
-    initI18n
+    initI18n,
+    translateElement
 };

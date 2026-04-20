@@ -113,7 +113,7 @@ const formatMemory = (bytes) => {
 .gpu-status-panel {
   background: var(--card-bg);
   border-radius: var(--radius);
-  padding: 1rem;
+  padding: 0.75rem;
   box-shadow: var(--shadow);
 }
 
@@ -121,29 +121,30 @@ const formatMemory = (bytes) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.375rem;
   border-bottom: 1px solid var(--border);
 }
 
 .panel-header h3 {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.25rem;
 }
 
 .panel-header h3 i {
   color: var(--primary);
+  font-size: 0.7rem;
 }
 
 .gpu-badge {
-  padding: 0.1875rem 0.625rem;
+  padding: 0.125rem 0.5rem;
   border-radius: 9999px;
-  font-size: 0.675rem;
+  font-size: 0.6rem;
   font-weight: 600;
 }
 
@@ -160,43 +161,43 @@ const formatMemory = (bytes) => {
 .gpu-main-info {
   display: flex;
   align-items: center;
-  gap: 0.875rem;
-  margin-bottom: 1rem;
+  gap: 0.625rem;
+  margin-bottom: 0.75rem;
 }
 
 .gpu-icon-wrapper {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   background: linear-gradient(135deg, var(--primary), #1d4ed8);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
 }
 
 .gpu-details .gpu-name {
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--text);
 }
 
 .gpu-details .gpu-identifier {
-  font-size: 0.725rem;
+  font-size: 0.65rem;
   color: var(--text-muted);
 }
 
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .metric-item {
   background: var(--bg);
-  border-radius: 10px;
-  padding: 0.75rem;
+  border-radius: 8px;
+  padding: 0.5rem;
 }
 
 .metric-item.memory {
@@ -206,20 +207,20 @@ const formatMemory = (bytes) => {
 .metric-header {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  margin-bottom: 0.375rem;
+  gap: 0.25rem;
+  margin-bottom: 0.25rem;
   color: var(--text-secondary);
-  font-size: 0.725rem;
+  font-size: 0.65rem;
 }
 
 .metric-header i {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.625rem;
+  font-size: 0.55rem;
   color: white;
 }
 
@@ -231,12 +232,12 @@ const formatMemory = (bytes) => {
 .metric-value-row {
   display: flex;
   align-items: baseline;
-  gap: 0.2rem;
-  margin-bottom: 0.375rem;
+  gap: 0.15rem;
+  margin-bottom: 0.25rem;
 }
 
 .metric-value-row .value {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text);
 }
@@ -244,25 +245,25 @@ const formatMemory = (bytes) => {
 .metric-value-row .separator,
 .metric-value-row .total,
 .metric-value-row .unit {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   color: var(--text-muted);
 }
 
 .metric-value-row.single .value {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
 }
 
 .progress-bar {
-  height: 5px;
+  height: 4px;
   background: var(--border);
-  border-radius: 2.5px;
+  border-radius: 2px;
   overflow: hidden;
-  margin-bottom: 0.375rem;
+  margin-bottom: 0.25rem;
 }
 
 .progress-fill {
   height: 100%;
-  border-radius: 2.5px;
+  border-radius: 2px;
   background: var(--primary);
   transition: width 0.5s ease;
 }
@@ -274,7 +275,7 @@ const formatMemory = (bytes) => {
 .metric-footer {
   display: flex;
   justify-content: space-between;
-  font-size: 0.675rem;
+  font-size: 0.6rem;
   color: var(--text-muted);
 }
 
@@ -283,22 +284,22 @@ const formatMemory = (bytes) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem;
+  padding: 1rem;
   color: var(--text-muted);
 }
 
 .empty-state i {
-  font-size: 1.5rem;
-  margin-bottom: 0.375rem;
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
   opacity: 0.5;
 }
 
 .skeleton-loader {
-  height: 180px;
+  height: 150px;
   background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 @keyframes shimmer {

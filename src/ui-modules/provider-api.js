@@ -12,6 +12,7 @@ import { generateUUID, createProviderConfig, formatSystemPath, detectProviderFro
 import { broadcastEvent } from './event-broadcast.js';
 import { getRegisteredProviders, getServiceAdapter, invalidateServiceAdapter, serviceInstances } from '../providers/adapter.js';
 import { withFileLock, atomicWriteFile } from '../utils/file-lock.js';
+import { MODEL_PROVIDER } from '../utils/constants.js';
 
 
 
@@ -459,8 +460,9 @@ export async function handleGetProvidersDynamic(req, res, currentConfig, provide
 
 /**
  * 获取所有提供商的可用模型（支持动态配置组）
+ * @param {boolean} isAuthenticated - 是否为认证用户（管理后台）
  */
-export async function handleGetProviderModels(req, res, currentConfig, providerPoolManager) {
+export async function handleGetProviderModels(req, res, currentConfig, providerPoolManager, isAuthenticated = false) {
     const registeredProviders = getRegisteredProviders();
     let providerPools = {};
 
@@ -475,18 +477,58 @@ export async function handleGetProviderModels(req, res, currentConfig, providerP
     const allTypes = [...new Set([...registeredProviders, ...poolTypes])];
     const allModels = {};
 
-    allTypes.forEach(type => {
-        let models = getProviderModels(type);
-        if (usesManagedModelList(type)) {
-            const managedModels = getManagedSupportedModels(type, providerPools[type] || []);
-            if (managedModels.length > 0) {
-                models = managedModels;
+    for (const type of allTypes) {
+        // 本地模型始终只返回当前运行的模型（通过Python服务获取）
+        if (type === MODEL_PROVIDER.LOCAL_MODEL) {
+            if (providerPoolManager) {
+                try {
+                    const serviceAdapter = getServiceAdapter({ ...currentConfig, MODEL_PROVIDER: type });
+                    if (typeof serviceAdapter.listModels === 'function') {
+                        const nativeModels = await serviceAdapter.listModels();
+                        const models = extractModelIdsFromNativeList(nativeModels, type);
+                        if (models && models.length > 0) {
+                            allModels[type] = models;
+                        }
+                    }
+                } catch (error) {
+                    logger.warn(`[UI API] Failed to get deployed models for ${type}:`, error.message);
+                }
+            }
+            continue;
+        }
+
+        // 其他提供商：未认证用户只返回健康的已部署模型，认证用户返回全部模型
+        if (!isAuthenticated) {
+            if (providerPoolManager && providerPoolManager.providerStatus[type]) {
+                const healthyProviders = providerPoolManager.providerStatus[type].filter(
+                    p => p.config.isHealthy && !p.config.isDisabled
+                );
+                if (healthyProviders.length > 0) {
+                    let models = getProviderModels(type);
+                    if (usesManagedModelList(type)) {
+                        const managedModels = getManagedSupportedModels(type, healthyProviders.map(p => p.config));
+                        if (managedModels.length > 0) {
+                            models = managedModels;
+                        }
+                    }
+                    if (models && models.length > 0) {
+                        allModels[type] = models;
+                    }
+                }
+            }
+        } else {
+            let models = getProviderModels(type);
+            if (usesManagedModelList(type)) {
+                const managedModels = getManagedSupportedModels(type, providerPools[type] || []);
+                if (managedModels.length > 0) {
+                    models = managedModels;
+                }
+            }
+            if (models && models.length > 0) {
+                allModels[type] = models;
             }
         }
-        if (models && models.length > 0) {
-            allModels[type] = models;
-        }
-    });
+    }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(allModels));
@@ -495,20 +537,56 @@ export async function handleGetProviderModels(req, res, currentConfig, providerP
 
 /**
  * 获取特定提供商类型的可用模型
+ * @param {boolean} isAuthenticated - 是否为认证用户（管理后台）
  */
-export async function handleGetProviderTypeModels(req, res, currentConfig, providerPoolManager, providerType) {
-    let models = getProviderModels(providerType);
-    if (usesManagedModelList(providerType)) {
-        try {
-            const providerPools = loadProviderPools(currentConfig, providerPoolManager);
-            const managedModels = getManagedSupportedModels(providerType, providerPools[providerType] || []);
-            if (managedModels.length > 0) {
-                models = managedModels;
+export async function handleGetProviderTypeModels(req, res, currentConfig, providerPoolManager, providerType, isAuthenticated = false) {
+    let models = [];
+
+    // 本地模型始终只返回当前运行的模型
+    if (providerType === MODEL_PROVIDER.LOCAL_MODEL) {
+        if (providerPoolManager) {
+            try {
+                const serviceAdapter = getServiceAdapter({ ...currentConfig, MODEL_PROVIDER: providerType });
+                if (typeof serviceAdapter.listModels === 'function') {
+                    const nativeModels = await serviceAdapter.listModels();
+                    models = extractModelIdsFromNativeList(nativeModels, providerType);
+                }
+            } catch (error) {
+                logger.warn(`[UI API] Failed to get deployed models for ${providerType}:`, error.message);
             }
-        } catch (error) {
-            logger.warn('[UI API] Failed to load managed provider models:', error.message);
+        }
+    } else if (!isAuthenticated) {
+        // 未认证用户只返回健康的已部署模型
+        if (providerPoolManager && providerPoolManager.providerStatus[providerType]) {
+            const healthyProviders = providerPoolManager.providerStatus[providerType].filter(
+                p => p.config.isHealthy && !p.config.isDisabled
+            );
+            if (healthyProviders.length > 0) {
+                models = getProviderModels(providerType);
+                if (usesManagedModelList(providerType)) {
+                    const managedModels = getManagedSupportedModels(providerType, healthyProviders.map(p => p.config));
+                    if (managedModels.length > 0) {
+                        models = managedModels;
+                    }
+                }
+            }
+        }
+    } else {
+        // 认证用户返回全部模型
+        models = getProviderModels(providerType);
+        if (usesManagedModelList(providerType)) {
+            try {
+                const providerPools = loadProviderPools(currentConfig, providerPoolManager);
+                const managedModels = getManagedSupportedModels(providerType, providerPools[providerType] || []);
+                if (managedModels.length > 0) {
+                    models = managedModels;
+                }
+            } catch (error) {
+                logger.warn('[UI API] Failed to load managed provider models:', error.message);
+            }
         }
     }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
         providerType,

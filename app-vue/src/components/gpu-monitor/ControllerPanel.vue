@@ -1,10 +1,10 @@
 <template>
   <div class="controller-section">
     <div class="controller-header">
-      <h3><i class="fas fa-desktop"></i> AI控制器</h3>
+      <h3><i class="fas fa-desktop"></i> {{ t('gpuMonitor.controller.title') }}</h3>
       <span class="controller-badge" :class="controllerConnected ? 'online' : 'offline'">
         <span class="status-dot"></span>
-        {{ controllerConnected ? '已连接' : '未连接' }}
+        {{ controllerConnected ? t('gpuMonitor.controller.connected') : t('gpuMonitor.controller.disconnected') }}
       </span>
     </div>
     <div class="iframe-wrapper">
@@ -17,14 +17,18 @@
       ></iframe>
       <div v-else class="iframe-placeholder">
         <i class="fas fa-server"></i>
-        <p>AI控制器未启动或配置</p>
-        <p class="hint">请启动 Python 控制器服务以查看详细监控面板</p>
+        <p>{{ t('gpuMonitor.controller.notStarted') }}</p>
+        <p class="hint">{{ t('gpuMonitor.controller.hint') }}</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
 defineProps({
   controllerConnected: {
     type: Boolean,
@@ -41,7 +45,7 @@ defineProps({
 .controller-section {
   background: var(--card-bg);
   border-radius: var(--radius);
-  padding: 1.25rem;
+  padding: 0.75rem;
   box-shadow: var(--shadow);
 }
 
@@ -49,30 +53,31 @@ defineProps({
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .controller-header h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .controller-header h3 i {
   color: var(--primary);
+  font-size: 0.7rem;
 }
 
 .controller-badge {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.75rem;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
   border-radius: 9999px;
-  font-size: 0.75rem;
+  font-size: 0.6rem;
   font-weight: 500;
 }
 
@@ -87,16 +92,16 @@ defineProps({
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
 }
 
 .iframe-wrapper {
   position: relative;
-  height: 500px;
-  border-radius: 12px;
+  height: 320px;
+  border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
 }
@@ -118,23 +123,24 @@ defineProps({
 }
 
 .iframe-placeholder i {
-  font-size: 3rem;
-  margin-bottom: 1rem;
+  font-size: 1.75rem;
+  margin-bottom: 0.5rem;
   opacity: 0.5;
 }
 
 .iframe-placeholder p {
-  margin: 0.5rem 0;
+  margin: 0.25rem 0;
+  font-size: 0.8rem;
 }
 
 .iframe-placeholder .hint {
-  font-size: 0.875rem;
+  font-size: 0.65rem;
   opacity: 0.7;
 }
 
 @media (max-width: 768px) {
   .iframe-wrapper {
-    height: 300px;
+    height: 220px;
   }
 }
 </style>

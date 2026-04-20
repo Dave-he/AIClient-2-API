@@ -9,6 +9,8 @@ import { discoverPlugins, getPluginManager } from '../core/plugin-manager.js';
 import { getTLSSidecar } from '../utils/tls-sidecar.js';
 import { HEALTH_CHECK } from '../utils/constants.js';
 import { setControllerUrl } from '../utils/python-controller.js';
+import { preloadControllerData, startPeriodicRefresh, stopPeriodicRefresh } from '../ui-modules/python-controller-api.js';
+import { preloadDashboardData } from '../ui-modules/dashboard-api.js';
 
 /**
  * @license
@@ -180,6 +182,13 @@ function setupWorkerCommunication() {
  */
 async function gracefulShutdown() {
     logger.info('[Server] Initiating graceful shutdown...');
+
+    // 停止控制器数据定时刷新
+    try {
+        stopPeriodicRefresh();
+    } catch (err) {
+        logger.debug('[Server] Stop periodic refresh error:', err?.message || err);
+    }
 
     // 停止所有插件
     try {
@@ -508,6 +517,25 @@ async function startServer() {
         // 如果是子进程，通知主进程已就绪
         if (IS_WORKER_PROCESS) {
             sendToMaster({ type: 'ready', pid: process.pid });
+        }
+
+        // Preload controller data (GPU status, models, queue, etc.) for faster UI response
+        logger.info('[Initialization] Preloading controller data for faster UI response...');
+        const preloadResult = await preloadControllerData();
+        if (preloadResult.success) {
+            logger.info(`[Initialization] Controller data preloaded in ${preloadResult.duration}ms`);
+            startPeriodicRefresh();
+        } else {
+            logger.warn(`[Initialization] Controller data preload failed: ${preloadResult.error}`);
+        }
+
+        // Preload dashboard summary data
+        logger.info('[Initialization] Preloading dashboard summary data...');
+        const dashboardPreloadResult = await preloadDashboardData();
+        if (dashboardPreloadResult.success) {
+            logger.info(`[Initialization] Dashboard data preloaded in ${dashboardPreloadResult.duration}ms`);
+        } else {
+            logger.warn(`[Initialization] Dashboard data preload failed: ${dashboardPreloadResult.error}`);
         }
     });
     return serverInstance; // Return the server instance for testing purposes

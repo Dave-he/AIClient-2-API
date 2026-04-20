@@ -25,6 +25,9 @@ const monitorSummaryCache = {
     ttl: 5000
 };
 
+let refreshIntervalId = null;
+const DEFAULT_REFRESH_INTERVAL = 10000;
+
 function invalidateControllerCaches() {
     gpuCache.data = null;
     gpuCache.timestamp = 0;
@@ -34,6 +37,83 @@ function invalidateControllerCaches() {
     modelsCache.timestamp = 0;
     monitorSummaryCache.data = null;
     monitorSummaryCache.timestamp = 0;
+}
+
+export async function preloadControllerData() {
+    logger.info('[Controller Cache] Starting preload of controller data...');
+    const startTime = Date.now();
+    
+    try {
+        const [gpuData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
+            callPythonController('/manage/gpu', 'GET', null, {}).catch(() => null),
+            callPythonController('/manage/models', 'GET', null, {}).catch(() => null),
+            callPythonController('/manage/queue', 'GET', null, {}).catch(() => null),
+            callPythonController('/manage/models/summary', 'GET', null, {}).catch(() => null),
+            callPythonController('/health', 'GET', null, {}).catch(() => null),
+            callPythonController('/manage/service/status', 'GET', null, {}).catch(() => null)
+        ]);
+
+        const now = Date.now();
+        
+        if (gpuData) {
+            gpuCache.data = gpuData;
+            gpuCache.timestamp = now;
+        }
+        if (modelsData) {
+            modelsCache.data = modelsData;
+            modelsCache.timestamp = now;
+        }
+        if (queueData) {
+            queueCache.data = queueData;
+            queueCache.timestamp = now;
+        }
+        
+        const result = {
+            success: true,
+            timestamp: now,
+            gpu: gpuData,
+            models: modelsData,
+            queue: queueData,
+            summary: summaryData,
+            health: healthData,
+            service: serviceData,
+            controllerUrl: CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000'
+        };
+        
+        monitorSummaryCache.data = result;
+        monitorSummaryCache.timestamp = now;
+        
+        const duration = Date.now() - startTime;
+        logger.info(`[Controller Cache] Preload completed in ${duration}ms`);
+        
+        return { success: true, duration, cached: !!gpuData || !!modelsData || !!queueData };
+    } catch (error) {
+        logger.warn(`[Controller Cache] Preload failed: ${error.message}`);
+        return { success: false, error: error.message };
+    }
+}
+
+export function startPeriodicRefresh(interval = DEFAULT_REFRESH_INTERVAL) {
+    stopPeriodicRefresh();
+    
+    refreshIntervalId = setInterval(async () => {
+        logger.debug('[Controller Cache] Running periodic refresh...');
+        await preloadControllerData();
+    }, interval);
+    
+    logger.info(`[Controller Cache] Periodic refresh scheduled every ${interval}ms`);
+}
+
+export function stopPeriodicRefresh() {
+    if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
+        logger.info('[Controller Cache] Periodic refresh stopped');
+    }
+}
+
+export function isRefreshRunning() {
+    return refreshIntervalId !== null;
 }
 
 function buildHeaders(req) {
@@ -54,7 +134,7 @@ function buildHeaders(req) {
 }
 
 async function callPythonController(endpoint, method = 'GET', body = null, headers = {}) {
-    const CONTROLLER_BASE_URL = CONFIG.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
+    const CONTROLLER_BASE_URL = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
     const url = `${CONTROLLER_BASE_URL}${endpoint}`;
     
     try {
@@ -123,14 +203,19 @@ export async function handleGetMonitorSummary(req, res) {
         const headers = buildHeaders(req);
         const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
         
-        const [gpuData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
+        const [gpuData, gpuHistoryData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
             callPythonController('/manage/gpu', 'GET', null, headers).catch(() => null),
+            callPythonController('/manage/gpu/history?count=60', 'GET', null, headers).catch(() => null),
             callPythonController('/manage/models', 'GET', null, headers).catch(() => null),
             callPythonController('/manage/queue', 'GET', null, headers).catch(() => null),
             callPythonController('/manage/models/summary', 'GET', null, headers).catch(() => null),
             callPythonController('/health', 'GET', null, headers).catch(() => null),
             callPythonController('/manage/service/status', 'GET', null, headers).catch(() => null)
         ]);
+
+        if (gpuData && gpuHistoryData && gpuHistoryData.history) {
+            gpuData.history = gpuHistoryData.history;
+        }
 
         const result = {
             success: true,

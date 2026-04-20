@@ -1,8 +1,8 @@
 <template>
   <div class="model-control-panel">
     <div class="panel-header">
-      <h3><i class="fas fa-server"></i> 模型管理</h3>
-      <button class="btn-icon-sm" @click="$emit('refresh-models')" title="刷新">
+      <h3><i class="fas fa-server"></i> {{ t('gpuMonitor.modelControl.title') }}</h3>
+      <button class="btn-icon-sm" @click="$emit('refresh-models')" :title="t('common.refresh')">
         <i class="fas fa-sync-alt"></i>
       </button>
     </div>
@@ -11,7 +11,7 @@
     </div>
     <div v-else-if="availableModels.length === 0" class="empty-state small">
       <i class="fas fa-database"></i>
-      <span>暂无可用模型</span>
+      <span>{{ t('gpuMonitor.modelControl.noModels') }}</span>
     </div>
     <div v-else class="model-list compact">
       <div
@@ -24,7 +24,7 @@
           <span class="model-name">{{ model.name }}</span>
           <span v-if="model.requiredMemory" class="model-memory">{{ model.requiredMemory }}GB</span>
           <span class="model-runtime-status" :class="model.status === 'running' ? 'running' : 'stopped'">
-            {{ model.status === 'running' ? '运行中' : '已停止' }}
+            {{ model.status === 'running' ? t('gpuMonitor.running') : t('gpuMonitor.modelControl.stopped') }}
           </span>
         </div>
         <div class="model-actions">
@@ -34,7 +34,7 @@
             @click="$emit('stop-model', model.name)"
           >
             <i class="fas fa-stop"></i>
-            停止
+            {{ t('gpuMonitor.modelControl.stop') }}
           </button>
           <button
             v-else
@@ -43,7 +43,7 @@
             :disabled="isTesting"
           >
             <i class="fas fa-play"></i>
-            切换
+            {{ t('gpuMonitor.modelControl.switch') }}
           </button>
         </div>
       </div>
@@ -52,6 +52,10 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
 defineProps({
   loading: {
     type: Boolean,
@@ -74,7 +78,7 @@ defineEmits(['refresh-models', 'switch-model', 'stop-model'])
 .model-control-panel {
   background: var(--card-bg);
   border-radius: var(--radius);
-  padding: 1.25rem;
+  padding: 0.75rem;
   box-shadow: var(--shadow);
 }
 
@@ -82,29 +86,30 @@ defineEmits(['refresh-models', 'switch-model', 'stop-model'])
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.375rem;
   border-bottom: 1px solid var(--border);
 }
 
 .panel-header h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .panel-header h3 i {
   color: var(--primary);
+  font-size: 0.7rem;
 }
 
 .btn-icon-sm {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
   border: none;
   background: var(--bg);
   color: var(--text-muted);
@@ -112,7 +117,7 @@ defineEmits(['refresh-models', 'switch-model', 'stop-model'])
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
+  font-size: 0.625rem;
   transition: all 0.2s;
 }
 
@@ -123,20 +128,20 @@ defineEmits(['refresh-models', 'switch-model', 'stop-model'])
 .model-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .model-list.compact .model-item {
-  padding: 0.875rem;
+  padding: 0.5rem;
 }
 
 .model-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem;
+  padding: 0.4rem;
   background: var(--bg);
-  border-radius: 10px;
+  border-radius: 6px;
   transition: all 0.2s;
 }
 
@@ -152,21 +157,21 @@ defineEmits(['refresh-models', 'switch-model', 'stop-model'])
 .model-info {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
   flex-wrap: wrap;
 }
 
 .model-name {
   font-weight: 500;
   color: var(--text);
-  font-size: 0.875rem;
+  font-size: 0.75rem;
 }
 
 .model-memory,
 .model-runtime-status {
-  font-size: 0.65rem;
-  padding: 0.125rem 0.375rem;
-  border-radius: 4px;
+  font-size: 0.55rem;
+  padding: 0.0875rem 0.25rem;
+  border-radius: 3px;
   font-weight: 500;
 }
 
@@ -186,16 +191,16 @@ defineEmits(['refresh-models', 'switch-model', 'stop-model'])
 }
 
 .btn {
-  padding: 0.375rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.6rem;
   font-weight: 600;
   cursor: pointer;
   border: none;
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.15rem;
 }
 
 .btn-primary {
@@ -217,8 +222,8 @@ defineEmits(['refresh-models', 'switch-model', 'stop-model'])
 }
 
 .btn-xs {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.7rem;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.575rem;
 }
 
 .btn:disabled {
@@ -231,22 +236,22 @@ defineEmits(['refresh-models', 'switch-model', 'stop-model'])
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 1rem;
   color: var(--text-muted);
 }
 
 .empty-state i {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
   opacity: 0.5;
 }
 
 .empty-state.small {
-  padding: 1rem;
+  padding: 0.5rem;
 }
 
 .empty-state.small i {
-  font-size: 1.25rem;
+  font-size: 1rem;
 }
 
 .skeleton-loader {
@@ -254,11 +259,11 @@ defineEmits(['refresh-models', 'switch-model', 'stop-model'])
   background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .skeleton-loader.small {
-  height: 80px;
+  height: 60px;
 }
 
 @keyframes shimmer {

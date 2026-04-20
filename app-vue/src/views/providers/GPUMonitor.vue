@@ -46,6 +46,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import GpuMonitorHeader from '@/components/gpu-monitor/GpuMonitorHeader.vue'
 import GpuStatusPanel from '@/components/gpu-monitor/GpuStatusPanel.vue'
 import GpuHistoryChartPanel from '@/components/gpu-monitor/GpuHistoryChartPanel.vue'
@@ -54,6 +55,8 @@ import QueueStatusPanel from '@/components/gpu-monitor/QueueStatusPanel.vue'
 import ModelControlPanel from '@/components/gpu-monitor/ModelControlPanel.vue'
 import ControllerPanel from '@/components/gpu-monitor/ControllerPanel.vue'
 import ModelTestReportModal from '@/components/gpu-monitor/ModelTestReportModal.vue'
+
+const { t } = useI18n()
 
 const loading = ref(true)
 const loadingModels = ref(true)
@@ -81,11 +84,11 @@ const chartData = ref({
 })
 
 const chartTabs = [
-  { type: 'all', label: '总览' },
-  { type: 'utilization', label: '使用率' },
-  { type: 'temperature', label: '温度' },
-  { type: 'memory', label: '显存' },
-  { type: 'power', label: '功耗' }
+  { type: 'all', label: t('gpuMonitor.history.overview') },
+  { type: 'utilization', label: t('gpuMonitor.utilization') },
+  { type: 'temperature', label: t('gpuMonitor.temperature') },
+  { type: 'memory', label: t('gpuMonitor.memory') },
+  { type: 'power', label: t('gpuMonitor.power') }
 ]
 
 const controllerUrl = ref('/api/python/manage')
@@ -216,7 +219,7 @@ const applyMonitorData = (data) => {
 const applyFallbackData = () => {
   gpuStatus.value = {
     status: 'unavailable',
-    message: '监控数据暂时不可用'
+    message: t('gpuMonitor.noGpu')
   }
 
   models.value = []
@@ -272,7 +275,7 @@ const switchModel = async (modelName) => {
     testReport.value = null
     showTestReport.value = false
 
-    window.$toast?.info(`正在切换到模型: ${modelName}，切换完成后将自动运行测试...`)
+    window.$toast?.info(`${t('gpuMonitor.model.switch')}: ${modelName}`)
 
     const response = await fetch(`/api/python/test/model/${encodeURIComponent(modelName)}/switch-and-test`, {
       method: 'POST'
@@ -282,13 +285,13 @@ const switchModel = async (modelName) => {
       const result = await response.json()
 
       if (result.success) {
-        window.$toast?.success(`成功切换到模型: ${modelName}`)
+        window.$toast?.success(`${t('gpuMonitor.model.switch')}: ${modelName}`)
         if (result.status === 'completed' && result.report) {
           testReport.value = result.report
           showTestReport.value = true
         }
       } else {
-        window.$toast?.error(result.error?.message || `切换模型失败: ${modelName}`)
+        window.$toast?.error(result.error?.message || `${t('common.操作失败')}: ${modelName}`)
       }
 
       requestCache.monitorSummary.timestamp = 0
@@ -298,11 +301,11 @@ const switchModel = async (modelName) => {
       debouncedLoadAvailableModels()
     } else {
       const error = await response.json()
-      window.$toast?.error(error.error?.message || `切换模型失败: ${modelName}`)
+      window.$toast?.error(error.error?.message || `${t('common.操作失败')}: ${modelName}`)
     }
   } catch (error) {
     console.error('Failed to switch model:', error)
-    window.$toast?.error(`切换模型失败: ${error.message}`)
+    window.$toast?.error(`${t('common.操作失败')}: ${error.message}`)
   } finally {
     isTesting.value = false
   }
@@ -316,20 +319,20 @@ const stopModel = async (modelName) => {
     if (response.ok) {
       const result = await response.json()
       if (result.success) {
-        window.$toast?.success(`已停止模型: ${modelName}`)
+        window.$toast?.success(`${t('gpuMonitor.model.stop')}: ${modelName}`)
         requestCache.availableModels.timestamp = 0
         debouncedLoadAvailableModels()
         debouncedFetchMonitorSummary()
       } else {
-        window.$toast?.error(result.error?.message || `停止模型失败: ${modelName}`)
+        window.$toast?.error(result.error?.message || `${t('common.操作失败')}: ${modelName}`)
       }
     } else {
       const error = await response.json()
-      window.$toast?.error(error.error?.message || `停止模型失败: ${modelName}`)
+      window.$toast?.error(error.error?.message || `${t('common.操作失败')}: ${modelName}`)
     }
   } catch (error) {
     console.error('Failed to stop model:', error)
-    window.$toast?.error(`停止模型失败: ${error.message}`)
+    window.$toast?.error(`${t('common.操作失败')}: ${error.message}`)
   }
 }
 
@@ -377,28 +380,28 @@ onUnmounted(() => {
   --text: #1e293b;
   --text-secondary: #64748b;
   --text-muted: #94a3b8;
-  --radius: 16px;
-  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --radius: 10px;
+  --shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
 }
 
 .section {
-  padding: 1.5rem;
+  padding: 0.75rem;
   max-width: 1600px;
   margin: 0 auto;
 }
 
 .gpu-monitor-container {
   display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: 1fr 300px;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
 }
 
 .left-column,
 .right-column {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0.75rem;
 }
 
 @media (max-width: 1200px) {
@@ -414,18 +417,23 @@ onUnmounted(() => {
 
   .left-column > *,
   .right-column > * {
-    flex: 1 1 300px;
+    flex: 1 1 260px;
   }
 }
 
 @media (max-width: 768px) {
   .section {
-    padding: 1rem;
+    padding: 0.5rem;
   }
 
   .left-column,
   .right-column {
     flex-direction: column;
+  }
+
+  .gpu-monitor-container {
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
   }
 }
 </style>

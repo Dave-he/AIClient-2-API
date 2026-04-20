@@ -39,8 +39,8 @@ defineEmits(['refresh'])
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding: 0.875rem 1.25rem;
+  margin-bottom: 0.75rem;
+  padding: 0.625rem 1rem;
   background: var(--card-bg);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -49,30 +49,31 @@ defineEmits(['refresh'])
 .header-left {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .header-left h2 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.25rem;
 }
 
 .header-left h2 i {
   color: var(--primary);
+  font-size: 0.9rem;
 }
 
 .connection-status {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.625rem;
+  gap: 0.25rem;
+  padding: 0.1875rem 0.5rem;
   border-radius: 9999px;
-  font-size: 0.725rem;
+  font-size: 0.65rem;
   font-weight: 500;
 }
 
@@ -87,8 +88,8 @@ defineEmits(['refresh'])
 }
 
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
 }
@@ -99,13 +100,13 @@ defineEmits(['refresh'])
 
 .header-actions {
   display: flex;
-  gap: 0.375rem;
+  gap: 0.25rem;
 }
 
 .btn-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-secondary);
@@ -114,6 +115,7 @@ defineEmits(['refresh'])
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  font-size: 0.8rem;
 }
 
 .btn-icon:hover {
@@ -129,13 +131,13 @@ defineEmits(['refresh'])
 @media (max-width: 768px) {
   .monitor-header {
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.5rem;
     align-items: flex-start;
   }
 
   .header-left {
     flex-direction: column;
-    gap: 0.375rem;
+    gap: 0.25rem;
     align-items: flex-start;
   }
 }

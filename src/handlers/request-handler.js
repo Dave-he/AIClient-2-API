@@ -37,6 +37,7 @@ import { randomUUID } from 'crypto';
 import { handleGrokAssetsProxy } from '../utils/grok-assets-proxy.js';
 import { getMaxRequestSize, containsImageContent } from '../utils/network-utils.js';
 import { getRateLimiter } from '../utils/rate-limiter.js';
+import { compressionMiddleware, cacheControlMiddleware } from '../middleware/performance.js';
 
 const IMAGE_ENDPOINTS = ['/v1/chat/completions', '/v1/images/validate', '/v1/images/upload'];
 
@@ -129,6 +130,12 @@ export function createRequestHandler(config, providerPoolManager) {
                     return;
                 }
 
+                // Performance middleware - Cache Control
+                cacheControlMiddleware.handle(req, res, () => {});
+
+                // Performance middleware - Compression
+                await compressionMiddleware.handle(req, res, () => {});
+
                 // Serve Vue app files from vue-dist/ directory (new UI)
                 if (path.startsWith('/vue/') || path === '/vue' || path === '/vue/index.html') {
                     const vuePath = path === '/vue' ? '/vue/index.html' : path;
@@ -138,10 +145,17 @@ export function createRequestHandler(config, providerPoolManager) {
 
                 // Serve static files from static/ directory (old UI)
                 // 只提供static目录下的旧界面静态文件
+                // 同时处理 SPA 路由回退（没有扩展名且不是 API/健康检查等路径）
+                const hasExtension = path.includes('.');
+                const isApiOrSpecialPath = path.startsWith('/api/') || path === '/health' || 
+                                          path.startsWith('/provider_health') || path.startsWith('/manage/') ||
+                                          path.startsWith('/vllm/') || path === '/api/grok/assets';
+                
                 if (path === '/' || path === '/index.html' || path === '/login.html' ||
                     path.startsWith('/static/') || path.startsWith('/app/') ||
                     path.startsWith('/components/') || path.startsWith('/assets/') || path === '/favicon.ico' ||
-                    pluginManager.isPluginStaticPath(path)) {
+                    pluginManager.isPluginStaticPath(path) ||
+                    (!hasExtension && !isApiOrSpecialPath)) {
                     const served = await serveStaticFiles(path, res, currentConfig);
                     if (served) return;
                 }

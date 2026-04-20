@@ -22,7 +22,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -177,12 +177,12 @@ const createChart = () => {
           position: 'bottom',
           labels: {
             usePointStyle: true,
-            boxWidth: 6,
-            boxHeight: 6,
+            boxWidth: 5,
+            boxHeight: 5,
             color: '#64748b',
-            padding: 12,
+            padding: 8,
             font: {
-              size: 11
+              size: 10
             }
           }
         },
@@ -190,13 +190,13 @@ const createChart = () => {
           backgroundColor: 'rgba(0, 0, 0, 0.8)',
           titleColor: '#fff',
           bodyColor: '#fff',
-          padding: 10,
-          cornerRadius: 6,
+          padding: 8,
+          cornerRadius: 5,
           titleFont: {
-            size: 12
+            size: 11
           },
           bodyFont: {
-            size: 11
+            size: 10
           }
         }
       },
@@ -209,7 +209,7 @@ const createChart = () => {
             color: '#94a3b8',
             maxTicksLimit: 6,
             font: {
-              size: 10
+              size: 9
             }
           }
         },
@@ -220,7 +220,7 @@ const createChart = () => {
           ticks: {
             color: '#94a3b8',
             font: {
-              size: 10
+              size: 9
             }
           },
           title: {
@@ -228,7 +228,7 @@ const createChart = () => {
             text: getYTitle(),
             color: '#64748b',
             font: {
-              size: 11
+              size: 10
             }
           },
           min: 0,
@@ -243,7 +243,7 @@ const createChart = () => {
           ticks: {
             color: '#ef4444',
             font: {
-              size: 10
+              size: 9
             }
           },
           title: {
@@ -251,7 +251,7 @@ const createChart = () => {
             text: t('gpuMonitor.metrics.temperature') + ' (°C)',
             color: '#ef4444',
             font: {
-              size: 11
+              size: 10
             }
           },
           min: 0,
@@ -294,7 +294,7 @@ onUnmounted(() => {
 .gpu-charts-panel {
   background: var(--card-bg);
   border-radius: var(--radius);
-  padding: 1rem;
+  padding: 0.75rem;
   box-shadow: var(--shadow);
 }
 
@@ -302,40 +302,41 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.375rem;
   border-bottom: 1px solid var(--border);
 }
 
 .panel-header h3 {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.25rem;
 }
 
 .panel-header h3 i {
   color: var(--primary);
+  font-size: 0.7rem;
 }
 
 .chart-tabs {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   background: var(--bg);
-  padding: 3px;
-  border-radius: 6px;
+  padding: 2px;
+  border-radius: 5px;
 }
 
 .chart-tab {
-  padding: 0.25rem 0.5rem;
+  padding: 0.1875rem 0.4rem;
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.675rem;
+  font-size: 0.625rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -352,10 +353,10 @@ onUnmounted(() => {
 
 .gpu-chart-content {
   position: relative;
-  height: 200px;
+  height: 160px;
   background: var(--bg);
-  border-radius: 10px;
-  padding: 0.75rem;
+  border-radius: 8px;
+  padding: 0.5rem;
 }
 
 .gpu-chart-content canvas {

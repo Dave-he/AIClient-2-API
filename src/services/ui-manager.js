@@ -16,6 +16,7 @@ import * as updateApi from '../ui-modules/update-api.js';
 import * as oauthApi from '../ui-modules/oauth-api.js';
 import * as customModelsApi from '../ui-modules/custom-models-api.js';
 import * as pythonControllerApi from '../ui-modules/python-controller-api.js';
+import * as dashboardApi from '../ui-modules/dashboard-api.js';
 import * as eventBroadcast from '../ui-modules/event-broadcast.js';
 
 // Re-export from event-broadcast module
@@ -66,9 +67,18 @@ export async function serveVueFiles(pathParam, res) {
 export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
     const pluginManager = getPluginManager();
     const staticPathPrefixes = ['/static/', '/assets/', '/app/', '/components/'];
+    
+    const hasExtension = path.extname(pathParam) !== '';
+    const isApiPath = pathParam.startsWith('/api/');
+    const isHealthPath = pathParam === '/health';
+    const isProviderPath = pathParam.startsWith('/provider_health') || pathParam.startsWith('/manage/');
+    const isVllmPath = pathParam.startsWith('/vllm/');
+    const isGrokAssetsPath = pathParam === '/api/grok/assets';
+
     const isStaticPath = staticPathPrefixes.some(prefix => pathParam.startsWith(prefix)) ||
                          pathParam === '/' || pathParam === '/index.html' || pathParam === '/login.html' || pathParam === '/favicon.ico' ||
-                         pluginManager.isPluginStaticPath(pathParam);
+                         pluginManager.isPluginStaticPath(pathParam) ||
+                         (!hasExtension && !isApiPath && !isHealthPath && !isProviderPath && !isVllmPath && !isGrokAssetsPath);
 
     if (!isStaticPath) {
         return false;
@@ -85,8 +95,12 @@ export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
         '.svg': 'image/svg+xml'
     };
 
-    if (pathParam === '/' || pathParam === '/index.html' || pathParam === '/login.html') {
-        filePath = path.join(process.cwd(), 'static', pathParam === '/' ? 'index.html' : pathParam);
+    if (pathParam === '/' || pathParam === '/index.html') {
+        filePath = path.join(process.cwd(), 'static', 'index.html');
+    } else if (pathParam === '/login.html') {
+        filePath = path.join(process.cwd(), 'static', 'login.html');
+    } else if (!hasExtension && !isApiPath && !isHealthPath && !isProviderPath && !isVllmPath && !isGrokAssetsPath) {
+        filePath = path.join(process.cwd(), 'static', 'index.html');
     } else if (pluginManager.isPluginStaticPath(pathParam)) {
         const plugin = pluginManager.getPluginByStaticPath(pathParam);
         if (plugin && plugin._enabled === false) {
@@ -114,10 +128,15 @@ export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
     if (existsSync(filePath)) {
         const ext = path.extname(filePath);
         const contentType = staticContentTypes[ext] || 'text/plain';
+        
+        const headers = {
+            'Content-Type': contentType,
+            'Cache-Control': ext === '.html' ? 'no-cache, no-store, must-revalidate' : 'public, max-age=86400'
+        };
 
         let content = readFileSync(filePath);
 
-        res.writeHead(200, { 'Content-Type': contentType });
+        res.writeHead(200, headers);
         res.end(content);
         return true;
     }
@@ -215,6 +234,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await systemApi.handleGetSystemMonitor(req, res);
     }
 
+    // Dashboard aggregate API - single request for all dashboard data
+    if (method === 'GET' && pathParam === '/api/dashboard') {
+        return await systemApi.handleGetDashboard(req, res);
+    }
+
     // Browser-friendly GPU status endpoint used by both legacy and Vue UIs.
     if (method === 'GET' && pathParam === '/api/gpu/status') {
         return await handleGetBrowserGpuStatus(req, res);
@@ -249,14 +273,16 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
 
     // Get available models for all providers or specific provider type
     if (method === 'GET' && pathParam === '/api/provider-models') {
-        return await providerApi.handleGetProviderModels(req, res, currentConfig, providerPoolManager);
+        const isAuth = await auth.checkAuth(req);
+        return await providerApi.handleGetProviderModels(req, res, currentConfig, providerPoolManager, isAuth);
     }
 
     // Get available models for a specific provider type
     const providerModelsMatch = pathParam.match(/^\/api\/provider-models\/([^\/]+)$/);
     if (method === 'GET' && providerModelsMatch) {
         const providerType = decodeURIComponent(providerModelsMatch[1]);
-        return await providerApi.handleGetProviderTypeModels(req, res, currentConfig, providerPoolManager, providerType);
+        const isAuth = await auth.checkAuth(req);
+        return await providerApi.handleGetProviderTypeModels(req, res, currentConfig, providerPoolManager, providerType, isAuth);
     }
 
     // Add new provider configuration
@@ -670,6 +696,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
     // Monitor summary - aggregated endpoint for all GPU monitor data
     if (method === 'GET' && pathParam === '/api/python/monitor/summary') {
         return await pythonControllerApi.handleGetMonitorSummary(req, res);
+    }
+
+    // Dashboard summary - aggregated endpoint for all dashboard data
+    if (method === 'GET' && pathParam === '/api/dashboard/summary') {
+        return await dashboardApi.handleGetDashboardSummary(req, res, currentConfig, providerPoolManager);
     }
 
     return false;

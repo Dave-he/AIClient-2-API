@@ -26,6 +26,8 @@ from core.metrics import MetricsCollector
 from core.prometheus_exporter import PrometheusExporter
 from core.structured_logger import StructuredLogger, RequestContext
 from core.redis_client import redis_client
+from core.cache_service import cache_service
+from core.cache_updater import CacheUpdater
 from core.model_testing import ModelTestingFramework
 from core.vllm_manager import (
     get_available_models,
@@ -140,6 +142,7 @@ ws_manager = WebSocketManager()
 metrics = MetricsCollector()
 prometheus = PrometheusExporter()
 model_tester = ModelTestingFramework(scheduler, gpu_monitor)
+cache_updater = CacheUpdater(gpu_monitor, scheduler)
 
 def on_config_changed(new_config: Dict):
     structured_logger.info("Configuration updated", action="config_reload")
@@ -211,8 +214,10 @@ async def startup_event():
     if redis_client.is_connected():
         logger.info("Redis connection established successfully")
         gpu_monitor.set_redis_client(redis_client)
+        await cache_updater.start(metrics)
+        logger.info("Cache updater service started")
     else:
-        logger.warning("Failed to connect to Redis")
+        logger.warning("Failed to connect to Redis, cache updater will not start")
 
     config_watcher.start_watching()
     _background_tasks.clear()
@@ -223,6 +228,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     config_watcher.stop_watching()
+    await cache_updater.stop()
     for task in _background_tasks:
         task.cancel()
     if _background_tasks:
@@ -306,10 +312,20 @@ class EmbeddingRequest(BaseModel):
     dimensions: Optional[int] = None
 
 @app.get("/v1/models")
-async def list_models():
+async def list_models(refresh: Optional[bool] = False):
+    cache_key = "api:v1:models"
+    
+    if not refresh:
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+    
     logger.info("Listing available models")
     models = scheduler.get_available_models()
-    return {"object": "list", "data": [{"id": m, "object": "model", "created": 0, "owned_by": "local"} for m in models]}
+    result = {"object": "list", "data": [{"id": m, "object": "model", "created": 0, "owned_by": "local"} for m in models]}
+    
+    cache_service.set(cache_key, result, ttl_seconds=300)
+    return result
 
 def count_image_content(request_data: Dict) -> Tuple[bool, int]:
     has_image = False
@@ -585,7 +601,12 @@ async def upload_image(file: UploadFile = File(...)):
 
 @app.get("/v1/images/info")
 async def get_image_info():
-    return {
+    cache_key = "api:v1:images:info"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    result = {
         "max_size_mb": MAX_IMAGE_SIZE_MB,
         "max_dimensions": f"{MAX_WIDTH}x{MAX_HEIGHT}",
         "supported_formats": list(SUPPORTED_FORMATS),
@@ -595,6 +616,9 @@ async def get_image_info():
             "info": "GET /v1/images/info - Get image service information"
         }
     }
+    
+    cache_service.set(cache_key, result, ttl_seconds=3600)
+    return result
 
 @app.post("/v1/images/generations", response_model=ImageGenerationResponse)
 async def generate_image(request: ImageGenerationRequest):
@@ -723,22 +747,47 @@ async def websocket_monitor(websocket: WebSocket):
         logger.info("WebSocket connection closed")
 
 @app.get("/manage/gpu")
-async def get_gpu_status():
+async def get_gpu_status(refresh: Optional[bool] = False):
+    cache_key = "api:manage:gpu:status"
+    
+    if not refresh:
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+    
     logger.info("Getting GPU status")
     status = gpu_monitor.get_gpu_status()
     if not status:
-        return {"status": "unavailable", "message": "No GPU detected", "serverTime": datetime.now().isoformat()}
-    status["serverTime"] = datetime.now().isoformat()
-    return status
+        result = {"status": "unavailable", "message": "No GPU detected", "serverTime": datetime.now().isoformat()}
+    else:
+        status["serverTime"] = datetime.now().isoformat()
+        result = status
+    
+    cache_service.set(cache_key, result, ttl_seconds=10)
+    return result
 
 @app.get("/manage/gpu/summary")
 async def get_gpu_summary():
+    cache_key = "api:manage:gpu:summary"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+    
     logger.info("Getting GPU summary")
     summary = gpu_monitor.get_gpu_summary()
+    
+    cache_service.set(cache_key, summary, ttl_seconds=30)
     return summary
 
 @app.get("/manage/models")
-async def get_model_status():
+async def get_model_status(refresh: Optional[bool] = False):
+    cache_key = "api:manage:models:status"
+    
+    if not refresh:
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+    
     logger.info("Getting model statuses")
     models = scheduler.get_available_models()
     status = {}
@@ -751,10 +800,17 @@ async def get_model_status():
             "preloaded": scheduler.is_model_preloaded(model),
             "last_used": scheduler.get_model_last_used(model).isoformat() if scheduler.get_model_last_used(model) else None
         }
+    
+    cache_service.set(cache_key, status, ttl_seconds=5)
     return status
 
 @app.get("/manage/queue")
 async def get_queue_status():
+    cache_key = "api:manage:queue:status"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+    
     logger.info("Getting queue status")
     models = scheduler.get_available_models()
     queue_info = {}
@@ -764,15 +820,25 @@ async def get_queue_status():
             "concurrency_limit": scheduler.get_concurrency_limit(),
             "can_accept": scheduler.can_accept_request(model)
         }
+    
+    cache_service.set(cache_key, queue_info, ttl_seconds=3)
     return queue_info
 
 @app.get("/manage/preload")
 async def get_preload():
+    cache_key = "api:manage:preload:status"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+    
     logger.info("Getting preload status")
-    return {
+    result = {
         "preloaded_models": scheduler.get_preloaded_models(),
         "all_models": scheduler.get_available_models()
     }
+    
+    cache_service.set(cache_key, result, ttl_seconds=60)
+    return result
 
 @app.post("/manage/preload/{model_name}")
 async def preload_model(model_name: str):
@@ -782,6 +848,12 @@ async def preload_model(model_name: str):
 
     success = await scheduler.start_model(model_name)
     if success:
+        # 清除相关缓存
+        cache_service.delete("api:manage:models:status")
+        cache_service.delete("api:manage:models:summary")
+        cache_service.delete("api:manage:preload:status")
+        cache_service.delete("api:manage:preload:detailed")
+        cache_service.delete("api:v1:status")
         return {"status": "preloaded", "model": model_name}
     else:
         raise HTTPException(status_code=500, detail=f"Failed to preload model {model_name}")
@@ -797,6 +869,12 @@ async def start_model(model_name: str):
 
     success = await scheduler.start_model(model_name)
     if success:
+        # 清除相关缓存
+        cache_service.delete("api:manage:models:status")
+        cache_service.delete("api:manage:models:summary")
+        cache_service.delete("api:manage:preload:status")
+        cache_service.delete("api:manage:preload:detailed")
+        cache_service.delete("api:v1:status")
         return {"status": "starting", "model": model_name}
     else:
         raise HTTPException(status_code=500, detail=f"Failed to start model {model_name}")
@@ -812,6 +890,12 @@ async def stop_model(model_name: str):
 
     success = await scheduler.stop_model(model_name)
     if success:
+        # 清除相关缓存
+        cache_service.delete("api:manage:models:status")
+        cache_service.delete("api:manage:models:summary")
+        cache_service.delete("api:manage:preload:status")
+        cache_service.delete("api:manage:preload:detailed")
+        cache_service.delete("api:v1:status")
         return {"status": "stopped", "model": model_name}
     else:
         raise HTTPException(status_code=500, detail=f"Failed to stop model {model_name}")
@@ -827,10 +911,20 @@ async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True):
         raise HTTPException(status_code=503, detail=f"Failed to switch to model {model_name}, insufficient memory")
 
     scheduler.mark_model_selected(model_name)
+    # 清除相关缓存
+    cache_service.delete("api:manage:models:status")
+    cache_service.delete("api:manage:models:summary")
+    cache_service.delete("api:manage:preload:status")
+    cache_service.delete("api:manage:preload:detailed")
+    cache_service.delete("api:v1:status")
 
     if test_enabled:
         logger.info(f"Running self-test for model {model_name}")
-        test_result = await switch_vllm_model_with_test(model_name, test_enabled=True)
+        
+        model_config = scheduler.get_model_config(model_name)
+        model_path = model_config.get('model_path', model_name) if model_config else model_name
+        
+        test_result = await switch_vllm_model_with_test(model_name, test_enabled=True, model_path=model_path)
         
         if not test_result.get("success", False):
             error_msg = test_result.get("error", "Unknown error during model test")
@@ -848,51 +942,86 @@ async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True):
 
 @app.get("/manage/metrics")
 async def get_metrics():
+    cache_key = "api:manage:metrics"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+    
     logger.info("Getting metrics")
-    return metrics.get_metrics()
+    result = metrics.get_metrics()
+    
+    cache_service.set(cache_key, result, ttl_seconds=10)
+    return result
 
 @app.post("/manage/metrics/reset")
 async def reset_metrics():
     logger.info("Resetting metrics")
     metrics.reset()
+    cache_service.delete("api:manage:metrics")
     return {"status": "reset"}
 
 @app.get("/health")
-async def health_check():
+async def health_check(refresh: Optional[bool] = False):
+    cache_key = "api:health"
+    
+    if not refresh:
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+    
     gpu_status = gpu_monitor.get_gpu_status()
     health_info = metrics.get_comprehensive_health_score(gpu_status)
-    return {
+    result = {
         "status": health_info["status"],
         "timestamp": datetime.now().isoformat(),
         "health_score": health_info["overall"],
         "details": health_info
     }
+    
+    cache_service.set(cache_key, result, ttl_seconds=5)
+    return result
 
 @app.get("/health/detailed")
 async def health_check_detailed():
+    cache_key = "api:health:detailed"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+    
     gpu_status = gpu_monitor.get_gpu_status()
     health_info = metrics.get_comprehensive_health_score(gpu_status)
-    return {
+    result = {
         "status": health_info["status"],
         "timestamp": datetime.now().isoformat(),
         "scores": health_info,
         "gpu": gpu_status,
         "metrics": metrics.get_detailed_metrics()
     }
+    
+    cache_service.set(cache_key, result, ttl_seconds=5)
+    return result
 
 @app.get("/manage/health/alert")
 async def check_alert_status():
+    cache_key = "api:manage:health:alert"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+    
     gpu_status = gpu_monitor.get_gpu_status()
     health_info = metrics.get_comprehensive_health_score(gpu_status)
     alert_reasons = metrics.get_alert_reasons()
 
-    return {
+    result = {
         "should_alert": health_info["overall"] < 70,
         "health_score": health_info["overall"],
         "status": health_info["status"],
         "alert_reasons": alert_reasons,
         "timestamp": datetime.now().isoformat()
     }
+    
+    cache_service.set(cache_key, result, ttl_seconds=10)
+    return result
 
 @app.get("/metrics")
 async def get_prometheus_metrics():
@@ -911,6 +1040,50 @@ async def get_prometheus_metrics():
         prometheus.set_active_requests(model_name, scheduler.get_active_requests(model_name))
 
     return prometheus.generate_metrics()
+
+@app.get("/manage/cache/status")
+async def get_cache_status():
+    """获取缓存服务状态和统计信息"""
+    return {
+        "cache_updater": cache_updater.get_status(),
+        "cache_service": cache_service.get_stats(),
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.post("/manage/cache/refresh")
+async def refresh_cache(endpoint: Optional[str] = None):
+    """刷新指定或所有缓存"""
+    if endpoint:
+        patterns = {
+            'models': 'api:v1:models',
+            'gpu': ['api:manage:gpu:status', 'api:manage:gpu:summary'],
+            'models_status': 'api:manage:models:status',
+            'queue': 'api:manage:queue:status',
+            'health': ['api:health', 'api:health:detailed', 'api:manage:health:alert'],
+            'metrics': 'api:manage:metrics',
+            'system': 'api:manage:system:status',
+            'preload': ['api:manage:preload:status', 'api:manage:preload:detailed'],
+            'v1_status': 'api:v1:status'
+        }
+        
+        keys_to_delete = patterns.get(endpoint)
+        if keys_to_delete:
+            if isinstance(keys_to_delete, list):
+                for key in keys_to_delete:
+                    cache_service.delete(key)
+            else:
+                cache_service.delete(keys_to_delete)
+            return {"status": "refreshed", "endpoint": endpoint}
+        else:
+            return {"status": "error", "message": f"Unknown endpoint: {endpoint}"}
+    else:
+        cache_service.flush_all()
+        return {"status": "all_refreshed"}
+
+@app.get("/manage/cache/stats")
+async def get_cache_stats():
+    """获取缓存统计信息"""
+    return cache_service.get_stats()
 
 @app.get("/metrics/metadata")
 async def get_metrics_metadata():
@@ -1118,6 +1291,11 @@ async def restart_python_service(request: ServiceControlRequest = None):
 
 @app.get("/manage/preload/status")
 async def get_preload_status():
+    cache_key = "api:manage:preload:detailed"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+    
     logger.info("Getting preload status")
     preloaded = scheduler.get_preloaded_models()
     all_models = scheduler.get_available_models()
@@ -1129,7 +1307,10 @@ async def get_preload_status():
             "running": scheduler.is_model_running(model),
             "preload_config": config.get("preload", False) if config else False
         }
-    return {"preloaded_models": preloaded, "all_models": all_models, "status": preload_status}
+    result = {"preloaded_models": preloaded, "all_models": all_models, "status": preload_status}
+    
+    cache_service.set(cache_key, result, ttl_seconds=30)
+    return result
 
 @app.post("/manage/preload/{model_name}/enable")
 async def enable_preload(model_name: str):
@@ -1167,6 +1348,11 @@ async def preload_all_models():
 @app.get("/api/v1/status")
 async def node_integration_status():
     """Node.js 集成状态检查接口，供 AIClient-2-API 调用"""
+    cache_key = "api:v1:status"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+    
     gpu_status = gpu_monitor.get_gpu_status()
     models = scheduler.get_available_models()
     model_statuses = {}
@@ -1181,7 +1367,7 @@ async def node_integration_status():
             "can_accept": scheduler.can_accept_request(model)
         }
     
-    return {
+    result = {
         "service": "ai-controller",
         "status": "healthy" if gpu_status else "degraded",
         "timestamp": datetime.now().isoformat(),
@@ -1196,15 +1382,25 @@ async def node_integration_status():
             "concurrency_limit": scheduler.get_concurrency_limit()
         }
     }
+    
+    cache_service.set(cache_key, result, ttl_seconds=5)
+    return result
 
 @app.get("/api/v1/models/{model_name}/info")
-async def model_info(model_name: str):
+async def model_info(model_name: str, refresh: Optional[bool] = False):
     """获取单个模型详细信息"""
+    cache_key = f"api:v1:models:{model_name}:info"
+    
+    if not refresh:
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+    
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
     
     config = scheduler.get_model_config(model_name)
-    return {
+    result = {
         "name": model_name,
         "available": True,
         "running": scheduler.is_model_running(model_name),
@@ -1219,17 +1415,25 @@ async def model_info(model_name: str):
         "can_accept": scheduler.can_accept_request(model_name),
         "last_used": scheduler.get_model_last_used(model_name).isoformat() if scheduler.get_model_last_used(model_name) else None
     }
+    
+    cache_service.set(cache_key, result, ttl_seconds=10)
+    return result
 
 @app.get("/manage/system/status")
 async def system_status():
     """获取系统级状态（CPU、内存、磁盘）"""
+    cache_key = "api:manage:system:status"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+    
     import psutil
     
     cpu_percent = psutil.cpu_percent(interval=1)
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
     
-    return {
+    result = {
         "cpu": {
             "percent": cpu_percent,
             "cores": psutil.cpu_count(),
@@ -1249,10 +1453,21 @@ async def system_status():
         },
         "timestamp": datetime.now().isoformat()
     }
+    
+    cache_service.set(cache_key, result, ttl_seconds=10)
+    return result
 
 @app.get("/manage/models/summary")
-async def models_summary():
+async def models_summary(refresh: Optional[bool] = False):
     """获取模型汇总信息（适合前端列表展示）"""
+    cache_key = "api:manage:models:summary"
+    
+    if not refresh:
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+    
+    logger.info("Getting models summary")
     models = scheduler.get_available_models()
     summary = []
     for model in models:
@@ -1266,11 +1481,14 @@ async def models_summary():
             "required_memory": config.get("required_memory", "") if config else "",
             "port": scheduler.get_model_port(model)
         })
-    return {
+    result = {
         "models": summary,
         "total": len(summary),
         "running_model": scheduler.get_current_model_name()
     }
+    
+    cache_service.set(cache_key, result, ttl_seconds=5)
+    return result
 
 class TestRequest(BaseModel):
     model_name: str
@@ -1478,6 +1696,77 @@ async def switch_and_test_model(model_name: str):
     except Exception as e:
         logger.error(f"Error switching and testing model {model_name}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Switch and test failed: {str(e)}")
+
+@app.get("/manage/monitor/all")
+async def get_monitor_all():
+    """获取所有监控数据的合并接口，减少HTTP往返"""
+    logger.info("Getting all monitor data")
+    
+    gpu_summary = gpu_monitor.get_gpu_summary()
+    models = scheduler.get_available_models()
+    
+    model_status = {}
+    for model in models:
+        model_status[model] = {
+            "running": scheduler.is_model_running(model),
+            "port": scheduler.get_model_port(model),
+            "service": scheduler.get_model_service(model),
+            "active_requests": scheduler.get_active_requests(model),
+            "preloaded": scheduler.is_model_preloaded(model),
+            "last_used": scheduler.get_model_last_used(model).isoformat() if scheduler.get_model_last_used(model) else None
+        }
+    
+    queue_info = {}
+    for model in models:
+        queue_info[model] = {
+            "active_requests": scheduler.get_active_requests(model),
+            "concurrency_limit": scheduler.get_concurrency_limit(),
+            "can_accept": scheduler.can_accept_request(model)
+        }
+    
+    model_summary = []
+    for model in models:
+        config = scheduler.get_model_config(model)
+        model_summary.append({
+            "name": model,
+            "running": scheduler.is_model_running(model),
+            "preloaded": scheduler.is_model_preloaded(model),
+            "supports_images": scheduler.get_model_supports_images(model),
+            "description": config.get("description", "") if config else "",
+            "required_memory": config.get("required_memory", "") if config else "",
+            "port": scheduler.get_model_port(model)
+        })
+    
+    gpu_status = gpu_monitor.get_gpu_status()
+    health_info = metrics.get_comprehensive_health_score(gpu_status)
+    
+    service_name = "aiclient-python"
+    service_info = {
+        "service": service_name,
+        "status": sys_controller.get_service_status(service_name),
+        "running": sys_controller.is_service_running(service_name),
+        "info": sys_controller.get_service_info(service_name)
+    }
+    
+    return {
+        "success": True,
+        "timestamp": datetime.now().isoformat(),
+        "gpu": gpu_summary,
+        "models": model_status,
+        "queue": queue_info,
+        "summary": {
+            "models": model_summary,
+            "total": len(model_summary),
+            "running_model": scheduler.get_current_model_name()
+        },
+        "health": {
+            "status": health_info["status"],
+            "health_score": health_info["overall"],
+            "details": health_info
+        },
+        "service": service_info,
+        "controllerUrl": CONFIG.CONTROLLER_BASE_URL if 'CONFIG' in dir() else 'http://localhost:5000'
+    }
 
 if __name__ == "__main__":
     import uvicorn

@@ -5,10 +5,15 @@ export class MonitorCache {
         this._fetching = {};
         this._callbacks = {};
         this._cacheTTL = 5000;
+        this._preloadedData = {};
     }
 
     async getSummary(forceRefresh = false) {
         return this._getWithCache('/api/python/monitor/summary', 'summary', forceRefresh);
+    }
+
+    async getDashboardSummary(forceRefresh = false) {
+        return this._getWithCache('/api/dashboard/summary', 'dashboardSummary', forceRefresh);
     }
 
     async getModelsSummary(forceRefresh = false) {
@@ -47,6 +52,104 @@ export class MonitorCache {
         return this._getWithCache('/api/providers/static', 'providersStatic', forceRefresh);
     }
 
+    async getSystemMonitor(forceRefresh = false) {
+        return this._getWithCache('/api/system/monitor', 'systemMonitor', forceRefresh);
+    }
+
+    async getTokenUsage(range = 'hour', forceRefresh = false) {
+        return this._getWithCache(`/api/usage/stats?range=${range}`, `tokenUsage_${range}`, forceRefresh);
+    }
+
+    async batchGet(keys, forceRefresh = false) {
+        const results = {};
+        const fetchPromises = [];
+
+        for (const key of keys) {
+            const method = this._getMethodForKey(key);
+            if (method) {
+                fetchPromises.push(
+                    method.call(this, forceRefresh).then(data => {
+                        results[key] = data;
+                    }).catch(() => {
+                        results[key] = null;
+                    })
+                );
+            }
+        }
+
+        await Promise.all(fetchPromises);
+        return results;
+    }
+
+    async preloadDashboardData() {
+        const startTime = performance.now();
+        
+        try {
+            const dashboardSummary = await this.getDashboardSummary(true);
+            
+            if (dashboardSummary && dashboardSummary.success) {
+                if (dashboardSummary.system) {
+                    this._cache['systemMonitor'] = dashboardSummary.system;
+                    this._timestamps['systemMonitor'] = Date.now();
+                }
+                if (dashboardSummary.python) {
+                    this._cache['summary'] = dashboardSummary.python;
+                    this._timestamps['summary'] = Date.now();
+                    
+                    if (dashboardSummary.python.gpu) {
+                        this._cache['gpuStatus'] = { success: true, ...dashboardSummary.python.gpu };
+                        this._timestamps['gpuStatus'] = Date.now();
+                    }
+                    if (dashboardSummary.python.models) {
+                        this._cache['modelsStatus'] = { success: true, models: dashboardSummary.python.models };
+                        this._timestamps['modelsStatus'] = Date.now();
+                    }
+                    if (dashboardSummary.python.queue) {
+                        this._cache['queueStatus'] = { success: true, queue: dashboardSummary.python.queue };
+                        this._timestamps['queueStatus'] = Date.now();
+                    }
+                }
+                if (dashboardSummary.providers) {
+                    this._cache['providersStatic'] = dashboardSummary.providers;
+                    this._timestamps['providersStatic'] = Date.now();
+                }
+            }
+
+            this._preloadedData = dashboardSummary;
+            this._preloadedData.preloadTime = performance.now() - startTime;
+            
+            return {
+                success: true,
+                duration: this._preloadedData.preloadTime,
+                cachedKeys: Object.keys(this._cache)
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                duration: performance.now() - startTime
+            };
+        }
+    }
+
+    _getMethodForKey(key) {
+        const methodMap = {
+            'summary': this.getSummary,
+            'dashboardSummary': this.getDashboardSummary,
+            'modelsSummary': this.getModelsSummary,
+            'modelsStatus': this.getModelsStatus,
+            'gpuStatus': this.getGpuStatus,
+            'serviceStatus': this.getServiceStatus,
+            'health': this.getHealth,
+            'queueStatus': this.getQueueStatus,
+            'gpuConfig': this.getGpuConfig,
+            'providersDynamic': this.getProvidersDynamic,
+            'providersStatic': this.getProvidersStatic,
+            'systemMonitor': this.getSystemMonitor
+        };
+        return methodMap[key];
+    }
+
     async _getWithCache(url, cacheKey, forceRefresh = false) {
         const now = Date.now();
 
@@ -72,11 +175,16 @@ export class MonitorCache {
                 headers['Authorization'] = `Bearer ${token}`;
             }
             
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            
             const response = await fetch(url, {
                 method: 'GET',
                 headers: headers,
-                timeout: 10000
+                signal: controller.signal
             });
+
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -100,6 +208,10 @@ export class MonitorCache {
         return this._cache[cacheKey];
     }
 
+    getAllCachedData() {
+        return { ...this._cache };
+    }
+
     invalidateCache(cacheKey = null) {
         if (cacheKey) {
             delete this._cache[cacheKey];
@@ -112,6 +224,15 @@ export class MonitorCache {
 
     setTTL(ttl) {
         this._cacheTTL = ttl;
+    }
+
+    getPreloadedData() {
+        return this._preloadedData;
+    }
+
+    isDataCached(cacheKey) {
+        return !!this._cache[cacheKey] && 
+               (Date.now() - this._timestamps[cacheKey]) < this._cacheTTL;
     }
 }
 

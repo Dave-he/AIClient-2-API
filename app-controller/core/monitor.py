@@ -5,6 +5,7 @@ import asyncio
 import httpx
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List
+from core.cache_service import cache_service
 
 class GPUMonitor:
     def __init__(self):
@@ -18,9 +19,10 @@ class GPUMonitor:
         self._max_history_days = 30
         self._status_cache: Optional[Dict] = None
         self._status_cache_time: Optional[datetime] = None
-        self._status_cache_ttl = timedelta(seconds=1)
         self._last_history_cleanup = datetime.min
         self._history_cleanup_interval = timedelta(minutes=5)
+        self._cache_update_task: Optional[asyncio.Task] = None
+        self._cache_update_interval = 3.0  # 缓存更新间隔，单位秒
     
     def _check_nvidia_smi(self) -> bool:
         try:
@@ -37,8 +39,90 @@ class GPUMonitor:
         return (
             self._status_cache is not None
             and self._status_cache_time is not None
-            and datetime.now() - self._status_cache_time < self._status_cache_ttl
         )
+    
+    async def _update_cache_loop(self):
+        """后台任务：定期更新GPU状态缓存"""
+        while True:
+            try:
+                await self._refresh_cache()
+            except Exception:
+                pass
+            await asyncio.sleep(self._cache_update_interval)
+    
+    async def _refresh_cache(self):
+        """刷新GPU状态缓存"""
+        if not self._nvidia_smi_available:
+            self._status_cache = None
+            self._status_cache_time = None
+            return
+        
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit,fan.speed,clocks.sm,clocks.mem", "--format=csv,noheader,nounits",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                text=True
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                self._status_cache = None
+                self._status_cache_time = None
+                return
+            
+            output = stdout.strip()
+            if not output:
+                self._status_cache = None
+                self._status_cache_time = None
+                return
+            
+            gpus = []
+            for line in output.split('\n'):
+                gpu_info = self._parse_gpu_line(line)
+                if gpu_info:
+                    gpus.append(gpu_info)
+            
+            if gpus:
+                primary_gpu = gpus[0]
+                status = {
+                    "status": "available",
+                    "gpu_count": len(gpus),
+                    "name": primary_gpu["name"],
+                    "total_memory": primary_gpu["total_memory"],
+                    "used_memory": primary_gpu["used_memory"],
+                    "available_memory": primary_gpu["available_memory"],
+                    "temperature": primary_gpu["temperature"],
+                    "utilization": primary_gpu["utilization"],
+                    "power_draw": primary_gpu["power_draw"],
+                    "power_limit": primary_gpu["power_limit"],
+                    "power_percent": primary_gpu["power_percent"],
+                    "fan_speed": primary_gpu["fan_speed"],
+                    "clock_sm": primary_gpu["clock_sm"],
+                    "clock_mem": primary_gpu["clock_mem"],
+                    "memory_utilization": primary_gpu["memory_utilization"],
+                    "primary": primary_gpu,
+                    "all_gpus": gpus
+                }
+                self._status_cache = status
+                self._status_cache_time = datetime.now()
+            else:
+                self._status_cache = None
+                self._status_cache_time = None
+        except Exception:
+            self._status_cache = None
+            self._status_cache_time = None
+    
+    def start_cache_updater(self):
+        """启动缓存更新任务"""
+        if self._cache_update_task is None or self._cache_update_task.done():
+            self._cache_update_task = asyncio.create_task(self._update_cache_loop())
+    
+    def stop_cache_updater(self):
+        """停止缓存更新任务"""
+        if self._cache_update_task and not self._cache_update_task.done():
+            self._cache_update_task.cancel()
     
     def _parse_gpu_line(self, line: str) -> Optional[Dict]:
         parts = [part.strip() for part in line.split(',')]
@@ -71,59 +155,10 @@ class GPUMonitor:
         }
     
     def get_gpu_status(self) -> Optional[Dict]:
+        """直接从缓存返回GPU状态"""
         if self._cache_valid():
             return self._status_cache
-        if not self._nvidia_smi_available:
-            return None
-        
-        try:
-            result = subprocess.run(
-                ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit,fan.speed,clocks.sm,clocks.mem", "--format=csv,noheader,nounits"],
-                capture_output=True,
-                text=True
-            )
-            
-            if result.returncode != 0:
-                return None
-            
-            output = result.stdout.strip()
-            if not output:
-                return None
-            
-            gpus = []
-            for line in output.split('\n'):
-                gpu_info = self._parse_gpu_line(line)
-                if gpu_info:
-                    gpus.append(gpu_info)
-            
-            if gpus:
-                primary_gpu = gpus[0]
-                status = {
-                    "status": "available",
-                    "gpu_count": len(gpus),
-                    "name": primary_gpu["name"],
-                    "total_memory": primary_gpu["total_memory"],
-                    "used_memory": primary_gpu["used_memory"],
-                    "available_memory": primary_gpu["available_memory"],
-                    "temperature": primary_gpu["temperature"],
-                    "utilization": primary_gpu["utilization"],
-                    "power_draw": primary_gpu["power_draw"],
-                    "power_limit": primary_gpu["power_limit"],
-                    "power_percent": primary_gpu["power_percent"],
-                    "fan_speed": primary_gpu["fan_speed"],
-                    "clock_sm": primary_gpu["clock_sm"],
-                    "clock_mem": primary_gpu["clock_mem"],
-                    "memory_utilization": primary_gpu["memory_utilization"],
-                    "primary": primary_gpu,
-                    "all_gpus": gpus
-                }
-                self._status_cache = status
-                self._status_cache_time = datetime.now()
-                return status
-            return None
-        
-        except Exception:
-            return None
+        return None
     
     def get_memory_usage(self) -> Optional[Dict[str, int]]:
         status = self.get_gpu_status()
@@ -265,6 +300,28 @@ class GPUMonitor:
             self._redis_client.lpush("gpu:history", json.dumps(history_entry))
             self._redis_client.ltrim("gpu:history", 0, max_points - 1)
             
+            ttl_30_days = 30 * 24 * 60 * 60
+            self._redis_client.expire("gpu:history", ttl_30_days)
+            
+            summary_data = {
+                "status": "available",
+                "current": {
+                    "name": status.get("name"),
+                    "gpu_count": status.get("gpu_count"),
+                    "utilization": status.get("utilization"),
+                    "temperature": status.get("temperature"),
+                    "power_draw": status.get("power_draw"),
+                    "power_limit": status.get("power_limit"),
+                    "power_percent": status.get("power_percent"),
+                    "memory_utilization": status.get("memory_utilization"),
+                    "used_memory": status.get("used_memory"),
+                    "available_memory": status.get("available_memory"),
+                    "total_memory": status.get("total_memory")
+                }
+            }
+            ttl_1_hour = 60 * 60
+            self._redis_client.set("gpu:summary", json.dumps(summary_data), ex=ttl_1_hour)
+            
             if datetime.now() - self._last_history_cleanup >= self._history_cleanup_interval:
                 self._clean_old_history()
                 self._last_history_cleanup = datetime.now()
@@ -336,6 +393,16 @@ class GPUMonitor:
             return []
     
     def get_gpu_summary(self) -> Dict:
+        if self._redis_client is not None:
+            try:
+                cached_summary = self._redis_client.get("gpu:summary")
+                if cached_summary:
+                    summary = json.loads(cached_summary)
+                    summary["history"] = self.get_gpu_history(60)
+                    return summary
+            except Exception:
+                pass
+        
         status = self.get_gpu_status()
         history = self.get_gpu_history(60)
         

@@ -15,6 +15,7 @@ export class GPUMonitorModule {
         this.lastModelsData = null;
         this.lastQueueData = null;
         this.i18n = window.i18n || { t: (key) => key };
+        this._pendingUpdates = {};
         this.init();
     }
 
@@ -25,6 +26,7 @@ export class GPUMonitorModule {
     init() {
         const initialize = () => {
             this.setupEventListeners();
+            this.preloadData();
             this.startPolling();
             this.initGpuStatusElements();
         };
@@ -32,11 +34,45 @@ export class GPUMonitorModule {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initialize);
         } else {
-            initialize();
+            setTimeout(initialize, 50);
         }
 
         window.addEventListener('componentsLoaded', () => {
             this.initGpuStatusElements();
+        });
+    }
+
+    async preloadData() {
+        try {
+            await monitorCache.preloadDashboardData();
+            const summary = monitorCache.getCachedData('dashboardSummary');
+            if (summary && summary.success && summary.python) {
+                if (summary.python.gpu) {
+                    const gpuData = summary.python.gpu;
+                    if (gpuData.primary) {
+                        this.updateGpuStatusFromSocket(gpuData.primary);
+                    } else if (gpuData.gpus && gpuData.gpus.length > 0) {
+                        this.updateGpuStatusFromSocket(gpuData.gpus[0]);
+                    } else if (gpuData.name) {
+                        this.updateGpuStatusFromSocket(gpuData);
+                    }
+                    if (gpuData.history && gpuData.history.length > 0) {
+                        this.gpuHistoryData = gpuData.history.map(item => this.normalizeHistoryPoint(item));
+                        this.scheduleChartUpdate();
+                    }
+                }
+            }
+        } catch (error) {
+            console.log('[GPUMonitor] Preload failed, continuing with normal flow:', error.message);
+        }
+    }
+
+    scheduleChartUpdate() {
+        if (this.animationFrame) {
+            cancelAnimationFrame(this.animationFrame);
+        }
+        this.animationFrame = requestAnimationFrame(() => {
+            this.updateChart();
         });
     }
 
@@ -728,6 +764,10 @@ export class GPUMonitorModule {
                         this.updateGpuStatusFromSocket(data.gpu.gpus[0]);
                     } else if (data.gpu.name) {
                         this.updateGpuStatusFromSocket(data.gpu);
+                    }
+                    if (data.gpu.history && data.gpu.history.length > 0) {
+                        this.gpuHistoryData = data.gpu.history.map(item => this.normalizeHistoryPoint(item));
+                        this.updateChart();
                     }
                 }
                 if (data.models) {

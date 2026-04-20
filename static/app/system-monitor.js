@@ -40,12 +40,10 @@ export class SystemMonitor {
         this.modelsList = [];
         this.currentModel = null;
         
+        this._chartAnimationFrame = null;
+        this._pendingUpdates = {};
+        
         this.initializeDefaultData();
-        console.log('[SystemMonitor] Constructor finished, initial data:', {
-            cpu: this.cpuHistoryData.length,
-            memory: this.memoryHistoryData.length,
-            gpu: this.gpuHistoryData.length
-        });
         
         systemMonitorInstance = this;
         this.init();
@@ -61,47 +59,62 @@ export class SystemMonitor {
         this.memoryHistoryData = [...defaultMemoryValues];
         this.gpuHistoryData = [...defaultGpuValues];
         this.gpuTempHistoryData = [...defaultGpuTempValues];
-        
-        console.log('[SystemMonitor] Default data initialized');
     }
 
     init() {
         const initWhenReady = () => {
             if (this.isInitialized) return;
             
-            console.log('[SystemMonitor] Initializing...');
             const dashboardSection = document.getElementById('dashboard');
             const gpuMonitorSection = document.getElementById('gpu-monitor');
 
             if (!dashboardSection && !gpuMonitorSection) {
-                console.log('[SystemMonitor] Dashboard or GPU monitor not found, retrying...');
-                setTimeout(initWhenReady, 500);
+                setTimeout(initWhenReady, 200);
                 return;
             }
 
             this.isInitialized = true;
             this.setupEventListeners();
+            
+            this.preloadDashboardData();
             this.startPolling();
             
-            // 延迟初始化图表，确保DOM已完全渲染
-            setTimeout(() => {
+            requestAnimationFrame(() => {
                 this.ensureChartInitialized();
                 this.ensurePythonGpuChartInitialized();
                 this.ensureTokenChartInitialized();
-            }, 500);
+            });
         };
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                setTimeout(initWhenReady, 300);
+                setTimeout(initWhenReady, 100);
             });
         } else {
-            setTimeout(initWhenReady, 300);
+            setTimeout(initWhenReady, 100);
         }
         
         window.addEventListener('componentsLoaded', () => {
-            setTimeout(initWhenReady, 200);
+            setTimeout(initWhenReady, 100);
         });
+    }
+
+    async preloadDashboardData() {
+        try {
+            const { monitorCache } = await import('./monitor-cache.js');
+            const result = await monitorCache.preloadDashboardData();
+            if (result.success) {
+                const preloaded = monitorCache.getPreloadedData();
+                if (preloaded.system) {
+                    this.updateFromSystemData(preloaded.system);
+                }
+                if (preloaded.python && preloaded.python.gpu) {
+                    this.updateFromPythonGpuData(preloaded.python.gpu);
+                }
+            }
+        } catch (error) {
+            console.log('[SystemMonitor] Preload failed, falling back to normal fetch:', error.message);
+        }
     }
 
     setupEventListeners() {
@@ -112,7 +125,7 @@ export class SystemMonitor {
                 e.target.classList.add('active');
                 this.currentPythonChartType = e.target.dataset.pythonChartType;
                 this.updatePythonGpuLegend();
-                this.updatePythonGpuChart();
+                this.scheduleChartUpdate('pythonGpu');
             });
         });
 
@@ -146,7 +159,7 @@ export class SystemMonitor {
                 e.target.classList.add('active');
                 this.currentTokenTimeRange = e.target.dataset.timeRange;
                 this.loadTokenUsageData();
-                this.updateTokenChart();
+                this.scheduleChartUpdate('token');
             });
         });
 
@@ -155,16 +168,18 @@ export class SystemMonitor {
             item.addEventListener('click', () => {
                 this.currentTokenSeries = item.dataset.tokenSeries || 'total';
                 this.updateTokenLegend();
-                this.updateTokenChart();
+                this.scheduleChartUpdate('token');
             });
         });
 
         document.addEventListener('section-change', (event) => {
             if (event.detail.section === 'dashboard') {
                 this.refreshAllStatus({ force: true });
-                this.ensureChartInitialized();
-                this.ensurePythonGpuChartInitialized();
-                this.ensureTokenChartInitialized();
+                requestAnimationFrame(() => {
+                    this.ensureChartInitialized();
+                    this.ensurePythonGpuChartInitialized();
+                    this.ensureTokenChartInitialized();
+                });
                 this.loadTokenUsageData();
             }
         });
@@ -177,9 +192,33 @@ export class SystemMonitor {
         });
 
         window.addEventListener('resize', () => {
-            this.ensureChartInitialized();
-            this.ensurePythonGpuChartInitialized();
-            this.ensureTokenChartInitialized();
+            this.scheduleChartUpdate('all');
+        });
+    }
+
+    scheduleChartUpdate(chartType = 'all') {
+        if (this._chartAnimationFrame) {
+            cancelAnimationFrame(this._chartAnimationFrame);
+        }
+        
+        this._pendingUpdates[chartType] = true;
+        
+        this._chartAnimationFrame = requestAnimationFrame(() => {
+            if (this._pendingUpdates['system']) {
+                this.ensureChartInitialized();
+            }
+            if (this._pendingUpdates['pythonGpu']) {
+                this.ensurePythonGpuChartInitialized();
+            }
+            if (this._pendingUpdates['token']) {
+                this.ensureTokenChartInitialized();
+            }
+            if (chartType === 'all') {
+                this.ensureChartInitialized();
+                this.ensurePythonGpuChartInitialized();
+                this.ensureTokenChartInitialized();
+            }
+            this._pendingUpdates = {};
         });
     }
 
@@ -236,7 +275,7 @@ export class SystemMonitor {
         this.pythonGpuMemoryHistory = [];
         this.pythonGpuTempHistory = [];
         this.lastPythonGpuHistorySampleAt = 0;
-        this.updatePythonGpuChart();
+        this.scheduleChartUpdate('pythonGpu');
     }
 
     appendPythonGpuHistoryPoint(data, { force = false } = {}) {
@@ -267,6 +306,7 @@ export class SystemMonitor {
         this.stopPolling();
         this.refreshAllStatus({ force: true });
         this.loadTokenUsageData();
+        
         this.pollingInterval = setInterval(() => {
             if (this.shouldPollDashboard()) {
                 this.refreshAllStatus();
@@ -311,17 +351,144 @@ export class SystemMonitor {
 
         this.isRefreshing = true;
         try {
-            await Promise.all([
-                this.updateSystemStatsFromServer(),
-                this.refreshPythonGpuStatus({ forceRefresh: force })
-            ]);
-            
-            this.ensureChartInitialized();
-            this.updateChart();
-            this.ensurePythonGpuChartInitialized();
-            this.updatePythonGpuChart();
+            await this.fetchDashboardSummary(force);
         } finally {
             this.isRefreshing = false;
+        }
+    }
+
+    async fetchDashboardSummary(forceRefresh = false) {
+        try {
+            const { monitorCache } = await import('./monitor-cache.js');
+            const summary = await monitorCache.getDashboardSummary(forceRefresh);
+            
+            if (summary && summary.success) {
+                if (summary.system) {
+                    this.updateFromSystemData(summary.system);
+                }
+                if (summary.python && summary.python.success) {
+                    this.updateFromPythonSummary(summary.python);
+                }
+            }
+        } catch (error) {
+            console.log('[SystemMonitor] Dashboard summary fetch failed:', error.message);
+            await this.refreshPythonGpuStatus({ forceRefresh });
+        }
+    }
+
+    _removeSkeletonClass(selector) {
+        const element = document.querySelector(selector);
+        if (element) {
+            element.classList.remove('skeleton');
+            element.classList.remove('skeleton-text');
+        }
+    }
+
+    _removeMultipleSkeletonClasses(selectors) {
+        selectors.forEach(selector => this._removeSkeletonClass(selector));
+    }
+
+    updateFromSystemData(data) {
+        if (!data) return;
+
+        const cpuValueEl = document.getElementById('cpuValue');
+        const memoryValueEl = document.getElementById('memoryValue');
+        const memoryTotalEl = document.getElementById('memoryTotal');
+        const cpuCoresEl = document.getElementById('cpuCores');
+        const memoryUsageEl = document.getElementById('memoryUsage');
+        const cpuUsageEl = document.getElementById('cpuUsage');
+
+        if (cpuValueEl && data.cpu) {
+            cpuValueEl.textContent = `${data.cpu.usage.toFixed(1)}%`;
+            this._removeSkeletonClass('#cpuValue');
+        }
+        if (memoryValueEl && data.memory) {
+            memoryValueEl.textContent = `${parseFloat(data.memory.usagePercent).toFixed(1)}%`;
+            this._removeSkeletonClass('#memoryValue');
+        }
+        if (memoryTotalEl && data.memory) {
+            memoryTotalEl.textContent = data.memory.total;
+            this._removeSkeletonClass('#memoryTotal');
+        }
+        if (cpuCoresEl && data.cpu) {
+            cpuCoresEl.textContent = data.cpu.cores.toString();
+        }
+        if (memoryUsageEl && data.memory) {
+            memoryUsageEl.textContent = `${data.memory.used || '--'} / ${data.memory.total || '--'}`;
+            this._removeSkeletonClass('#memoryUsage');
+        }
+        if (cpuUsageEl && data.cpu) {
+            cpuUsageEl.textContent = `${data.cpu.usage.toFixed(1)}%`;
+            this._removeSkeletonClass('#cpuUsage');
+        }
+
+        if (data.cpu?.history && data.cpu.history.length > 0) {
+            if (this.cpuHistoryData.length === 0) {
+                this.cpuHistoryData = [...data.cpu.history];
+            } else if (data.cpu.history.length > this.cpuHistoryData.length) {
+                this.cpuHistoryData = [...data.cpu.history];
+            } else {
+                const lastServerValue = data.cpu.history[data.cpu.history.length - 1];
+                if (lastServerValue !== this.cpuHistoryData[this.cpuHistoryData.length - 1]) {
+                    this.addToHistory(this.cpuHistoryData, lastServerValue);
+                }
+            }
+        }
+
+        if (data.memory?.history && data.memory.history.length > 0) {
+            if (this.memoryHistoryData.length === 0) {
+                this.memoryHistoryData = [...data.memory.history];
+            } else if (data.memory.history.length > this.memoryHistoryData.length) {
+                this.memoryHistoryData = [...data.memory.history];
+            } else {
+                const lastServerValue = data.memory.history[data.memory.history.length - 1];
+                if (lastServerValue !== this.memoryHistoryData[this.memoryHistoryData.length - 1]) {
+                    this.addToHistory(this.memoryHistoryData, lastServerValue);
+                }
+            }
+        }
+
+        this.scheduleChartUpdate('system');
+    }
+
+    updateFromPythonSummary(data) {
+        if (!data.gpu) return;
+        
+        this.updateFromPythonGpuData(data.gpu);
+        
+        if (data.models) {
+            this.lastModelsData = data.models;
+        }
+        if (data.queue) {
+            const container = document.getElementById('queueStatusContent');
+            if (container) this.renderQueueStatus(data.queue, container);
+            this.lastQueueData = data.queue;
+        }
+    }
+
+    updateFromPythonGpuData(gpuData) {
+        const data = {
+            ...gpuData,
+            utilization: gpuData.utilization || gpuData.gpu_utilization || 0,
+            memory_utilization: gpuData.memory_utilization || 
+                (gpuData.total_memory && gpuData.used_memory 
+                    ? Math.round((gpuData.used_memory / gpuData.total_memory) * 100) 
+                    : 0),
+            temperature: gpuData.temperature || 0,
+            power_draw: gpuData.power_draw || gpuData.power || 0,
+            name: gpuData.name || 'Unknown',
+            total_memory: gpuData.total_memory,
+            used_memory: gpuData.used_memory,
+            available_memory: gpuData.available_memory
+        };
+        
+        this.pythonGpuConnected = data.status !== 'unavailable';
+        this.renderPythonGpuConnectionStatus(this.pythonGpuConnected);
+        this.renderPythonGpuStatus(data);
+        this.updatePythonGpuVisibility(true);
+
+        if (this.pythonGpuConnected) {
+            this.appendPythonGpuHistoryPoint(data);
         }
     }
 
@@ -338,32 +505,8 @@ export class SystemMonitor {
             }
 
             const gpuData = result.gpu || {};
-            this.pythonGpuConnected = gpuData.status === 'available';
-            this.renderPythonGpuConnectionStatus(this.pythonGpuConnected);
-            
-            const data = {
-                ...gpuData,
-                utilization: gpuData.utilization || gpuData.gpu_utilization || 0,
-                memory_utilization: gpuData.memory_utilization || 
-                    (gpuData.total_memory && gpuData.used_memory 
-                        ? Math.round((gpuData.used_memory / gpuData.total_memory) * 100) 
-                        : 0),
-                temperature: gpuData.temperature || 0,
-                power_draw: gpuData.power_draw || gpuData.power || 0,
-                name: gpuData.name || 'Unknown',
-                total_memory: gpuData.total_memory,
-                used_memory: gpuData.used_memory,
-                available_memory: gpuData.available_memory
-            };
-            
-            this.renderPythonGpuStatus(data);
-            this.updatePythonGpuVisibility(true);
-
-            if (this.pythonGpuConnected) {
-                this.appendPythonGpuHistoryPoint(data, { force: forceRefresh || forceSample });
-            }
+            this.updateFromPythonGpuData(gpuData);
         } catch (error) {
-            console.log('[SystemMonitor] Using fallback API:', error.message);
             await this.refreshPythonGpuStatusFallback({ forceSample });
         }
     }
@@ -377,26 +520,16 @@ export class SystemMonitor {
             if (!result || !result.success) {
                 throw new Error(result?.error || 'Failed to get GPU status');
             }
-            const data = result;
-            this.pythonGpuConnected = data.status === 'available';
-            this.renderPythonGpuConnectionStatus(this.pythonGpuConnected);
-            this.renderPythonGpuStatus(data);
-            this.updatePythonGpuVisibility(true);
-
-            if (this.pythonGpuConnected) {
-                this.appendPythonGpuHistoryPoint(data, { force: forceSample });
-            }
+            this.updateFromPythonGpuData(result);
         } catch (error) {
             this.pythonGpuConnected = false;
             this.renderPythonGpuConnectionStatus(false);
             this.updatePythonGpuVisibility(false);
-            console.log('[SystemMonitor] Python GPU connection failed:', error.message);
         }
     }
 
     updatePythonGpuVisibility(isConnected) {
         const dashboardGpuPanel = document.querySelector('.python-gpu-monitor');
-
         if (dashboardGpuPanel) {
             dashboardGpuPanel.style.display = isConnected ? '' : 'none';
         }
@@ -415,14 +548,22 @@ export class SystemMonitor {
 
     renderPythonGpuStatus(data) {
         if (!data || data.status === 'unavailable') {
-            document.getElementById('pythonGpuUtilization').textContent = '--';
-            document.getElementById('pythonGpuMemory').textContent = '--';
-            document.getElementById('pythonGpuTemp').textContent = '--';
-            document.getElementById('pythonGpuPower').textContent = '--';
-            document.getElementById('pythonGpuName').textContent = data?.message || '未检测到GPU';
-            document.getElementById('pythonGpuTotalMemory').textContent = '--';
-            document.getElementById('pythonGpuUsedMemory').textContent = '--';
-            document.getElementById('pythonGpuAvailableMemory').textContent = '--';
+            const utilElement = document.getElementById('pythonGpuUtilization');
+            const memElement = document.getElementById('pythonGpuMemory');
+            const tempElement = document.getElementById('pythonGpuTemp');
+            const powerElement = document.getElementById('pythonGpuPower');
+            const nameElement = document.getElementById('pythonGpuName');
+            const totalMemElement = document.getElementById('pythonGpuTotalMemory');
+            const usedMemElement = document.getElementById('pythonGpuUsedMemory');
+            const availMemElement = document.getElementById('pythonGpuAvailableMemory');
+            if (utilElement) utilElement.textContent = '--';
+            if (memElement) memElement.textContent = '--';
+            if (tempElement) tempElement.textContent = '--';
+            if (powerElement) powerElement.textContent = '--';
+            if (nameElement) nameElement.textContent = data?.message || '未检测到GPU';
+            if (totalMemElement) totalMemElement.textContent = '--';
+            if (usedMemElement) usedMemElement.textContent = '--';
+            if (availMemElement) availMemElement.textContent = '--';
             return;
         }
 
@@ -430,14 +571,37 @@ export class SystemMonitor {
         const usedMemoryGB = data.used_memory / (1024 ** 3);
         const availableMemoryGB = data.available_memory / (1024 ** 3);
 
-        document.getElementById('pythonGpuUtilization').textContent = `${data.utilization || 0}%`;
-        document.getElementById('pythonGpuMemory').textContent = `${data.memory_utilization || 0}%`;
-        document.getElementById('pythonGpuTemp').textContent = `${data.temperature || 0}°C`;
-        document.getElementById('pythonGpuPower').textContent = `${data.power_draw || 0}W`;
-        document.getElementById('pythonGpuName').textContent = data.name || 'Unknown';
-        document.getElementById('pythonGpuTotalMemory').textContent = `${totalMemoryGB.toFixed(1)} GB`;
-        document.getElementById('pythonGpuUsedMemory').textContent = `${usedMemoryGB.toFixed(1)} GB`;
-        document.getElementById('pythonGpuAvailableMemory').textContent = `${availableMemoryGB.toFixed(1)} GB`;
+        const utilEl = document.getElementById('pythonGpuUtilization');
+        const memEl = document.getElementById('pythonGpuMemory');
+        const tempEl = document.getElementById('pythonGpuTemp');
+        const powerEl = document.getElementById('pythonGpuPower');
+        const nameEl = document.getElementById('pythonGpuName');
+        const totalMemEl = document.getElementById('pythonGpuTotalMemory');
+        const usedMemEl = document.getElementById('pythonGpuUsedMemory');
+        const availMemEl = document.getElementById('pythonGpuAvailableMemory');
+        if (utilEl) utilEl.textContent = `${data.utilization || 0}%`;
+        if (memEl) memEl.textContent = `${data.memory_utilization || 0}%`;
+        if (tempEl) tempEl.textContent = `${data.temperature || 0}°C`;
+        if (powerEl) powerEl.textContent = `${data.power_draw || 0}W`;
+        if (nameEl) nameEl.textContent = data.name || 'Unknown';
+        if (totalMemEl) totalMemEl.textContent = `${totalMemoryGB.toFixed(1)} GB`;
+        if (usedMemEl) usedMemEl.textContent = `${usedMemoryGB.toFixed(1)} GB`;
+        if (availMemEl) availMemEl.textContent = `${availableMemoryGB.toFixed(1)} GB`;
+        
+        this._removeMultipleSkeletonClasses([
+            '#pythonGpuUtilization',
+            '#pythonGpuMemory', 
+            '#pythonGpuTemp',
+            '#pythonGpuPower',
+            '#pythonGpuName',
+            '#pythonGpuTotalMemory',
+            '#pythonGpuUsedMemory',
+            '#pythonGpuAvailableMemory',
+            '.python-stat-icon.gpu',
+            '.python-stat-icon.memory',
+            '.python-stat-icon.temp',
+            '.python-stat-icon.power'
+        ]);
     }
 
     updatePythonGpuLegend() {
@@ -614,8 +778,6 @@ export class SystemMonitor {
     async updateSystemStatsFromServer() {
         try {
             const token = localStorage.getItem('authToken');
-            console.log('[SystemMonitor] Auth token exists:', !!token);
-            
             const headers = {};
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
@@ -623,69 +785,11 @@ export class SystemMonitor {
             
             const response = await fetch('/api/system/monitor', { headers });
             
-            console.log('[SystemMonitor] API response status:', response.status);
-            
             if (response.ok) {
                 const data = await response.json();
-                console.log('[SystemMonitor] Received data:', data);
-                
-                const cpuValueEl = document.getElementById('cpuValue');
-                const memoryValueEl = document.getElementById('memoryValue');
-                const memoryTotalEl = document.getElementById('memoryTotal');
-                const cpuCoresEl = document.getElementById('cpuCores');
-                
-                const memoryUsageEl = document.getElementById('memoryUsage');
-                const cpuUsageEl = document.getElementById('cpuUsage');
-                
-                if (cpuValueEl) cpuValueEl.textContent = `${data.cpu.usage.toFixed(1)}%`;
-                if (memoryValueEl) memoryValueEl.textContent = `${parseFloat(data.memory.usagePercent).toFixed(1)}%`;
-                if (memoryTotalEl) memoryTotalEl.textContent = data.memory.total;
-                if (cpuCoresEl) cpuCoresEl.textContent = data.cpu.cores.toString();
-                
-                if (memoryUsageEl) memoryUsageEl.textContent = `${data.memory.used || '--'} / ${data.memory.total || '--'}`;
-                if (cpuUsageEl) cpuUsageEl.textContent = `${data.cpu.usage.toFixed(1)}%`;
-
-                if (data.cpu.history && data.cpu.history.length > 0) {
-                    console.log('[SystemMonitor] Server CPU history length:', data.cpu.history.length);
-                    
-                    if (this.cpuHistoryData.length === 0) {
-                        this.cpuHistoryData = [...data.cpu.history];
-                    } else if (data.cpu.history.length > this.cpuHistoryData.length) {
-                        this.cpuHistoryData = [...data.cpu.history];
-                    } else {
-                        const lastServerValue = data.cpu.history[data.cpu.history.length - 1];
-                        if (lastServerValue !== this.cpuHistoryData[this.cpuHistoryData.length - 1]) {
-                            this.addToHistory(this.cpuHistoryData, lastServerValue);
-                        }
-                    }
-                    console.log('[SystemMonitor] CPU history length after update:', this.cpuHistoryData.length);
-                } else {
-                    this.updateSystemStatsLocally();
-                }
-                
-                if (data.memory.history && data.memory.history.length > 0) {
-                    console.log('[SystemMonitor] Server Memory history length:', data.memory.history.length);
-                    
-                    if (this.memoryHistoryData.length === 0) {
-                        this.memoryHistoryData = [...data.memory.history];
-                    } else if (data.memory.history.length > this.memoryHistoryData.length) {
-                        this.memoryHistoryData = [...data.memory.history];
-                    } else {
-                        const lastServerValue = data.memory.history[data.memory.history.length - 1];
-                        if (lastServerValue !== this.memoryHistoryData[this.memoryHistoryData.length - 1]) {
-                            this.addToHistory(this.memoryHistoryData, lastServerValue);
-                        }
-                    }
-                    console.log('[SystemMonitor] Memory history length after update:', this.memoryHistoryData.length);
-                } else {
-                    this.updateSystemStatsLocally();
-                }
-            } else {
-                console.log('[SystemMonitor] API not ok (status:', response.status, '), falling back to local');
-                this.updateSystemStatsLocally();
+                this.updateFromSystemData(data);
             }
         } catch (error) {
-            console.error('[SystemMonitor] API error:', error);
             this.updateSystemStatsLocally();
         }
     }
@@ -697,14 +801,12 @@ export class SystemMonitor {
         const cpuEl = document.getElementById('cpuValue');
         const memEl = document.getElementById('memoryValue');
         const memTotalEl = document.getElementById('memoryTotal');
-        
         const memoryUsageEl = document.getElementById('memoryUsage');
         const cpuUsageEl = document.getElementById('cpuUsage');
 
         if (cpuEl) cpuEl.textContent = cpuUsage;
         if (memEl) memEl.textContent = memoryInfo.usagePercent;
         if (memTotalEl) memTotalEl.textContent = memoryInfo.total;
-        
         if (memoryUsageEl) memoryUsageEl.textContent = `${memoryInfo.used} / ${memoryInfo.total}`;
         if (cpuUsageEl) cpuUsageEl.textContent = cpuUsage;
 
@@ -819,12 +921,11 @@ export class SystemMonitor {
             if (!result || !result.success) {
                 throw new Error(result?.error || 'Failed to get GPU status');
             }
-            const data = result;
-            this.renderGpuStatus(data, container);
+            this.renderGpuStatus(result, container);
 
-            if (data.status === 'available') {
-                const utilization = data.utilization || 0;
-                const temperature = data.temperature || 0;
+            if (result.status === 'available') {
+                const utilization = result.utilization || 0;
+                const temperature = result.temperature || 0;
 
                 this.addToHistory(this.gpuHistoryData, utilization);
                 this.addToHistory(this.gpuTempHistoryData, temperature);
@@ -862,8 +963,6 @@ export class SystemMonitor {
                     </div>
                 </div>
             `;
-            const gpuValElErr = document.getElementById('gpuValue');
-            if (gpuValElErr) gpuValElErr.textContent = '--';
         }
     }
 
@@ -904,8 +1003,6 @@ export class SystemMonitor {
                     </div>
                 </div>
             `;
-            const gpuValElUnavail = document.getElementById('gpuValue');
-            if (gpuValElUnavail) gpuValElUnavail.textContent = '--';
             return;
         }
 
@@ -913,7 +1010,6 @@ export class SystemMonitor {
         const usedMemoryGB = data.used_memory / (1024 ** 3);
         const availableMemoryGB = data.available_memory / (1024 ** 3);
         const memoryPercent = data.memory_utilization || 0;
-        const memoryClass = memoryPercent > 90 ? 'high' : memoryPercent > 70 ? 'medium' : 'low';
         const utilization = data.utilization || 0;
         const temperature = data.temperature || 0;
 
@@ -928,7 +1024,7 @@ export class SystemMonitor {
                         <div class="metric-label">显存使用</div>
                         <div class="metric-value">${usedMemoryGB.toFixed(1)} / ${totalMemoryGB.toFixed(1)} GB</div>
                         <div class="memory-bar">
-                            <div class="memory-fill ${memoryClass}" style="width: ${memoryPercent}%"></div>
+                            <div class="memory-fill" style="width: ${memoryPercent}%"></div>
                         </div>
                     </div>
                     <div class="metric-item">
@@ -978,25 +1074,17 @@ export class SystemMonitor {
 
     initChart() {
         const canvas = document.getElementById('systemChart');
-        console.log('[SystemMonitor] Canvas element:', canvas);
-        
-        if (!canvas) {
-            console.log('[SystemMonitor] Canvas not found');
-            return;
-        }
+        if (!canvas) return;
 
         const ctx = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
         
         let rect = canvas.getBoundingClientRect();
-        console.log('[SystemMonitor] Canvas rect:', rect);
         
         if (rect.width === 0 || rect.height === 0) {
-            console.log('[SystemMonitor] Canvas has zero size, trying container...');
             const container = canvas.parentElement;
             if (container) {
                 const containerRect = container.getBoundingClientRect();
-                console.log('[SystemMonitor] Container rect:', containerRect);
                 rect = {
                     width: Math.max(containerRect.width - 32, 300),
                     height: Math.max(containerRect.height - 32, 200)
@@ -1007,11 +1095,9 @@ export class SystemMonitor {
         }
 
         if (rect.width <= 0 || rect.height <= 0) {
-            console.log('[SystemMonitor] Invalid dimensions:', rect);
             rect = { width: 400, height: 250 };
         }
 
-        console.log('[SystemMonitor] Setting canvas size:', rect.width * dpr, 'x', rect.height * dpr);
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
         ctx.scale(dpr, dpr);
@@ -1022,38 +1108,23 @@ export class SystemMonitor {
             height: rect.height,
             padding: { top: 15, right: 15, bottom: 28, left: 40 }
         };
-        
-        console.log('[SystemMonitor] Chart initialized successfully');
     }
 
     updateChart() {
-        console.log('[SystemMonitor] updateChart called');
-        
         if (!this.chart) {
-            console.log('[SystemMonitor] Chart not initialized, trying to initialize...');
             this.ensureChartInitialized();
         }
 
-        if (!this.chart) {
-            console.log('[SystemMonitor] Chart still not initialized after ensureChartInitialized');
-            return;
-        }
+        if (!this.chart) return;
 
         const { ctx, width, height, padding } = this.chart;
         const chartWidth = width - padding.left - padding.right;
         const chartHeight = height - padding.top - padding.bottom;
 
-        console.log('[SystemMonitor] Chart dimensions:', { width, height, chartWidth, chartHeight, padding });
-
         ctx.clearRect(0, 0, width, height);
 
         let datasets = [];
         let dataLength = 0;
-        
-        console.log('[SystemMonitor] Current chart type:', this.currentChartType);
-        console.log('[SystemMonitor] CPU history:', this.cpuHistoryData.slice(-5));
-        console.log('[SystemMonitor] Memory history:', this.memoryHistoryData.slice(-5));
-        console.log('[SystemMonitor] GPU history:', this.gpuHistoryData.slice(-5));
 
         if (this.currentChartType === 'cpu' || this.currentChartType === 'all') {
             if (this.cpuHistoryData.length > 0) {
@@ -1101,10 +1172,7 @@ export class SystemMonitor {
             }
         }
 
-        console.log('[SystemMonitor] Datasets:', datasets.length, 'Data length:', dataLength);
-
         if (dataLength === 0) {
-            console.log('[SystemMonitor] No data to display');
             this.renderEmptyChart();
             return;
         }
@@ -1113,8 +1181,6 @@ export class SystemMonitor {
         datasets.forEach(ds => allValues.push(...ds.data.filter(v => v > 0)));
         const minValue = allValues.length > 0 ? Math.min(...allValues) * 0.9 : 0;
         const maxValue = allValues.length > 0 ? Math.max(...allValues) * 1.1 : 100;
-
-        console.log('[SystemMonitor] Value range:', { minValue, maxValue });
 
         this.drawGrid(ctx, chartWidth, chartHeight, padding, minValue, maxValue);
         this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, false);
@@ -1125,11 +1191,10 @@ export class SystemMonitor {
         datasets.forEach(ds => {
             this.drawPoint(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
         });
-        
-        console.log('[SystemMonitor] Chart drawn successfully');
     }
 
     renderEmptyChart() {
+        if (!this.chart) return;
         const { ctx, width, height } = this.chart;
         ctx.clearRect(0, 0, width, height);
         ctx.fillStyle = '#6b7280';
@@ -1251,11 +1316,7 @@ export class SystemMonitor {
             if (index === 0) {
                 ctx.moveTo(x, y);
             } else {
-                const prevX = padding.left + (chartWidth / (dataLength - 1)) * (index - 1);
-                const prevY = padding.top + chartHeight - ((dataset.data[index - 1] - minValue) / (maxValue - minValue)) * chartHeight;
-                
-                const cpX = (prevX + x) / 2;
-                ctx.quadraticCurveTo(prevX, prevY, cpX, (prevY + y) / 2);
+                ctx.lineTo(x, y);
             }
         });
 
@@ -1291,13 +1352,10 @@ export class SystemMonitor {
 
     async loadTokenUsageData() {
         try {
-            const token = localStorage.getItem('authToken');
-            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-
-            const response = await fetch(`/api/usage/stats?range=${encodeURIComponent(this.currentTokenTimeRange)}`, { headers });
+            const { monitorCache } = await import('./monitor-cache.js');
+            const data = await monitorCache.getTokenUsage(this.currentTokenTimeRange);
             
-            if (response.ok) {
-                const data = await response.json();
+            if (data) {
                 this.tokenChartData = {
                     range: data.range || this.currentTokenTimeRange,
                     trend: data.trend || [],
@@ -1307,7 +1365,7 @@ export class SystemMonitor {
                     inputTokens: data.inputTokens || 0,
                     outputTokens: data.outputTokens || 0
                 };
-                this.updateTokenChart();
+                this.scheduleChartUpdate('token');
             }
         } catch (error) {
             console.log('[SystemMonitor] Failed to load token usage data:', error);
@@ -1341,154 +1399,6 @@ export class SystemMonitor {
 
         this.updateTokenLegend();
         this.updateTokenChart();
-    }
-
-    ensureGpuChartInitialized() {
-        const canvas = document.getElementById('gpuChart');
-        if (!canvas) return;
-
-        const rect = canvas.getBoundingClientRect();
-        
-        if (rect.width <= 0 || rect.height <= 0) {
-            const container = canvas.parentElement;
-            if (container) {
-                const containerRect = container.getBoundingClientRect();
-                if (containerRect.width > 0 && containerRect.height > 0) {
-                    this.gpuChart = null;
-                    this.initGpuChart();
-                }
-            }
-            return;
-        }
-
-        if (!this.gpuChart) {
-            this.initGpuChart();
-        } else if (this.gpuChart.width !== rect.width || this.gpuChart.height !== rect.height) {
-            this.gpuChart = null;
-            this.initGpuChart();
-        }
-        
-        this.updateGpuChart();
-    }
-
-    initGpuChart() {
-        const canvas = document.getElementById('gpuChart');
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        const dpr = window.devicePixelRatio || 1;
-        
-        let rect = canvas.getBoundingClientRect();
-        
-        // 优先使用容器的尺寸
-        const container = canvas.parentElement;
-        if (container) {
-            const containerRect = container.getBoundingClientRect();
-            if (containerRect.width > 0 && containerRect.height > 0) {
-                rect = {
-                    width: containerRect.width - 32, // 减去内边距
-                    height: containerRect.height - 32 // 减去内边距
-                };
-            }
-        }
-        
-        // 确保尺寸有效
-        if (rect.width <= 0 || rect.height <= 0) {
-            rect = { width: 400, height: 300 };
-        }
-
-        // 设置canvas尺寸
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        ctx.scale(dpr, dpr);
-
-        // 调整padding以确保图表内容不会被裁剪
-        this.gpuChart = {
-            ctx,
-            width: rect.width,
-            height: rect.height,
-            padding: { top: 20, right: 20, bottom: 35, left: 50 }
-        };
-    }
-
-    updateGpuChart() {
-        if (!this.gpuChart) {
-            this.ensureGpuChartInitialized();
-        }
-
-        if (!this.gpuChart) return;
-
-        const { ctx, width, height, padding } = this.gpuChart;
-        const chartWidth = width - padding.left - padding.right;
-        const chartHeight = height - padding.top - padding.bottom;
-
-        // 清除画布
-        ctx.clearRect(0, 0, width, height);
-
-        let datasets = [];
-        let dataLength = 0;
-
-        // 添加GPU使用率数据
-        if (this.gpuHistoryData.length > 0) {
-            datasets.push({
-                data: [...this.gpuHistoryData],
-                color: '#8b5cf6',
-                label: 'GPU使用率',
-                gradient: ['#8b5cf6', '#a78bfa']
-            });
-            dataLength = Math.max(dataLength, this.gpuHistoryData.length);
-        }
-        // 添加GPU温度数据
-        if (this.gpuTempHistoryData.length > 0) {
-            datasets.push({
-                data: [...this.gpuTempHistoryData],
-                color: '#ef4444',
-                label: 'GPU温度',
-                gradient: ['#ef4444', '#f87171'],
-                isTemperature: true
-            });
-            dataLength = Math.max(dataLength, this.gpuTempHistoryData.length);
-        }
-
-        // 如果没有数据，显示空状态
-        if (dataLength === 0) {
-            this.renderGpuEmptyChart();
-            return;
-        }
-
-        // 计算数据范围
-        let allValues = [];
-        datasets.forEach(ds => allValues.push(...ds.data.filter(v => v > 0)));
-        const minValue = allValues.length > 0 ? Math.min(...allValues) * 0.9 : 0;
-        const maxValue = allValues.length > 0 ? Math.max(...allValues) * 1.1 : 100;
-
-        // 绘制网格
-        this.drawGrid(ctx, chartWidth, chartHeight, padding, minValue, maxValue);
-        // 绘制坐标轴
-        // 检查是否有温度数据
-        const hasTemperatureData = datasets.some(ds => ds.isTemperature);
-        this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, false, hasTemperatureData);
-        // 绘制数据集
-        datasets.forEach(ds => {
-            // 绘制面积图
-            this.drawArea(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
-            // 绘制折线
-            this.drawLine(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
-        });
-        // 绘制数据点
-        datasets.forEach(ds => {
-            this.drawPoint(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
-        });
-    }
-
-    renderGpuEmptyChart() {
-        if (!this.gpuChart) return;
-        const { ctx, width, height } = this.gpuChart;
-        ctx.clearRect(0, 0, width, height);
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '14px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('暂无数据', width / 2, height / 2);
     }
 
     initTokenChart() {
@@ -1575,46 +1485,9 @@ export class SystemMonitor {
             }
             
             result.labels.push(label);
-            
-            let prompt = 0, completion = 0, total = 0;
-            
-            if (range === 'hour') {
-                const minuteKey = time.toISOString().slice(0, 16);
-                if (data.minuteData && data.minuteData[minuteKey]) {
-                    const d = data.minuteData[minuteKey];
-                    prompt = d.promptTokens || 0;
-                    completion = d.completionTokens || 0;
-                    total = d.totalTokens || 0;
-                }
-            } else if (range === 'day') {
-                const hourKey = time.toISOString().slice(0, 13);
-                if (data.hourly && data.hourly[hourKey]) {
-                    const d = data.hourly[hourKey];
-                    prompt = d.promptTokens || 0;
-                    completion = d.completionTokens || 0;
-                    total = d.totalTokens || 0;
-                } else if (data.daily) {
-                    const dateKey = time.toISOString().slice(0, 10);
-                    if (data.daily[dateKey]) {
-                        const d = data.daily[dateKey];
-                        prompt += (d.promptTokens || 0) / 24;
-                        completion += (d.completionTokens || 0) / 24;
-                        total += (d.totalTokens || 0) / 24;
-                    }
-                }
-            } else {
-                const dateKey = time.toISOString().slice(0, 10);
-                if (data.daily && data.daily[dateKey]) {
-                    const d = data.daily[dateKey];
-                    prompt = d.promptTokens || 0;
-                    completion = d.completionTokens || 0;
-                    total = d.totalTokens || 0;
-                }
-            }
-            
-            result.promptTokens.push(Math.round(prompt));
-            result.completionTokens.push(Math.round(completion));
-            result.totalTokens.push(Math.round(total));
+            result.promptTokens.push(0);
+            result.completionTokens.push(0);
+            result.totalTokens.push(0);
         }
         
         return result;
@@ -1745,17 +1618,6 @@ export class SystemMonitor {
             }));
         } catch (error) {
             console.log('[SystemMonitor] Failed to load models list:', error.message);
-            container.innerHTML = `
-                <div class="status-loading">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span>无法加载模型列表</span>
-                    <p class="error-hint">错误信息: ${error.message}</p>
-                    <p class="error-suggestion">请确保Python控制器服务已启动</p>
-                    <button class="btn btn-primary btn-sm mt-2" onclick="window.systemMonitor.loadModelsAndRender()">
-                        <i class="fas fa-sync-alt"></i> 重试
-                    </button>
-                </div>
-            `;
         }
     }
 
@@ -1781,241 +1643,61 @@ export class SystemMonitor {
         }
     }
 
-    async loadModelsAndRender() {
-        try {
-            await Promise.all([
-                this.loadModelsList(),
-                this.loadCurrentModel()
-            ]);
-            this.renderQuickSwitchPanel();
-        } catch (error) {
-            console.log('[SystemMonitor] Failed to load models:', error.message);
-        }
-    }
-
-    renderQuickSwitchPanel() {
-        const container = document.getElementById('quickSwitchContent');
-        if (!container) return;
-
-        if (this.modelsList.length === 0) {
+    renderQueueStatus(data, container) {
+        const t = (key) => key;
+        if (!data || Object.keys(data).length === 0) {
             container.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-cube"></i>
-                    <p>暂无可用模型</p>
-                    <p class="hint">请在 Python Controller 中配置模型</p>
+                <div class="status-loading">
+                    <i class="fas fa-info-circle"></i>
+                    <span>${t('gpuMonitor.noQueueInfo')}</span>
                 </div>
             `;
             return;
         }
 
-        const currentModelName = this.currentModel?.name || this.currentModel;
-        
-        let html = `
-            <div class="current-model-info">
-                <div class="current-model-label">当前运行模型</div>
-                <div class="current-model-value">
-                    ${currentModelName ? `<span class="model-name">${currentModelName}</span>` : '<span class="no-model">-</span>'}
-                </div>
-            </div>
-            <div class="models-switch-list">
-        `;
+        let totalActive = 0;
+        let totalLimit = 0;
+        let canAccept = false;
 
-        this.modelsList.forEach(model => {
-            const isRunning = model.name === currentModelName;
-            const statusClass = isRunning ? 'status-running' : model.running ? 'status-running' : 'status-stopped';
-            const statusText = isRunning ? '当前运行' : model.running ? '运行中' : '已停止';
-            
-            html += `
-                <div class="model-switch-item" data-model="${model.name}">
-                    <div class="model-switch-header">
-                        <div class="model-switch-info">
-                            <div class="model-switch-name">${model.name}</div>
-                            <div class="model-switch-details">
-                                <span class="model-switch-port">端口: ${model.port || '-'}</span>
-                                <span class="model-switch-memory">${model.required_memory || '-'}</span>
-                            </div>
-                        </div>
-                        <span class="model-switch-status ${statusClass}">${statusText}</span>
-                    </div>
-                    <div class="model-switch-actions">
-                        ${isRunning ? `
-                            <button class="btn btn-danger btn-sm" onclick="window.systemMonitor.stopModel('${model.name}')">
-                                <i class="fas fa-stop"></i> 停止
-                            </button>
-                        ` : model.running ? `
-                            <button class="btn btn-primary btn-sm" onclick="window.systemMonitor.switchModel('${model.name}')">
-                                <i class="fas fa-exchange-alt"></i> 切换到此
-                            </button>
-                        ` : `
-                            <button class="btn btn-success btn-sm" onclick="window.systemMonitor.startModel('${model.name}')">
-                                <i class="fas fa-play"></i> 启动
-                            </button>
-                        `}
-                    </div>
-                </div>
-            `;
+        Object.values(data).forEach(model => {
+            totalActive += model.active_requests;
+            totalLimit = model.concurrency_limit;
+            if (model.can_accept) canAccept = true;
         });
 
-        html += `</div>`;
-        container.innerHTML = html;
-    }
-
-    async switchModel(modelName) {
-        const container = document.getElementById('quickSwitchContent');
-        if (!container) return;
-
-        const modelItem = container.querySelector(`[data-model="${modelName}"]`);
-        if (modelItem) {
-            modelItem.querySelector('.model-switch-actions').innerHTML = `
-                <button class="btn btn-primary btn-sm disabled" disabled>
-                    <i class="fas fa-spinner fa-spin"></i> 切换中...
-                </button>
-            `;
-        }
-
-        try {
-            const token = window.authManager ? window.authManager.getToken() : null;
-            const headers = { 'Content-Type': 'application/json' };
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-            
-            const response = await fetch(`${API_BASE_URL}/models/${encodeURIComponent(modelName)}/switch`, {
-                method: 'POST',
-                headers,
-                timeout: 120000
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            this.currentModel = { name: modelName, ...data };
-            const { monitorCache } = await import('./monitor-cache.js');
-            monitorCache.invalidateCache();
-            this.renderQuickSwitchPanel();
-            this.showToast('模型切换成功', 'success');
-        } catch (error) {
-            console.error('[SystemMonitor] Failed to switch model:', error.message);
-            this.renderQuickSwitchPanel();
-            this.showToast(`切换失败: ${error.message}`, 'error');
-        }
-    }
-
-    async startModel(modelName) {
-        const container = document.getElementById('quickSwitchContent');
-        if (!container) return;
-
-        const modelItem = container.querySelector(`[data-model="${modelName}"]`);
-        if (modelItem) {
-            modelItem.querySelector('.model-switch-actions').innerHTML = `
-                <button class="btn btn-success btn-sm disabled" disabled>
-                    <i class="fas fa-spinner fa-spin"></i> 启动中...
-                </button>
-            `;
-        }
-
-        try {
-            const token = window.authManager ? window.authManager.getToken() : null;
-            const headers = { 'Content-Type': 'application/json' };
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-            
-            const response = await fetch(`${API_BASE_URL}/models/${encodeURIComponent(modelName)}/start`, {
-                method: 'POST',
-                headers,
-                timeout: 120000
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            this.currentModel = { name: modelName, ...data };
-            this.renderQuickSwitchPanel();
-            this.showToast('模型启动成功', 'success');
-        } catch (error) {
-            console.error('[SystemMonitor] Failed to start model:', error.message);
-            this.renderQuickSwitchPanel();
-            this.showToast(`启动失败: ${error.message}`, 'error');
-        }
-    }
-
-    async stopModel(modelName) {
-        const container = document.getElementById('quickSwitchContent');
-        if (!container) return;
-
-        const modelItem = container.querySelector(`[data-model="${modelName}"]`);
-        if (modelItem) {
-            modelItem.querySelector('.model-switch-actions').innerHTML = `
-                <button class="btn btn-danger btn-sm disabled" disabled>
-                    <i class="fas fa-spinner fa-spin"></i> 停止中...
-                </button>
-            `;
-        }
-
-        try {
-            const token = window.authManager ? window.authManager.getToken() : null;
-            const headers = { 'Content-Type': 'application/json' };
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-            
-            const response = await fetch(`${API_BASE_URL}/models/${encodeURIComponent(modelName)}/stop`, {
-                method: 'POST',
-                headers,
-                timeout: 30000
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-            }
-
-            await response.json();
-            this.currentModel = null;
-            this.renderQuickSwitchPanel();
-            this.showToast('模型已停止', 'success');
-        } catch (error) {
-            console.error('[SystemMonitor] Failed to stop model:', error.message);
-            this.renderQuickSwitchPanel();
-            this.showToast(`停止失败: ${error.message}`, 'error');
-        }
-    }
-
-    showToast(message, type = 'info') {
-        const toastContainer = document.getElementById('toastContainer');
-        if (!toastContainer) return;
-
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
-        
-        let iconClass = 'fa-info-circle';
-        if (type === 'success') iconClass = 'fa-check-circle';
-        else if (type === 'error') iconClass = 'fa-exclamation-circle';
-        else if (type === 'warning') iconClass = 'fa-warning';
-
-        toast.innerHTML = `
-            <i class="fas ${iconClass}"></i>
-            <span>${message}</span>
+        container.innerHTML = `
+            <div class="queue-info-grid">
+                <div class="queue-card">
+                    <div class="queue-icon"><i class="fas fa-tasks"></i></div>
+                    <div class="queue-value">${totalActive}</div>
+                    <div class="queue-label">${t('gpuMonitor.activeRequests')}</div>
+                </div>
+                <div class="queue-card">
+                    <div class="queue-icon"><i class="fas fa-gauge"></i></div>
+                    <div class="queue-value">${totalLimit}</div>
+                    <div class="queue-label">${t('gpuMonitor.concurrencyLimit')}</div>
+                </div>
+                <div class="queue-card">
+                    <div class="queue-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="queue-value ${canAccept ? 'success' : 'danger'}">${canAccept ? t('gpuMonitor.yes') : t('gpuMonitor.no')}</div>
+                    <div class="queue-label">${t('gpuMonitor.canAcceptNew')}</div>
+                </div>
+                <div class="queue-card">
+                    <div class="queue-icon"><i class="fas fa-chart-line"></i></div>
+                    <div class="queue-value">${totalLimit - totalActive}</div>
+                    <div class="queue-label">${t('gpuMonitor.remainingSlots')}</div>
+                </div>
+            </div>
         `;
-
-        toastContainer.appendChild(toast);
-
-        setTimeout(() => {
-            toast.classList.add('toast-fade-out');
-            setTimeout(() => {
-                toast.remove();
-            }, 300);
-        }, 3000);
     }
 }
 
-const systemMonitor = new SystemMonitor();
-window.systemMonitor = systemMonitor;
-export default systemMonitor;
+export function getSystemMonitor() {
+    if (!systemMonitorInstance) {
+        systemMonitorInstance = new SystemMonitor();
+    }
+    return systemMonitorInstance;
+}
+
+window.SystemMonitor = SystemMonitor;
+window.systemMonitor = getSystemMonitor();

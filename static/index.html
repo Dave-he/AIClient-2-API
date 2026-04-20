@@ -45,7 +45,7 @@
         // 导入组件加载器
         import { initializeComponents } from './app/component-loader.js';
         // 导入多语言、主题切换和认证函数
-        import { initI18n, t, setLanguage, getCurrentLanguage } from './app/i18n.js';
+        import { initI18n, t, setLanguage, getCurrentLanguage, translateElement } from './app/i18n.js';
         import { initLanguageSwitcher } from './app/language-switcher.js';
         import { initThemeSwitcher, setTheme, getCurrentTheme } from './app/theme-switcher.js';
         import { initAuth, logout } from './app/auth.js';
@@ -131,6 +131,8 @@
         // 导出到 window 供其他脚本使用
         window.initAuth = initAuth;
         window.logout = logout;
+        // 设置 window.i18n 供其他脚本使用（如 gpu-monitor.js, custom-models-manager.js）
+        window.i18n = { t, setLanguage, getCurrentLanguage, translateElement };
     </script>
     <script type="module" src="app/system-monitor.js"></script>
     <script type="module" src="app/app.js"></script>

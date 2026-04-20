@@ -6,6 +6,7 @@ import threading
 from typing import Dict, Optional, List, Set
 from datetime import datetime, timedelta
 from .rate_limiter import RateLimiter
+from core.cache_service import cache_service
 
 def _parse_memory_size(size_str: str) -> int:
     if not size_str:
@@ -49,10 +50,16 @@ class Scheduler:
         self._init_preloaded_models()
     
     def _load_config(self) -> Dict:
+        cached_config = cache_service.get("ai_controller:cache:config")
+        if cached_config is not None:
+            return cached_config
+        
         config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
-                return yaml.safe_load(f)
+                config = yaml.safe_load(f)
+                cache_service.set("ai_controller:cache:config", config, ttl=60)
+                return config
         return self._get_default_config()
     
     def _get_default_config(self) -> Dict:
@@ -125,9 +132,17 @@ class Scheduler:
         return self._find_matching_model(model_name) is not None
     
     def get_model_config(self, model_name: str) -> Optional[Dict]:
+        cache_key = f"ai_controller:cache:model_config:{model_name}"
+        cached_config = cache_service.get(cache_key)
+        if cached_config is not None:
+            return cached_config
+        
         matched_name = self._find_matching_model(model_name)
         if matched_name:
-            return self.config.get('models', {}).get(matched_name)
+            config = self.config.get('models', {}).get(matched_name)
+            if config:
+                cache_service.set(cache_key, config, ttl=300)
+            return config
         return None
     
     def get_model_path(self, model_name: str) -> Optional[str]:
@@ -160,6 +175,11 @@ class Scheduler:
         return self.config.get('settings', {}).get('concurrency_limit', 4)
     
     def is_model_running(self, model_name: str) -> bool:
+        cache_key = f"ai_controller:cache:model_running:{model_name}"
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+        
         with self._model_lock:
             port = self.get_model_port(model_name)
             if port:
@@ -167,11 +187,13 @@ class Scheduler:
                 if process_info:
                     if model_name not in self.running_models:
                         self.running_models[model_name] = datetime.now()
+                    cache_service.set(cache_key, True, ttl=3)
                     return True
             
             if model_name in self.running_models:
                 del self.running_models[model_name]
             
+            cache_service.set(cache_key, False, ttl=3)
             return False
     
     def is_model_preloaded(self, model_name: str) -> bool:

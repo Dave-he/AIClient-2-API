@@ -46,7 +46,7 @@ defineProps({
 .current-model-panel {
   background: var(--card-bg);
   border-radius: var(--radius);
-  padding: 1rem;
+  padding: 0.75rem;
   box-shadow: var(--shadow);
 }
 
@@ -54,27 +54,28 @@ defineProps({
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.375rem;
   border-bottom: 1px solid var(--border);
 }
 
 .panel-header h3 {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.25rem;
 }
 
 .panel-header h3 i {
   color: var(--primary);
+  font-size: 0.7rem;
 }
 
 .current-model-content {
-  min-height: 70px;
+  min-height: 60px;
   display: flex;
   align-items: center;
 }
@@ -82,23 +83,23 @@ defineProps({
 .model-running-card {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
+  gap: 0.5rem;
+  padding: 0.5rem;
   background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
   border: 1px solid rgba(34, 197, 94, 0.2);
-  border-radius: 10px;
+  border-radius: 8px;
   width: 100%;
 }
 
 .model-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 1rem;
+  font-size: 0.875rem;
 }
 
 .model-icon.running {
@@ -106,7 +107,7 @@ defineProps({
 }
 
 .model-info .model-name {
-  font-size: 0.9rem;
+  font-size: 0.825rem;
   font-weight: 600;
   color: var(--text);
 }
@@ -114,14 +115,14 @@ defineProps({
 .model-info .model-status {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  font-size: 0.725rem;
+  gap: 0.25rem;
+  font-size: 0.65rem;
   color: var(--success);
 }
 
 .status-indicator {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
 }
 
@@ -135,22 +136,22 @@ defineProps({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem;
+  padding: 1rem;
   color: var(--text-muted);
 }
 
 .empty-state i {
-  font-size: 1.5rem;
-  margin-bottom: 0.375rem;
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
   opacity: 0.5;
 }
 
 .empty-state.small {
-  padding: 0.75rem;
+  padding: 0.5rem;
 }
 
 .empty-state.small i {
-  font-size: 1.125rem;
+  font-size: 1rem;
 }
 
 .skeleton-loader {
@@ -158,12 +159,12 @@ defineProps({
   background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 10px;
+  border-radius: 8px;
   width: 100%;
 }
 
 .skeleton-loader.small {
-  height: 70px;
+  height: 60px;
 }
 
 @keyframes shimmer {

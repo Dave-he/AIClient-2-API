@@ -1,7 +1,26 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
 const loadView = (view) => {
-  return () => import(/* webpackChunkName: "view-[request]" */ `@/views/${view}.vue`);
+  const viewMap = {
+    'core/Dashboard': () => import('@/views/core/Dashboard.vue'),
+    'guide/Guide': () => import('@/views/guide/Guide.vue'),
+    'guide/Tutorial': () => import('@/views/guide/Tutorial.vue'),
+    'config/Config': () => import('@/views/config/Config.vue'),
+    'config/CustomModels': () => import('@/views/config/CustomModels.vue'),
+    'config/UploadConfig': () => import('@/views/config/UploadConfig.vue'),
+    'providers/Providers': () => import('@/views/providers/Providers.vue'),
+    'providers/GPUMonitor': () => import('@/views/providers/GPUMonitor.vue'),
+    'stats/Usage': () => import('@/views/stats/Usage.vue'),
+    'stats/ModelUsageStats': () => import('@/views/stats/ModelUsageStats.vue'),
+    'tools/Plugins': () => import('@/views/tools/Plugins.vue'),
+    'tools/Logs': () => import('@/views/tools/Logs.vue'),
+    'tools/TestAPI': () => import('@/views/tools/TestAPI.vue'),
+    'plugins/Potluck': () => import('@/views/plugins/Potluck.vue'),
+    'plugins/PotluckUser': () => import('@/views/plugins/PotluckUser.vue'),
+    'core/Login': () => import('@/views/core/Login.vue'),
+    'core/NotFound': () => import('@/views/core/NotFound.vue')
+  };
+  return viewMap[view] || (() => import('@/views/core/NotFound.vue'));
 };
 
 const prefetchViewMap = {
