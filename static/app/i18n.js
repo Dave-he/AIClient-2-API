@@ -1048,6 +1048,13 @@ const translations = {
         'gpuMonitor.startFailed': '启动失败',
         'gpuMonitor.stopFailed': '停止失败',
         'gpuMonitor.restartFailed': '重启失败',
+        'gpuMonitor.editConfig': '编辑配置',
+        'gpuMonitor.configPlaceholder': '在此输入配置内容...',
+        'gpuMonitor.configSaved': '配置已保存',
+        'gpuMonitor.configSaveFailed': '保存配置失败',
+        'gpuMonitor.cannotGetModels': '无法获取模型列表',
+        'gpuMonitor.noModelsAvailable': '暂无可用模型',
+        'gpuMonitor.noModelsHint': '请在配置文件中添加模型配置',
 
         // Common
         'common.confirm': '确定',

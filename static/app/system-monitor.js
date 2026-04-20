@@ -279,6 +279,62 @@ export class SystemMonitor {
         if (!container) return;
 
         try {
+            const response = await fetch('/api/python/monitor/summary', {
+                method: 'GET',
+                timeout: 10000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to get monitor summary');
+            }
+
+            const gpuData = result.gpu || {};
+            this.pythonGpuConnected = gpuData.status === 'available';
+            this.renderPythonGpuConnectionStatus(this.pythonGpuConnected);
+            
+            const data = {
+                ...gpuData,
+                utilization: gpuData.utilization || gpuData.gpu_utilization || 0,
+                memory_utilization: gpuData.memory_utilization || 
+                    (gpuData.total_memory && gpuData.used_memory 
+                        ? Math.round((gpuData.used_memory / gpuData.total_memory) * 100) 
+                        : 0),
+                temperature: gpuData.temperature || 0,
+                power_draw: gpuData.power_draw || gpuData.power || 0,
+                name: gpuData.name || 'Unknown',
+                total_memory: gpuData.total_memory,
+                used_memory: gpuData.used_memory,
+                available_memory: gpuData.available_memory
+            };
+            
+            this.renderPythonGpuStatus(data);
+            this.updatePythonGpuVisibility(true);
+
+            if (this.pythonGpuConnected) {
+                const utilization = data.utilization || 0;
+                const memoryUtil = data.memory_utilization || 0;
+                const temperature = data.temperature || 0;
+
+                this.addToHistory(this.pythonGpuUtilizationHistory, utilization);
+                this.addToHistory(this.pythonGpuMemoryHistory, memoryUtil);
+                this.addToHistory(this.pythonGpuTempHistory, temperature);
+            }
+        } catch (error) {
+            console.log('[SystemMonitor] Using fallback API:', error.message);
+            await this.refreshPythonGpuStatusFallback();
+        }
+    }
+
+    async refreshPythonGpuStatusFallback() {
+        const container = document.getElementById('pythonGpuConnectionStatus');
+        if (!container) return;
+
+        try {
             const token = window.authManager ? window.authManager.getToken() : null;
             const headers = {};
             if (token) {

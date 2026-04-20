@@ -77,6 +77,40 @@ export async function handleGetVLLMModels(req, res) {
     return true;
 }
 
+export async function handleGetMonitorSummary(req, res) {
+    try {
+        const headers = buildHeaders(req);
+        const controllerBaseUrl = process.env.CONTROLLER_BASE_URL || 'http://localhost:5000';
+        
+        const [gpuData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
+            callPythonController('/manage/gpu', 'GET', null, headers).catch(() => null),
+            callPythonController('/manage/models', 'GET', null, headers).catch(() => null),
+            callPythonController('/manage/queue', 'GET', null, headers).catch(() => null),
+            callPythonController('/manage/models/summary', 'GET', null, headers).catch(() => null),
+            callPythonController('/health', 'GET', null, headers).catch(() => null),
+            callPythonController('/manage/service/status', 'GET', null, headers).catch(() => null)
+        ]);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: true,
+            timestamp: Date.now(),
+            gpu: gpuData,
+            models: modelsData,
+            queue: queueData,
+            summary: summaryData,
+            health: healthData,
+            service: serviceData,
+            controllerUrl: controllerBaseUrl
+        }));
+    } catch (error) {
+        logger.error(`[Python Controller API] Error getting monitor summary: ${error.message}`);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: { message: error.message } }));
+    }
+    return true;
+}
+
 export async function handleGetModelStatus(req, res) {
     try {
         const headers = buildHeaders(req);
@@ -229,8 +263,9 @@ export async function handleGetHealthStatus(req, res) {
     try {
         const headers = buildHeaders(req);
         const data = await callPythonController('/health', 'GET', null, headers);
+        const controllerBaseUrl = process.env.CONTROLLER_BASE_URL || 'http://localhost:5000';
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, ...data }));
+        res.end(JSON.stringify({ success: true, ...data, controllerUrl: controllerBaseUrl }));
     } catch (error) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: { message: error.message } }));

@@ -115,6 +115,33 @@
         </div>
       </div>
       
+      <!-- Current Model Panel -->
+      <div class="current-model-panel">
+        <div class="panel-header">
+          <h3><i class="fas fa-check-circle"></i> 当前运行模型</h3>
+        </div>
+        
+        <div class="current-model-content">
+          <div v-if="!currentModel" class="empty-state">
+            <i class="fas fa-cube"></i>
+            <span>暂无运行中的模型</span>
+          </div>
+          <div v-else class="current-model-card">
+            <div class="current-model-icon">
+              <i class="fas fa-cube"></i>
+            </div>
+            <div class="current-model-info">
+              <div class="current-model-name">{{ typeof currentModel === 'object' ? currentModel.name : currentModel }}</div>
+              <div class="current-model-status">
+                <span class="status-badge success">
+                  <i class="fas fa-circle"></i> 运行中
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <!-- Models Status Panel -->
       <div class="models-status-panel">
         <div class="panel-header">
@@ -135,6 +162,7 @@
               v-for="model in models" 
               :key="model.name" 
               class="model-status-item"
+              :class="{ active: model.name === (typeof currentModel === 'object' ? currentModel.name : currentModel) }"
             >
               <div class="model-info">
                 <span class="model-name">{{ model.name }}</span>
@@ -444,6 +472,7 @@ const availableModels = ref([])
 const currentChartType = ref('utilization')
 const controllerConnected = ref(false)
 const chartCanvas = ref(null)
+const currentModel = ref(null)
 
 const testReport = ref(null)
 const isTesting = ref(false)
@@ -758,7 +787,6 @@ const loadAvailableModels = async () => {
     if (response.ok) {
       const result = await response.json()
       if (result.success) {
-        // 假设返回的models包含所有模型，我们将其作为可用模型
         availableModels.value = result.models || []
         requestCache.availableModels = { timestamp: now, data: result.models || [] }
       }
@@ -776,11 +804,29 @@ const loadAvailableModels = async () => {
   }
 }
 
+const loadCurrentModel = async () => {
+  try {
+    const response = await fetch('/api/python/models/summary', { timeout: 5000 })
+    if (response.ok) {
+      const data = await response.json()
+      if (data && data.running_model) {
+        currentModel.value = data.running_model
+      } else {
+        currentModel.value = null
+      }
+    }
+  } catch (error) {
+    console.error('Failed to fetch current model:', error)
+    currentModel.value = null
+  }
+}
+
 // 防抖处理
 const debouncedRefreshGpuStatus = debounce(refreshGpuStatus, 300)
 const debouncedLoadModelsStatus = debounce(loadModelsStatus, 300)
 const debouncedLoadQueueStatus = debounce(loadQueueStatus, 300)
 const debouncedLoadAvailableModels = debounce(loadAvailableModels, 300)
+const debouncedLoadCurrentModel = debounce(loadCurrentModel, 300)
 
 const switchModel = async (modelName) => {
   try {
@@ -790,7 +836,7 @@ const switchModel = async (modelName) => {
     
     window.$toast?.info(`正在切换到模型: ${modelName}，切换完成后将自动运行测试...`)
     
-    const response = await fetch(`/api/python/models/${modelName}/switch`, {
+    const response = await fetch(`/api/python/test/model/${encodeURIComponent(modelName)}/switch-and-test`, {
       method: 'POST'
     })
     
@@ -799,11 +845,14 @@ const switchModel = async (modelName) => {
       
       if (result.success) {
         window.$toast?.success(`成功切换到模型: ${modelName}`)
+        if (result.status === 'completed' && result.report) {
+          testReport.value = result.report
+          showTestReport.value = true
+        }
       } else {
         window.$toast?.error(result.error?.message || `切换模型失败: ${modelName}`)
       }
       
-      // 清除缓存，确保获取最新数据
       requestCache.modelsStatus.timestamp = 0
       requestCache.availableModels.timestamp = 0
       requestCache.gpuStatus.timestamp = 0
@@ -811,6 +860,7 @@ const switchModel = async (modelName) => {
       debouncedLoadModelsStatus()
       debouncedLoadAvailableModels()
       debouncedRefreshGpuStatus()
+      debouncedLoadCurrentModel()
     } else {
       const error = await response.json()
       window.$toast?.error(error.error?.message || `切换模型失败: ${modelName}`)
@@ -908,7 +958,6 @@ const stopModel = async (modelName) => {
       const result = await response.json()
       if (result.success) {
         window.$toast?.success(`已停止模型: ${modelName}`)
-        // 清除缓存，确保获取最新数据
         requestCache.modelsStatus.timestamp = 0
         requestCache.availableModels.timestamp = 0
         requestCache.gpuStatus.timestamp = 0
@@ -916,6 +965,7 @@ const stopModel = async (modelName) => {
         debouncedLoadModelsStatus()
         debouncedLoadAvailableModels()
         debouncedRefreshGpuStatus()
+        debouncedLoadCurrentModel()
       } else {
         window.$toast?.error(result.error?.message || `停止模型失败: ${modelName}`)
       }
@@ -950,6 +1000,7 @@ const startPolling = () => {
     debouncedRefreshGpuStatus()
     debouncedLoadModelsStatus()
     debouncedLoadQueueStatus()
+    debouncedLoadCurrentModel()
     checkControllerConnection()
   }, 5000)
 }
@@ -970,6 +1021,7 @@ onMounted(() => {
   debouncedLoadModelsStatus()
   debouncedLoadQueueStatus()
   debouncedLoadAvailableModels()
+  debouncedLoadCurrentModel()
   checkControllerConnection()
   startPolling()
 })
@@ -1296,6 +1348,71 @@ watch(currentChartType, () => {
   color: var(--text-secondary);
   min-width: 32px;
   text-align: right;
+}
+
+.current-model-content {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.current-model-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  width: 100%;
+}
+
+.current-model-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.25rem;
+}
+
+.current-model-info {
+  flex: 1;
+}
+
+.current-model-name {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.current-model-status {
+  display: flex;
+  align-items: center;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  padding: 1rem;
+}
+
+.empty-state i {
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+}
+
+.model-status-item.active {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
 }
 
 .models-status-content {

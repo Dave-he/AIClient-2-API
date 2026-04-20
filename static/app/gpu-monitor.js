@@ -9,6 +9,7 @@ export class GPUMonitorModule {
         this.animationFrame = null;
         this.testReport = null;
         this._isRefreshing = false;
+        this.currentModel = null;
         this.i18n = window.i18n || { t: (key) => key };
         this.init();
     }
@@ -161,12 +162,23 @@ export class GPUMonitorModule {
             refreshConfigBtn.addEventListener('click', () => this.refreshConfig());
         }
 
-        document.addEventListener('section-change', (event) => {
+        const editConfigBtn = document.getElementById('editConfigBtn');
+        if (editConfigBtn) {
+            editConfigBtn.addEventListener('click', () => this.showConfigEditor());
+        }
+
+        const refreshModelsListBtn = document.getElementById('refreshModelsListBtn');
+        if (refreshModelsListBtn) {
+            refreshModelsListBtn.addEventListener('click', () => this.refreshQuickSwitch());
+        }
+
+        document.addEventListener('section-change', async (event) => {
             if (event.detail.section === 'gpu-monitor') {
-                this.refreshAllStatus();
+                await this.refreshAllStatus();
                 this.checkControllerConnection();
                 this.refreshPythonServiceStatus();
                 this.refreshConfig();
+                this.refreshQuickSwitch();
             }
         });
 
@@ -231,7 +243,7 @@ export class GPUMonitorModule {
         const statusBadge = document.getElementById('gpuStatusBadge');
         const isActive = gpu.utilization > 10;
         statusBadge.className = `gpu-status-badge ${isActive ? 'active' : 'idle'}`;
-        statusBadge.innerHTML = `<span class="status-indicator"></span><span>${isActive ? this.t('gpuMonitor.running') : this.t('gpuMonitor.idle')}</span>`;
+        statusBadge.innerHTML = `<span class="status-indicator"></span><span>${isActive ? this.i18n.t('gpuMonitor.running') : this.i18n.t('gpuMonitor.idle')}</span>`;
 
         this.lastGpuData = gpu;
     }
@@ -356,7 +368,7 @@ export class GPUMonitorModule {
         ctx.fillStyle = '#6b7280';
         ctx.font = '14px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(this.t('gpuMonitor.noData'), width / 2, height / 2);
+        ctx.fillText(this.i18n.t('gpuMonitor.noData'), width / 2, height / 2);
     }
 
     renderChart(progress = 1) {
@@ -483,7 +495,7 @@ export class GPUMonitorModule {
         }
         
         ctx.textAlign = 'center';
-        const timeLabels = ['-60s', '-45s', '-30s', '-15s', this.t('gpuMonitor.now')];
+        const timeLabels = ['-60s', '-45s', '-30s', '-15s', this.i18n.t('gpuMonitor.now')];
         for (let i = 0; i < 5; i++) {
             const x = padding.left + (chartWidth / 4) * i;
             ctx.fillText(timeLabels[i], x, padding.top + chartHeight + 25);
@@ -493,7 +505,7 @@ export class GPUMonitorModule {
         ctx.translate(20, height / 2);
         ctx.rotate(-Math.PI / 2);
         ctx.textAlign = 'center';
-        ctx.fillText(this.t('gpuMonitor.value'), 0, 0);
+        ctx.fillText(this.i18n.t('gpuMonitor.value'), 0, 0);
         ctx.restore();
     }
 
@@ -630,15 +642,90 @@ export class GPUMonitorModule {
         }
         this._isRefreshing = true;
         try {
+            const response = await fetch('/api/python/monitor/summary', {
+                method: 'GET',
+                timeout: 10000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (data.success) {
+                this._cachedSummary = data;
+                
+                if (data.gpu) {
+                    this.renderGpuStatus(data.gpu);
+                }
+                if (data.models) {
+                    this.renderModelsStatus(data.models);
+                }
+                if (data.queue) {
+                    this.renderQueueStatus(data.queue);
+                }
+                if (data.summary && data.summary.models) {
+                    const runningModels = data.summary.models.filter(m => m.running);
+                    this.currentModel = runningModels.length > 0 ? runningModels[0] : null;
+                    this.renderCurrentModel();
+                    this.renderModelControls(data.summary.models);
+                }
+            }
+        } catch (error) {
+            console.warn(`Failed to fetch monitor summary: ${error.message}`);
             await Promise.all([
                 this.refreshGpuStatus(),
                 this.refreshModelsStatus(),
                 this.refreshQueueStatus(),
-                this.refreshModelControls()
+                this.refreshModelControls(),
+                this.refreshCurrentModel()
             ]);
         } finally {
             this._isRefreshing = false;
         }
+    }
+
+    async refreshCurrentModel() {
+        try {
+            const response = await fetch(`/api/python/models/summary`, {
+                method: 'GET',
+                timeout: 5000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (data && data.models && data.models.length > 0) {
+                const runningModels = data.models.filter(m => m.running);
+                this.currentModel = runningModels.length > 0 ? runningModels[0] : null;
+            } else {
+                this.currentModel = null;
+            }
+            this.renderCurrentModel();
+        } catch (error) {
+            console.warn(`Failed to fetch current model: ${error.message}`);
+            this.currentModel = null;
+            this.renderCurrentModel();
+        }
+    }
+
+    renderCurrentModel() {
+        const container = document.getElementById('currentModelInfo');
+        if (!container) return;
+
+        const t = this.t.bind(this);
+        const currentModelName = typeof this.currentModel === 'object' ? this.currentModel.name : this.currentModel;
+
+        container.innerHTML = `
+            <div class="current-model-info">
+                <div class="current-model-label">${t('gpuMonitor.currentModel')}</div>
+                <div class="current-model-value">
+                    ${currentModelName ? `<span class="model-name">${currentModelName}</span>` : `<span class="no-model">-</span>`}
+                </div>
+            </div>
+        `;
     }
 
     async checkControllerConnection() {
@@ -647,16 +734,34 @@ export class GPUMonitorModule {
         const placeholder = document.getElementById('iframePlaceholder');
 
         try {
-            const response = await fetch('/api/python/health', {
-                method: 'GET',
-                timeout: 5000
-            });
+            let healthData = null;
+            let controllerBaseUrl = 'http://localhost:5000';
 
-            if (response.ok) {
+            if (this._cachedSummary && this._cachedSummary.health) {
+                healthData = this._cachedSummary.health;
+                controllerBaseUrl = this._cachedSummary.controllerUrl || 'http://localhost:5000';
+            } else {
+                const response = await fetch('/api/python/health', {
+                    method: 'GET',
+                    timeout: 5000
+                });
+
+                if (!response.ok) {
+                    throw new Error('Controller not responding');
+                }
+
+                healthData = await response.json();
+                controllerBaseUrl = healthData.controllerUrl || healthData.url || 'http://localhost:5000';
+            }
+
+            if (healthData && (healthData.status === 'healthy' || healthData.success)) {
                 this.animateStatusChange(statusElement, true);
                 
-                const data = await response.json();
-                const controllerBaseUrl = data.controllerUrl || 'http://localhost:5000';
+                if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                    const portMatch = controllerBaseUrl.match(/:(\d+)$/);
+                    const controllerPort = portMatch ? portMatch[1] : '5000';
+                    controllerBaseUrl = `${window.location.protocol}//${window.location.hostname}:${controllerPort}`;
+                }
                 
                 if (iframe && placeholder) {
                     iframe.src = `${controllerBaseUrl}/docs`;
@@ -664,7 +769,7 @@ export class GPUMonitorModule {
                     iframe.style.display = 'block';
                 }
             } else {
-                throw new Error('Controller not responding');
+                throw new Error('Controller not healthy');
             }
         } catch (error) {
             this.animateStatusChange(statusElement, false);
@@ -683,7 +788,7 @@ export class GPUMonitorModule {
         element.classList.add('status-transition');
         setTimeout(() => {
             element.className = `status-badge ${isOnline ? 'online' : 'offline'} status-transition`;
-            element.innerHTML = `<i class="fas fa-circle"></i> <span>${isOnline ? this.t('gpuMonitor.connected') : this.t('gpuMonitor.disconnected')}</span>`;
+            element.innerHTML = `<i class="fas fa-circle"></i> <span>${isOnline ? this.i18n.t('gpuMonitor.connected') : this.i18n.t('gpuMonitor.disconnected')}</span>`;
         }, 50);
     }
 
@@ -974,7 +1079,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to start model ${modelName}: ${error.message}`);
-            alert(`${this.t('gpuMonitor.startModelFailed')}: ${error.message}`);
+            alert(`${this.i18n.t('gpuMonitor.startModelFailed')}: ${error.message}`);
         }
     }
 
@@ -1000,7 +1105,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to stop model ${modelName}: ${error.message}`);
-            alert(`${this.t('gpuMonitor.stopModelFailed')}: ${error.message}`);
+            alert(`${this.i18n.t('gpuMonitor.stopModelFailed')}: ${error.message}`);
         }
     }
 
@@ -1030,7 +1135,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to switch model ${modelName}: ${error.message}`);
-            alert(`${this.t('gpuMonitor.switchModelFailed')}: ${error.message}`);
+            alert(`${this.i18n.t('gpuMonitor.switchModelFailed')}: ${error.message}`);
         }
     }
 
@@ -1058,7 +1163,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to test model ${modelName}: ${error.message}`);
-            alert(`${this.t('gpuMonitor.testModelFailed')}: ${error.message}`);
+            alert(`${this.i18n.t('gpuMonitor.testModelFailed')}: ${error.message}`);
         }
     }
 
@@ -1246,23 +1351,30 @@ export class GPUMonitorModule {
         if (!container) return;
 
         try {
-            const token = window.authManager ? window.authManager.getToken() : null;
-            const headers = {};
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+            let result = null;
+
+            if (this._cachedSummary && this._cachedSummary.service) {
+                result = { success: true, ...this._cachedSummary.service };
+            } else {
+                const token = window.authManager ? window.authManager.getToken() : null;
+                const headers = {};
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+
+                const response = await fetch(`/api/python-gpu/service/status`, {
+                    method: 'GET',
+                    headers,
+                    timeout: 5000
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                result = await response.json();
             }
 
-            const response = await fetch(`/api/python-gpu/service/status`, {
-                method: 'GET',
-                headers,
-                timeout: 5000
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
             if (result.success) {
                 this.renderPythonServiceStatus(result, container);
             } else {
@@ -1347,7 +1459,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to start Python service: ${error.message}`);
-            alert(`${this.t('gpuMonitor.startFailed')}: ${error.message}`);
+            alert(`${this.i18n.t('gpuMonitor.startFailed')}: ${error.message}`);
         }
     }
 
@@ -1373,7 +1485,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to stop Python service: ${error.message}`);
-            alert(`${this.t('gpuMonitor.stopFailed')}: ${error.message}`);
+            alert(`${this.i18n.t('gpuMonitor.stopFailed')}: ${error.message}`);
         }
     }
 
@@ -1399,7 +1511,7 @@ export class GPUMonitorModule {
             }
         } catch (error) {
             console.error(`Failed to restart Python service: ${error.message}`);
-            alert(`${this.t('gpuMonitor.restartFailed')}: ${error.message}`);
+            alert(`${this.i18n.t('gpuMonitor.restartFailed')}: ${error.message}`);
         }
     }
 
@@ -1408,27 +1520,37 @@ export class GPUMonitorModule {
         if (!container) return;
 
         try {
-            const token = window.authManager ? window.authManager.getToken() : null;
-            const headers = {};
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
+            let config = null;
 
-            const response = await fetch(`/api/python-gpu/service/status`, {
-                method: 'GET',
-                headers,
-                timeout: 5000
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
-            if (result.success && result.config) {
-                this.renderConfig(result.config, container);
+            if (this._cachedSummary && this._cachedSummary.service && this._cachedSummary.service.config) {
+                config = this._cachedSummary.service.config;
             } else {
-                throw new Error(result.error?.message || 'Failed to get config');
+                const token = window.authManager ? window.authManager.getToken() : null;
+                const headers = {};
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+
+                const response = await fetch(`/api/python-gpu/service/status`, {
+                    method: 'GET',
+                    headers,
+                    timeout: 5000
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                if (result.success && result.config) {
+                    config = result.config;
+                } else {
+                    throw new Error(result.error?.message || 'Failed to get config');
+                }
+            }
+
+            if (config) {
+                this.renderConfig(config, container);
             }
         } catch (error) {
             console.warn(`Failed to fetch config: ${error.message}`);
@@ -1506,5 +1628,188 @@ export class GPUMonitorModule {
                 <span>${t('gpuMonitor.noConfigInfo')}</span>
             </div>
         `;
+    }
+
+    showConfigEditor() {
+        const container = document.createElement('div');
+        container.className = 'config-editor-modal';
+        
+        const t = this.t.bind(this);
+        
+        container.innerHTML = `
+            <div class="config-editor-container">
+                <div class="config-editor-header">
+                    <h3><i class="fas fa-edit"></i> ${t('gpuMonitor.editConfig')}</h3>
+                    <button class="config-editor-close" onclick="this.closest('.config-editor-modal').remove()"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="config-editor-body">
+                    <textarea class="config-editor-textarea" placeholder="${t('gpuMonitor.configPlaceholder')}"></textarea>
+                </div>
+                <div class="config-editor-footer">
+                    <button class="btn btn-outline" onclick="this.closest('.config-editor-modal').remove()">${t('common.cancel')}</button>
+                    <button class="btn btn-primary" onclick="window.GPUMonitor.saveConfig()">${t('common.save')}</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(container);
+        
+        container.addEventListener('click', (e) => {
+            if (e.target === container) {
+                document.body.removeChild(container);
+            }
+        });
+    }
+
+    async saveConfig() {
+        const modal = document.querySelector('.config-editor-modal');
+        const textarea = modal.querySelector('.config-editor-textarea');
+        const configContent = textarea.value;
+        
+        try {
+            const token = window.authManager ? window.authManager.getToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch('/api/python-gpu/config', {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({ config: configContent })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert(this.i18n.t('gpuMonitor.configSaved'));
+                document.body.removeChild(modal);
+                await this.refreshConfig();
+            } else {
+                throw new Error(result.error?.message || this.i18n.t('gpuMonitor.configSaveFailed'));
+            }
+        } catch (error) {
+            console.error('Failed to save config:', error.message);
+            alert(`${this.i18n.t('gpuMonitor.configSaveFailed')}: ${error.message}`);
+        }
+    }
+
+    async refreshQuickSwitch() {
+        const container = document.getElementById('quickSwitchContent');
+        if (!container) return;
+
+        try {
+            let models = null;
+
+            if (this._cachedSummary && this._cachedSummary.summary && this._cachedSummary.summary.models) {
+                models = this._cachedSummary.summary.models;
+            } else if (this._cachedSummary && this._cachedSummary.models) {
+                const modelList = [];
+                for (const [name, status] of Object.entries(this._cachedSummary.models)) {
+                    modelList.push({
+                        name,
+                        running: status.running,
+                        port: status.port,
+                        preloaded: status.preloaded,
+                        required_memory: status.required_memory,
+                        description: status.description
+                    });
+                }
+                models = modelList;
+            } else {
+                const token = window.authManager ? window.authManager.getToken() : null;
+                const headers = {};
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+
+                const response = await fetch('/api/python/models/status', {
+                    method: 'GET',
+                    headers,
+                    timeout: 5000
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                if (result.success) {
+                    const modelList = [];
+                    for (const [name, status] of Object.entries(result.models)) {
+                        modelList.push({
+                            name,
+                            running: status.running,
+                            port: status.port,
+                            preloaded: status.preloaded,
+                            required_memory: status.required_memory,
+                            description: status.description
+                        });
+                    }
+                    models = modelList;
+                } else {
+                    throw new Error(result.error || 'Failed to get models');
+                }
+            }
+
+            if (models) {
+                this.renderQuickSwitch(models, container);
+            }
+        } catch (error) {
+            console.warn(`Failed to fetch quick switch models: ${error.message}`);
+            const t = this.t.bind(this);
+            container.innerHTML = `
+                <div class="status-loading">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>${t('gpuMonitor.cannotGetModels')}</span>
+                </div>
+            `;
+        }
+    }
+
+    renderQuickSwitch(models, container) {
+        const t = this.t.bind(this);
+        if (!models || Object.keys(models).length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-cubes"></i>
+                    <p>${t('gpuMonitor.noModelsAvailable')}</p>
+                    <p class="hint">${t('gpuMonitor.noModelsHint')}</p>
+                </div>
+            `;
+            return;
+        }
+
+        const items = Object.entries(models).map(([name, status]) => `
+            <div class="model-switch-item">
+                <div class="model-switch-header">
+                    <div class="model-switch-info">
+                        <div class="model-switch-name">${name}</div>
+                        <div class="model-switch-details">
+                            <span class="model-switch-port"><i class="fas fa-server"></i> ${status.port || '-'}</span>
+                            <span class="model-switch-memory"><i class="fas fa-memory"></i> ${status.memory || '-'}</span>
+                        </div>
+                    </div>
+                    <span class="model-switch-status ${status.running ? 'status-running' : 'status-stopped'}">
+                        ${status.running ? t('gpuMonitor.running') : t('gpuMonitor.stopped')}
+                    </span>
+                </div>
+                <div class="model-switch-actions">
+                    ${status.running ? `
+                        <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${name}')">
+                            <i class="fas fa-stop"></i> ${t('gpuMonitor.stop')}
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="window.GPUMonitor.switchModel('${name}')">
+                            <i class="fas fa-exchange-alt"></i> ${t('gpuMonitor.switch')}
+                        </button>
+                    ` : `
+                        <button class="btn btn-success btn-sm" onclick="window.GPUMonitor.startModel('${name}')">
+                            <i class="fas fa-play"></i> ${t('gpuMonitor.start')}
+                        </button>
+                    `}
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = `<div class="models-switch-list">${items}</div>`;
     }
 }

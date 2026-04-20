@@ -109,7 +109,7 @@ export async function handleGetConfig(req, res, currentConfig) {
 /**
  * 更新配置
  */
-export async function handleUpdateConfig(req, res, currentConfig) {
+export async function handleUpdateConfig(req, res, currentConfig, providerPoolManager = null) {
     try {
         const body = await getRequestBody(req);
         const newConfig = body;
@@ -131,9 +131,43 @@ export async function handleUpdateConfig(req, res, currentConfig) {
             if (Number.isInteger(port) && port >= NETWORK.MIN_PORT && port <= NETWORK.MAX_PORT) currentConfig.SERVER_PORT = port;
         }
         if (newConfig.MODEL_PROVIDER !== undefined) {
+            const oldProvider = currentConfig.MODEL_PROVIDER;
             currentConfig.MODEL_PROVIDER = newConfig.MODEL_PROVIDER;
             currentConfig.DEFAULT_MODEL_PROVIDERS = [];
             normalizeConfiguredProviders(currentConfig);
+            
+            // 如果提供商发生变化，需要重新初始化服务实例
+            if (oldProvider !== currentConfig.MODEL_PROVIDER) {
+                Object.keys(serviceInstances).forEach(key => delete serviceInstances[key]);
+                await initApiService(currentConfig);
+                
+                // 更新 providerPoolManager
+                if (providerPoolManager) {
+                    providerPoolManager.initializeProviderStatus();
+                }
+                
+                logger.info('[UI API] Service instances reinitialized due to MODEL_PROVIDER change');
+            }
+        }
+        
+        if (newConfig.DEFAULT_MODEL_PROVIDERS !== undefined && Array.isArray(newConfig.DEFAULT_MODEL_PROVIDERS)) {
+            const oldProviders = [...(currentConfig.DEFAULT_MODEL_PROVIDERS || [])];
+            currentConfig.DEFAULT_MODEL_PROVIDERS = [];
+            normalizeConfiguredProviders(currentConfig);
+            
+            // 如果提供商列表发生变化，需要重新初始化服务实例
+            const providersChanged = JSON.stringify(oldProviders) !== JSON.stringify(currentConfig.DEFAULT_MODEL_PROVIDERS);
+            if (providersChanged) {
+                Object.keys(serviceInstances).forEach(key => delete serviceInstances[key]);
+                await initApiService(currentConfig);
+                
+                // 更新 providerPoolManager
+                if (providerPoolManager) {
+                    providerPoolManager.initializeProviderStatus();
+                }
+                
+                logger.info('[UI API] Service instances reinitialized due to DEFAULT_MODEL_PROVIDERS change');
+            }
         }
         if (newConfig.SYSTEM_PROMPT_FILE_PATH !== undefined) {
             const p = String(newConfig.SYSTEM_PROMPT_FILE_PATH);
@@ -178,8 +212,26 @@ export async function handleUpdateConfig(req, res, currentConfig) {
         if (newConfig.MAX_ERROR_COUNT !== undefined) currentConfig.MAX_ERROR_COUNT = newConfig.MAX_ERROR_COUNT;
         if (newConfig.WARMUP_TARGET !== undefined) currentConfig.WARMUP_TARGET = newConfig.WARMUP_TARGET;
         if (newConfig.REFRESH_CONCURRENCY_PER_PROVIDER !== undefined) currentConfig.REFRESH_CONCURRENCY_PER_PROVIDER = newConfig.REFRESH_CONCURRENCY_PER_PROVIDER;
-        if (newConfig.providerFallbackChain !== undefined) currentConfig.providerFallbackChain = newConfig.providerFallbackChain;
-        if (newConfig.modelFallbackMapping !== undefined) currentConfig.modelFallbackMapping = newConfig.modelFallbackMapping;
+        if (newConfig.providerFallbackChain !== undefined) {
+            const oldFallbackChain = JSON.stringify(currentConfig.providerFallbackChain || {});
+            currentConfig.providerFallbackChain = newConfig.providerFallbackChain;
+            
+            // 更新 providerPoolManager 中的 fallbackChain
+            if (providerPoolManager && oldFallbackChain !== JSON.stringify(currentConfig.providerFallbackChain)) {
+                providerPoolManager.fallbackChain = currentConfig.providerFallbackChain;
+                logger.info('[UI API] Provider fallback chain updated');
+            }
+        }
+        if (newConfig.modelFallbackMapping !== undefined) {
+            const oldMapping = JSON.stringify(currentConfig.modelFallbackMapping || {});
+            currentConfig.modelFallbackMapping = newConfig.modelFallbackMapping;
+            
+            // 更新 providerPoolManager 中的 modelFallbackMapping
+            if (providerPoolManager && oldMapping !== JSON.stringify(currentConfig.modelFallbackMapping)) {
+                providerPoolManager.modelFallbackMapping = currentConfig.modelFallbackMapping;
+                logger.info('[UI API] Model fallback mapping updated');
+            }
+        }
         
         // Proxy settings
         if (newConfig.PROXY_URL !== undefined) currentConfig.PROXY_URL = newConfig.PROXY_URL;

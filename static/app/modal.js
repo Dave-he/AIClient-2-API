@@ -433,9 +433,9 @@ function showProviderManagerModal(data, initialSearchTerm = '') {
                         <button class="btn btn-success" onclick="window.showAddProviderForm('${providerType}')">
                             <i class="fas fa-plus"></i> <span data-i18n="modal.provider.add">添加新提供商</span>
                         </button>
-                        <button class="btn btn-primary" onclick="window.showModelSwitchModal()" id="modelSwitchBtn" title="一键切换本地模型">
+                        ${providerType === 'local-model' ? `<button class="btn btn-primary" onclick="window.showModelSwitchModal()" id="modelSwitchBtn" title="一键切换本地模型">
                             <i class="fas fa-exchange-alt"></i> <span data-i18n="modal.provider.switchModel">切换模型</span>
-                        </button>
+                        </button>` : ''}
                         <button class="btn btn-warning" onclick="window.resetAllProvidersHealth('${providerType}')" data-i18n="modal.provider.resetHealth" title="将所有节点的健康状态重置为健康">
                             <i class="fas fa-heartbeat"></i> 重置为健康
                         </button>
@@ -484,6 +484,11 @@ function showProviderManagerModal(data, initialSearchTerm = '') {
     
     // 初始渲染
     window.goToProviderPage(1);
+    
+    // 页面加载后自动执行健康检测
+    setTimeout(() => {
+        performHealthCheck(providerType);
+    }, 500);
 }
 
 /**
@@ -1962,10 +1967,6 @@ async function resetAllProvidersHealth(providerType) {
  * @param {string} providerType - 提供商类型
  */
 async function performHealthCheck(providerType) {
-    if (!confirm(t('modal.provider.healthCheckConfirm', {type: providerType}))) {
-        return;
-    }
-    
     try {
         showToast(t('common.info'), t('modal.provider.healthCheck') + '...', 'info');
         

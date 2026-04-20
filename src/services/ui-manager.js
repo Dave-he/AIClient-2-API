@@ -141,7 +141,7 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
     }
 
     // Handle UI management API requests (需要token验证，除了登录接口、健康检查、Events接口和GPU状态接口)
-    if (pathParam.startsWith('/api/') && pathParam !== '/api/login' && pathParam !== '/api/health' && pathParam !== '/api/events' && pathParam !== '/api/grok/assets' && pathParam !== '/api/python-gpu/status' && pathParam !== '/api/python/models/status' && pathParam !== '/api/python/models/summary') {
+    if (pathParam.startsWith('/api/') && pathParam !== '/api/login' && pathParam !== '/api/health' && pathParam !== '/api/events' && pathParam !== '/api/grok/assets' && pathParam !== '/api/python-gpu/status' && pathParam !== '/api/python-gpu/service/status' && pathParam !== '/api/python-gpu/service/start' && pathParam !== '/api/python-gpu/service/stop' && pathParam !== '/api/python-gpu/service/restart' && pathParam !== '/api/python-gpu/config' && pathParam !== '/api/python-gpu/models' && pathParam !== '/api/python-gpu/queue' && pathParam !== '/api/python/models/status' && pathParam !== '/api/python/models/summary' && pathParam !== '/api/python/gpu/status' && pathParam !== '/api/python/health' && pathParam !== '/api/python/queue/status' && pathParam !== '/api/python/vllm/models' && pathParam !== '/api/python/monitor/summary' && !pathParam.startsWith('/api/python/models/') && !pathParam.startsWith('/api/python/test/') && !pathParam.startsWith('/api/python/gpu/') && !pathParam.startsWith('/api/python-gpu/')) {
         // 检查token验证
         const isAuth = await auth.checkAuth(req);
         if (!isAuth) {
@@ -177,7 +177,7 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
 
     // Update configuration
     if (method === 'POST' && pathParam === '/api/config') {
-        return await configApi.handleUpdateConfig(req, res, currentConfig);
+        return await configApi.handleUpdateConfig(req, res, currentConfig, providerPoolManager);
     }
 
     // Get system information
@@ -644,6 +644,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
     // Queue status proxy (proxy to /api/python/queue/status)
     if (method === 'GET' && pathParam === '/api/python-gpu/queue') {
         return await pythonControllerApi.handleGetQueueStatus(req, res);
+    }
+
+    // Monitor summary - aggregated endpoint for all GPU monitor data
+    if (method === 'GET' && pathParam === '/api/python/monitor/summary') {
+        return await pythonControllerApi.handleGetMonitorSummary(req, res);
     }
 
     return false;
