@@ -63,10 +63,6 @@ export class GPUMonitorModule {
                         this.scheduleChartUpdate();
                     }
                 }
-                if (summary.python.summary) {
-                    this.currentModel = this.resolveCurrentModelFromSummary(summary.python.summary);
-                    this.renderCurrentModel();
-                }
             }
         } catch (error) {
             console.log('[GPUMonitor] Preload failed, continuing with normal flow:', error.message);
@@ -445,16 +441,7 @@ export class GPUMonitorModule {
     }
 
     updateChart() {
-        const canvas = document.getElementById('gpuChart');
-        if (!canvas) return;
-        
-        const rect = canvas.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) {
-            this.chart = null;
-            return;
-        }
-        
-        if (!this.chart || this.chart.width !== rect.width || this.chart.height !== rect.height) {
+        if (!this.chart) {
             this.initChart();
         }
         
@@ -819,12 +806,10 @@ export class GPUMonitorModule {
                     if (container) this.renderQueueStatus(data.queue, container);
                     this.lastQueueData = data.queue;
                 }
-                if (data.summary) {
+                if (data.summary && data.summary.models) {
                     this.currentModel = this.resolveCurrentModelFromSummary(data.summary);
                     this.renderCurrentModel();
-                    if (data.summary.models) {
-                        this.lastModelsData = data.summary.models;
-                    }
+                    this.lastModelsData = data.summary.models;
                 }
                 this.renderUnifiedModels();
             }
@@ -850,7 +835,7 @@ export class GPUMonitorModule {
                 data = await monitorCache.getModelsSummary();
             }
 
-            if (data && (data.running_model || (data.models && data.models.length > 0))) {
+            if (data && data.models && data.models.length > 0) {
                 this.currentModel = this.resolveCurrentModelFromSummary(data);
             } else {
                 this.currentModel = null;

@@ -41,7 +41,7 @@ export function useAuth() {
   const logout = () => {
     localStorage.removeItem('authToken');
     isAuthenticated.value = false;
-    window.location.href = '/vue/login';
+    window.location.href = '/login';
   };
 
   const validateToken = async () => {

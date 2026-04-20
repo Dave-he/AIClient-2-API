@@ -172,7 +172,10 @@ const applyMonitorData = (data) => {
   const healthData = data.health
 
   if (gpuData) {
-    const memoryUtilization = gpuData.memory_utilization ?? (gpuData.used_memory && gpuData.total_memory ? Math.round((gpuData.used_memory / gpuData.total_memory) * 100) : 0)
+    const usedMemoryBytes = gpuData.used_memory || 0
+    const totalMemoryBytes = gpuData.total_memory || 0
+    const memoryUtilizationFromBytes = totalMemoryBytes > 0 ? Math.round((usedMemoryBytes / totalMemoryBytes) * 100) : 0
+    const memoryUtilization = gpuData.memory_utilization ?? memoryUtilizationFromBytes
     const powerPercent = gpuData.power_percent ?? (
       gpuData.power_limit && gpuData.power_draw
         ? Math.round((gpuData.power_draw / gpuData.power_limit) * 100)
@@ -186,20 +189,72 @@ const applyMonitorData = (data) => {
       status: gpuData.status || (gpuData.utilization !== undefined ? 'available' : 'unavailable')
     }
 
+    if (gpuData.history && gpuData.history.length > 0) {
+      const historyData = gpuData.history.map(item => {
+        const usedMem = Number(item.used_memory || 0)
+        const totalMem = Number(item.total_memory || 0)
+        const memUtil = item.memory_utilization ?? (totalMem > 0 ? Math.round((usedMem / totalMem) * 100) : 0)
+        const pwrPercent = item.power_percent ?? (item.power_limit && item.power_draw ? Math.round((item.power_draw / item.power_limit) * 100) : 0)
+        const timestamp = item.timestamp || item.time || Date.now()
+        const date = new Date(timestamp)
+        const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+
+        return {
+          time: timeStr,
+          utilization: item.utilization ?? 0,
+          temperature: item.temperature ?? 0,
+          memory: memUtil,
+          power: item.power_draw ?? 0,
+          powerPercent: pwrPercent
+        }
+      })
+
+      chartData.value.time = historyData.map(d => d.time)
+      chartData.value.utilization = historyData.map(d => d.utilization)
+      chartData.value.temperature = historyData.map(d => d.temperature)
+      chartData.value.memory = historyData.map(d => d.memory)
+      chartData.value.power = historyData.map(d => d.power)
+      chartData.value.powerPercent = historyData.map(d => d.powerPercent)
+    }
+
+    const currentUtilization = gpuData.utilization ?? 0
+    const currentTemperature = gpuData.temperature ?? 0
+    const currentPowerDraw = gpuData.power_draw ?? 0
+
     addChartData(
-      gpuData.utilization ?? 0,
-      gpuData.temperature ?? 0,
+      currentUtilization,
+      currentTemperature,
       memoryUtilization,
-      gpuData.power_draw ?? 0,
+      currentPowerDraw,
       powerPercent
     )
   }
 
   if (modelsData) {
-    models.value = modelsData
+    let modelsArray = []
+    if (Array.isArray(modelsData)) {
+      modelsArray = modelsData.map(m => ({
+        ...m,
+        requiredMemory: m.requiredMemory || m.required_memory || null
+      }))
+    } else if (typeof modelsData === 'object' && modelsData !== null) {
+      modelsArray = Object.entries(modelsData).map(([name, info]) => ({
+        name,
+        status: info.running ? 'running' : 'stopped',
+        running: info.running || false,
+        port: info.port || null,
+        service: info.service || null,
+        activeRequests: info.active_requests || 0,
+        preloaded: info.preloaded || false,
+        requiredMemory: info.requiredMemory || info.required_memory || null,
+        description: info.description || ''
+      }))
+    }
+    models.value = modelsArray
+
     if (!requestCache.availableModels.data || Date.now() - requestCache.availableModels.timestamp > CACHE_DURATION) {
-      availableModels.value = modelsData
-      requestCache.availableModels = { timestamp: Date.now(), data: modelsData }
+      availableModels.value = modelsArray
+      requestCache.availableModels = { timestamp: Date.now(), data: modelsArray }
     }
   }
 
@@ -207,8 +262,42 @@ const applyMonitorData = (data) => {
     queueStats.value = queueData
   }
 
-  if (summaryData && summaryData.running_model) {
-    currentModel.value = summaryData.running_model
+  if (summaryData) {
+    if (summaryData.running_model) {
+      const runningModelName = typeof summaryData.running_model === 'string'
+        ? summaryData.running_model
+        : summaryData.running_model.name
+
+      const runningModelFromSummary = summaryData.models?.find(m => m.name === runningModelName || m.running)
+
+      if (runningModelFromSummary) {
+        currentModel.value = {
+          name: runningModelFromSummary.name,
+          status: 'running',
+          port: runningModelFromSummary.port || null,
+          memory: runningModelFromSummary.required_memory || runningModelFromSummary.memory || null
+        }
+      } else {
+        currentModel.value = {
+          name: runningModelName,
+          status: 'running'
+        }
+      }
+    } else if (summaryData.models && summaryData.models.length > 0) {
+      const runningModel = summaryData.models.find(m => m.running)
+      if (runningModel) {
+        currentModel.value = {
+          name: runningModel.name,
+          status: 'running',
+          port: runningModel.port || null,
+          memory: runningModel.required_memory || runningModel.memory || null
+        }
+      } else {
+        currentModel.value = null
+      }
+    } else {
+      currentModel.value = null
+    }
   }
 
   if (healthData !== undefined) {
@@ -246,10 +335,36 @@ const loadAvailableModels = async () => {
     const response = await fetch('/api/python/models/status', { timeout: 5000 })
     if (response.ok) {
       const result = await response.json()
-      if (result.success) {
-        availableModels.value = result.models || []
-        requestCache.availableModels = { timestamp: now, data: result.models || [] }
+      if (result.success && result.models) {
+        const modelsData = result.models
+        let modelsArray = []
+
+        if (Array.isArray(modelsData)) {
+          modelsArray = modelsData.map(m => ({
+            ...m,
+            requiredMemory: m.requiredMemory || m.required_memory || null
+          }))
+        } else if (typeof modelsData === 'object' && modelsData !== null) {
+          modelsArray = Object.entries(modelsData).map(([name, info]) => ({
+            name,
+            status: info.running ? 'running' : 'stopped',
+            running: info.running || false,
+            port: info.port || null,
+            service: info.service || null,
+            activeRequests: info.active_requests || 0,
+            preloaded: info.preloaded || false,
+            requiredMemory: info.requiredMemory || info.required_memory || null,
+            description: info.description || ''
+          }))
+        }
+
+        availableModels.value = modelsArray
+        requestCache.availableModels = { timestamp: now, data: modelsArray }
+      } else {
+        availableModels.value = []
       }
+    } else {
+      availableModels.value = []
     }
   } catch (error) {
     console.error('Failed to fetch available models:', error)

@@ -5,7 +5,7 @@ import { logger } from '@/utils/logger.js';
 import { cache, pendingRequests, isCacheable, requestConfig } from '@/utils/request-cache.js';
 import { errorHandler } from '@/utils/error-handler.js';
 
-const createApiInstance = (baseURL = window.location.origin) => {
+const createApiInstance = (baseURL = '') => {
   const token = localStorage.getItem('authToken');
   const instance = axios.create({
     baseURL,
@@ -40,7 +40,7 @@ const createApiInstance = (baseURL = window.location.origin) => {
         if (router) {
           router.push('/login');
         } else {
-          window.location.href = '/vue/login';
+          window.location.href = '/login';
         }
       } else {
         errorHandler.handleApiError(error);

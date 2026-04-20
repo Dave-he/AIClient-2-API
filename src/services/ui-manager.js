@@ -131,7 +131,7 @@ export async function serveStaticFiles(pathParam, res, currentConfig = {}) {
         
         const headers = {
             'Content-Type': contentType,
-            'Cache-Control': ext === '.html' ? 'no-cache, no-store, must-revalidate' : 'public, max-age=86400'
+            'Cache-Control': ext === '.html' ? 'no-cache, no-store, must-revalidate' : (ext === '.js' || ext === '.css' ? 'no-cache, no-store, must-revalidate' : 'public, max-age=86400')
         };
 
         let content = readFileSync(filePath);

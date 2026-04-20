@@ -8,6 +8,106 @@
       </div>
     </div>
     
+    <div class="provider-controls">
+      <div class="provider-selector">
+        <label for="provider-select">选择提供商</label>
+        <select id="provider-select" v-model="selectedProvider" @change="onProviderChange">
+          <option value="all">全部提供商</option>
+          <option v-for="p in providerList" :key="p" :value="p">{{ p }}</option>
+        </select>
+      </div>
+      
+      <div class="chart-controls">
+        <div class="time-range-tabs">
+          <button 
+            v-for="tab in timeRangeTabs" 
+            :key="tab.id"
+            class="time-range-tab"
+            :class="{ active: activeTimeRange === tab.id }"
+            @click="onTimeRangeChange(tab.id)"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+        
+        <div class="chart-metric-tabs">
+          <button 
+            v-for="tab in metricTabs" 
+            :key="tab.id"
+            class="metric-tab"
+            :class="{ active: activeMetric === tab.id }"
+            @click="onMetricChange(tab.id)"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="usage-chart-panel">
+      <div class="panel-header">
+        <h3><i class="fas fa-chart-line"></i> 使用量统计</h3>
+        <button class="btn btn-sm btn-outline" @click="refreshUsageData">
+          <i class="fas fa-sync-alt"></i> 刷新
+        </button>
+      </div>
+      <div class="chart-content">
+        <canvas ref="usageChartCanvas"></canvas>
+        <div v-if="usageChartData.length === 0" class="chart-empty-state">
+          <i class="fas fa-chart-area"></i>
+          <span>暂无使用数据，请等待请求产生后自动显示</span>
+        </div>
+      </div>
+      <div class="chart-legend">
+        <span v-if="selectedProvider === 'all'">总请求量</span>
+        <span v-else>{{ selectedProvider }} 请求量</span>
+        <span class="legend-value">{{ formatNumber(currentSeriesTotal) }}</span>
+      </div>
+    </div>
+
+    <div class="model-control-panel">
+      <div class="panel-header">
+        <h3><i class="fas fa-cube"></i> 模型控制</h3>
+        <div class="model-control-actions">
+          <span v-if="currentModel" class="current-model-badge">
+            <i class="fas fa-play-circle"></i> 当前: {{ currentModel }}
+          </span>
+          <button class="btn btn-sm btn-outline" @click="loadAvailableModels">
+            <i class="fas fa-sync-alt"></i> 刷新模型
+          </button>
+        </div>
+      </div>
+      <div class="model-selector-row">
+        <div class="model-dropdown">
+          <select v-model="selectedModel" :disabled="isSwitching">
+            <option value="">选择模型</option>
+            <option v-for="model in availableModelsList" :key="model" :value="model" :disabled="model === currentModel">
+              {{ model }}{{ model === currentModel ? ' (运行中)' : '' }}
+            </option>
+          </select>
+          <button 
+            class="btn btn-primary btn-sm" 
+            @click="switchModel" 
+            :disabled="!selectedModel || selectedModel === currentModel || isSwitching"
+          >
+            <i v-if="isSwitching" class="fas fa-spinner fa-spin"></i>
+            <i v-else class="fas fa-exchange-alt"></i>
+            {{ isSwitching ? '切换中...' : '切换模型' }}
+          </button>
+          <button 
+            v-if="currentModel"
+            class="btn btn-danger btn-sm" 
+            @click="stopCurrentModel" 
+            :disabled="isSwitching"
+          >
+            <i v-if="isSwitching" class="fas fa-spinner fa-spin"></i>
+            <i v-else class="fas fa-stop"></i>
+            停止当前
+          </button>
+        </div>
+      </div>
+    </div>
+    
     <!-- Provider Pool Stats -->
     <div class="stats-grid">
       <div class="stat-card">
@@ -219,14 +319,31 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useProviders } from '@/composables/useProviders.js'
 import ProviderNode from '@/components/ProviderNode.vue'
 import { logger } from '@/utils/logger.js'
 import { apiClient } from '@/utils/api.js'
+import { Chart, registerables } from 'chart.js'
+
+Chart.register(...registerables)
 
 const showModal = ref(false)
 const isEditing = ref(false)
+const selectedProvider = ref('all')
+const activeTimeRange = ref('hour')
+const activeMetric = ref('requests')
+const usageChartCanvas = ref(null)
+const providerList = ref([])
+const usageChartData = ref([])
+const usageChartLabels = ref([])
+const availableModelsList = ref([])
+const selectedModel = ref('')
+const currentModel = ref(null)
+const isSwitching = ref(false)
+
+let usageChartInstance = null
+let usagePollingInterval = null
 
 const {
   providers,
@@ -243,6 +360,17 @@ const {
   performHealthCheck
 } = useProviders()
 
+const timeRangeTabs = [
+  { id: 'hour', label: '最近一小时' },
+  { id: 'day', label: '最近一天' },
+  { id: 'week', label: '最近一周' }
+]
+
+const metricTabs = [
+  { id: 'requests', label: '请求次数' },
+  { id: 'tokens', label: 'Token 用量' }
+]
+
 const formData = reactive({
   providerType: 'gemini-cli-oauth',
   name: '',
@@ -251,6 +379,246 @@ const formData = reactive({
   email: '',
   accessToken: ''
 })
+
+const formatNumber = (num) => {
+  if (!num) return '0'
+  if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M'
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+  return num.toString()
+}
+
+const currentSeriesTotal = ref(0)
+
+const onProviderChange = async () => {
+  await fetchUsageData()
+}
+
+const onTimeRangeChange = async (range) => {
+  activeTimeRange.value = range
+  await fetchUsageData()
+}
+
+const onMetricChange = async (metric) => {
+  activeMetric.value = metric
+  updateChart()
+}
+
+const fetchUsageData = async () => {
+  try {
+    const response = await apiClient.get(
+      `/api/model-usage-stats/provider-time-series?range=${activeTimeRange.value}${selectedProvider.value !== 'all' ? `&provider=${selectedProvider.value}` : ''}`
+    )
+    
+    if (response.data.success) {
+      const data = response.data.data
+      usageChartData.value = []
+      usageChartLabels.value = []
+      
+      let total = 0
+      for (const point of data.dataPoints || []) {
+        usageChartLabels.value.push(formatTimeKey(point.key, activeTimeRange.value))
+        
+        let value = 0
+        if (activeMetric.value === 'requests') {
+          value = point.totalRequests || 0
+        } else {
+          value = point.totalTokens || 0
+        }
+        usageChartData.value.push(value)
+        total += value
+      }
+      
+      currentSeriesTotal.value = total
+      updateChart()
+    }
+  } catch (error) {
+    logger.error('Failed to fetch usage data', error)
+  }
+}
+
+const refreshUsageData = async () => {
+  await fetchUsageData()
+}
+
+const formatTimeKey = (key, range) => {
+  if (range === 'hour') {
+    const time = new Date(key)
+    return `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`
+  } else if (range === 'day') {
+    const time = new Date(key)
+    return `${time.getHours().toString().padStart(2, '0')}:00`
+  } else {
+    const time = new Date(key)
+    return `${time.getMonth() + 1}/${time.getDate()}`
+  }
+}
+
+const updateChart = () => {
+  if (!usageChartInstance || usageChartLabels.value.length === 0) return
+  
+  const ctx = usageChartCanvas.value?.getContext('2d')
+  if (!ctx) return
+  
+  const color = selectedProvider.value === 'all' 
+    ? { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' }
+    : { border: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' }
+  
+  usageChartInstance.data.labels = usageChartLabels.value
+  usageChartInstance.data.datasets = [{
+    label: activeMetric.value === 'requests' ? '请求次数' : 'Token 用量',
+    data: usageChartData.value,
+    borderColor: color.border,
+    backgroundColor: color.bg,
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2
+  }]
+  
+  usageChartInstance.update('none')
+}
+
+const initUsageChart = () => {
+  if (!usageChartCanvas.value) return
+  
+  const ctx = usageChartCanvas.value.getContext('2d')
+  
+  if (usageChartInstance) {
+    usageChartInstance.destroy()
+  }
+  
+  usageChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: []
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          padding: 8,
+          cornerRadius: 5,
+          titleFont: { size: 11 },
+          bodyFont: { size: 10 }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(0, 0, 0, 0.05)' },
+          ticks: {
+            color: '#94a3b8',
+            maxTicksLimit: 8,
+            font: { size: 9 }
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(0, 0, 0, 0.05)' },
+          ticks: {
+            color: '#94a3b8',
+            font: { size: 9 },
+            callback: (value) => formatNumber(value)
+          }
+        }
+      },
+      animation: { duration: 300 }
+    }
+  })
+}
+
+const loadAvailableModels = async () => {
+  try {
+    const response = await apiClient.get('/api/python/models/status')
+    if (response.data.success && response.data.models) {
+      const modelsData = response.data.models
+      let modelsArray = []
+      
+      if (Array.isArray(modelsData)) {
+        modelsArray = modelsData.map(m => m.name || m)
+      } else if (typeof modelsData === 'object' && modelsData !== null) {
+        modelsArray = Object.keys(modelsData)
+      }
+      
+      availableModelsList.value = modelsArray
+      
+      if (response.data.current_model) {
+        currentModel.value = response.data.current_model
+      } else {
+        const runningModel = Object.entries(response.data.models).find(([_, info]) => info.running)
+        if (runningModel) {
+          currentModel.value = runningModel[0]
+        } else {
+          currentModel.value = null
+        }
+      }
+    }
+  } catch (error) {
+    logger.error('Failed to load available models', error)
+  }
+}
+
+const switchModel = async () => {
+  if (!selectedModel.value || selectedModel.value === currentModel.value) {
+    return
+  }
+  
+  isSwitching.value = true
+  try {
+    const response = await apiClient.post(
+      `/api/python/test/model/${encodeURIComponent(selectedModel.value)}/switch-and-test`
+    )
+    
+    if (response.data.success) {
+      window.$toast?.success(`模型切换成功: ${selectedModel.value}`)
+      currentModel.value = selectedModel.value
+      selectedModel.value = ''
+      await loadAvailableModels()
+    } else {
+      window.$toast?.error(response.data.error?.message || '模型切换失败')
+    }
+  } catch (error) {
+    logger.error('Model switch failed', error)
+    window.$toast?.error('模型切换失败: ' + error.message)
+  } finally {
+    isSwitching.value = false
+  }
+}
+
+const stopCurrentModel = async () => {
+  if (!currentModel.value) return
+  
+  isSwitching.value = true
+  try {
+    const response = await apiClient.post(
+      `/api/python/models/${encodeURIComponent(currentModel.value)}/stop`
+    )
+    
+    if (response.data.success) {
+      window.$toast?.success(`模型已停止: ${currentModel.value}`)
+      currentModel.value = null
+      await loadAvailableModels()
+    } else {
+      window.$toast?.error(response.data.error?.message || '停止模型失败')
+    }
+  } catch (error) {
+    logger.error('Model stop failed', error)
+    window.$toast?.error('停止模型失败: ' + error.message)
+  } finally {
+    isSwitching.value = false
+  }
+}
 
 const maskApiKey = (key) => {
   if (!key) return ''
@@ -383,9 +751,36 @@ const addNode = (providerType) => {
   showModal.value = true
 }
 
-onMounted(() => {
-  fetchProviders()
+onMounted(async () => {
+  await fetchProviders()
+  providerList.value = Object.keys(providers.value || {})
+  
+  await nextTick()
+  initUsageChart()
+  await Promise.all([
+    fetchUsageData(),
+    loadAvailableModels()
+  ])
+  
+  usagePollingInterval = setInterval(() => {
+    fetchUsageData()
+  }, 30000)
 })
+
+onUnmounted(() => {
+  if (usagePollingInterval) {
+    clearInterval(usagePollingInterval)
+    usagePollingInterval = null
+  }
+  if (usageChartInstance) {
+    usageChartInstance.destroy()
+    usageChartInstance = null
+  }
+})
+
+watch(() => providers.value, (newProviders) => {
+  providerList.value = Object.keys(newProviders || {})
+}, { deep: true })
 </script>
 
 <style scoped>
@@ -396,6 +791,256 @@ onMounted(() => {
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+.provider-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.provider-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.provider-selector label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.provider-selector select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-width: 180px;
+}
+
+.chart-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.time-range-tabs,
+.chart-metric-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-secondary);
+  padding: 2px;
+  border-radius: var(--radius-md);
+}
+
+.time-range-tab,
+.metric-tab {
+  padding: 0.375rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.time-range-tab:hover,
+.metric-tab:hover {
+  color: var(--primary-color);
+}
+
+.time-range-tab.active,
+.metric-tab.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+.usage-chart-panel {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.usage-chart-panel .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.usage-chart-panel .panel-header h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.usage-chart-panel .panel-header h3 i {
+  color: var(--primary-color);
+}
+
+.chart-content {
+  position: relative;
+  height: 280px;
+  padding: 1rem;
+}
+
+.chart-content canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.chart-empty-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-tertiary);
+}
+
+.chart-empty-state i {
+  font-size: 3rem;
+  opacity: 0.3;
+}
+
+.chart-empty-state span {
+  font-size: 0.875rem;
+}
+
+.chart-legend {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.legend-value {
+  font-weight: 600;
+  color: var(--primary-color);
+  font-size: 0.875rem;
+}
+
+.model-control-panel {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.model-control-panel .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.model-control-panel .panel-header h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.model-control-panel .panel-header h3 i {
+  color: var(--primary-color);
+}
+
+.model-control-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.current-model-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  color: var(--success-color);
+  font-weight: 500;
+}
+
+.model-control-actions .btn-outline {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.model-control-actions .btn-outline:hover {
+  background: var(--bg-tertiary);
+}
+
+.model-selector-row {
+  padding: 1rem;
+}
+
+.model-dropdown {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.model-dropdown select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-width: 220px;
+}
+
+.model-dropdown select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background: var(--danger-color);
+  color: white;
+  border-color: var(--danger-color);
+}
+
+.btn-danger:hover {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pool-description {

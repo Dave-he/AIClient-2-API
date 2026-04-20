@@ -111,8 +111,8 @@ export class SystemMonitor {
                 if (preloaded.system) {
                     this.updateFromSystemData(preloaded.system);
                 }
-                if (preloaded.python && preloaded.python.gpu) {
-                    this.updateFromPythonGpuData(preloaded.python.gpu);
+                if (preloaded.python) {
+                    this.updateFromPythonGpuData(preloaded.python);
                 }
             }
         } catch (error) {
@@ -493,6 +493,15 @@ export class SystemMonitor {
         
         this.updateFromPythonGpuData(data.gpu);
         
+        if (data.summary) {
+            if (data.summary.running_model || (data.summary.models && data.summary.models.length > 0)) {
+                this.currentModel = this.resolveCurrentModelFromSummary(data.summary);
+                this.renderCurrentModel();
+            }
+            if (data.summary.models) {
+                this.lastModelsData = data.summary.models;
+            }
+        }
         if (data.models) {
             this.lastModelsData = data.models;
         }
@@ -503,9 +512,56 @@ export class SystemMonitor {
         }
     }
 
+    resolveCurrentModelFromSummary(summary) {
+        if (!summary) return null;
+
+        if (summary.running_model) {
+            if (typeof summary.running_model === 'string') {
+                return summary.models?.find(model => model.name === summary.running_model) || summary.running_model;
+            }
+            return summary.running_model;
+        }
+
+        if (Array.isArray(summary.models)) {
+            const runningModels = summary.models.filter(model => model.running);
+            return runningModels.length > 0 ? runningModels[0] : null;
+        }
+
+        return null;
+    }
+
+    renderCurrentModel() {
+        const container = document.getElementById('currentModelInfo');
+        if (!container) return;
+
+        const currentModel = typeof this.currentModel === 'object' ? this.currentModel : { name: this.currentModel };
+        const currentModelName = currentModel?.name;
+        const meta = [];
+
+        if (currentModel?.port) {
+            meta.push(`<span class="current-model-meta"><i class="fas fa-server"></i> ${currentModel.port}</span>`);
+        }
+        if (currentModel?.required_memory || currentModel?.memory) {
+            meta.push(`<span class="current-model-meta"><i class="fas fa-memory"></i> ${currentModel.required_memory || currentModel.memory}</span>`);
+        }
+
+        container.innerHTML = `
+            <div class="current-model-info">
+                <div class="current-model-label">当前运行模型</div>
+                <div class="current-model-value">
+                    ${currentModelName ? `<span class="model-name">${currentModelName}</span>` : `<span class="no-model">-</span>`}
+                    ${meta.join('')}
+                </div>
+            </div>
+        `;
+    }
+
     updateFromPythonGpuData(fullResult) {
         const gpuData = fullResult.gpu || {};
         const serviceData = fullResult.service || {};
+        
+        const hasValidData = gpuData && Object.keys(gpuData).length > 0 && gpuData.status !== 'unavailable';
+        const serviceActive = serviceData && serviceData.status === 'active';
         
         const data = {
             ...gpuData,
@@ -522,7 +578,7 @@ export class SystemMonitor {
             available_memory: gpuData.available_memory
         };
         
-        this.pythonGpuConnected = fullResult.success === true || serviceData.status === 'active';
+        this.pythonGpuConnected = (fullResult.success === true && hasValidData) || serviceActive;
         this.renderPythonGpuConnectionStatus(this.pythonGpuConnected);
         this.renderPythonGpuStatus(data);
         this.updatePythonGpuVisibility(this.pythonGpuConnected);

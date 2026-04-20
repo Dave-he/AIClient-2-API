@@ -578,3 +578,99 @@ export async function resetTokenStats() {
     logger.warn('[Model Usage Stats] Token stats reset');
     return getStats();
 }
+
+export async function getProviderTimeSeries(range = 'hour', targetProvider = null) {
+    ensureLoaded();
+    const now = new Date();
+    const dataPoints = [];
+
+    const getTimeKey = (minutesAgo) => {
+        const time = new Date(now.getTime() - minutesAgo * 60000);
+        return time.toISOString().slice(0, 16);
+    };
+
+    let keys = [];
+    let count = 0;
+
+    if (range === 'hour') {
+        count = 60;
+        for (let i = count - 1; i >= 0; i--) {
+            keys.push(getTimeKey(i));
+        }
+    } else if (range === 'day') {
+        count = 24;
+        for (let i = count - 1; i >= 0; i--) {
+            keys.push(new Date(now.getTime() - i * 3600000).toISOString().slice(0, 13));
+        }
+    } else if (range === 'week') {
+        count = 7;
+        for (let i = count - 1; i >= 0; i--) {
+            const d = new Date(now.getTime() - i * 86400000);
+            keys.push(d.toISOString().slice(0, 10));
+        }
+    }
+
+    const providersToInclude = targetProvider 
+        ? [targetProvider] 
+        : Object.keys(statsStore.providers || {});
+
+    const storeRef = range === 'hour' ? statsStore.minuteData : 
+                     range === 'day' ? statsStore.hourly : 
+                     statsStore.daily;
+
+    for (const key of keys) {
+        let totalRequests = 0;
+        let totalPromptTokens = 0;
+        let totalCompletionTokens = 0;
+        let totalTokens = 0;
+
+        if (storeRef[key]) {
+            const block = storeRef[key];
+            totalRequests += block.requestCount || 0;
+            totalPromptTokens += block.promptTokens || 0;
+            totalCompletionTokens += block.completionTokens || 0;
+            totalTokens += block.totalTokens || 0;
+        }
+
+        const perProvider = {};
+        for (const provider of providersToInclude) {
+            let pRequests = 0;
+            let pPromptTokens = 0;
+            let pCompletionTokens = 0;
+            let pTotalTokens = 0;
+
+            if (statsStore.providers[provider]) {
+                const providerStore = statsStore.providers[provider];
+                for (const [model, modelStore] of Object.entries(providerStore.models || {})) {
+                    pRequests += modelStore.requestCount || 0;
+                    pPromptTokens += modelStore.promptTokens || 0;
+                    pCompletionTokens += modelStore.completionTokens || 0;
+                    pTotalTokens += modelStore.totalTokens || 0;
+                }
+            }
+
+            perProvider[provider] = {
+                requests: pRequests,
+                promptTokens: pPromptTokens,
+                completionTokens: pCompletionTokens,
+                totalTokens: pTotalTokens
+            };
+        }
+
+        dataPoints.push({
+            key,
+            totalRequests,
+            totalPromptTokens,
+            totalCompletionTokens,
+            totalTokens,
+            providers: perProvider
+        });
+    }
+
+    return {
+        range,
+        provider: targetProvider,
+        dataPoints,
+        keys
+    };
+}

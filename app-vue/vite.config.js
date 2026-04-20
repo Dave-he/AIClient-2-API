@@ -33,7 +33,15 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: env.VITE_API_BASE_URL || 'http://localhost:30000',
           changeOrigin: true,
-          secure: false
+          secure: false,
+          configure: (proxy, options) => {
+            proxy.on('error', (err, req, res) => {
+              console.log('Proxy error:', err);
+            });
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+              console.log('Proxying:', req.method, req.url, '->', options.target + req.url);
+            });
+          }
         }
       }
     },

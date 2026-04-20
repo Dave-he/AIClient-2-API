@@ -355,7 +355,7 @@ export function useDashboard() {
       const response = await apiClient.get('/api/python-gpu/status');
       const data = response.data;
       
-      if (data.success) {
+      if (data.success && data.status !== 'unavailable') {
         const memoryUsageValue = Number(data.memoryUsage ?? data.memory_utilization ?? 0);
         const utilizationValue = Number(data.utilization || 0);
         const temperatureValue = Number(data.temperature || 0);

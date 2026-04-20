@@ -24,6 +24,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Chart, registerables } from 'chart.js'
+
+Chart.register(...registerables)
 
 const { t } = useI18n()
 
@@ -158,7 +161,7 @@ const createChart = () => {
   if (!chartCanvas.value) return
   const ctx = chartCanvas.value.getContext('2d')
 
-  chartInstance = new (window.Chart || require('chart.js').Chart)(ctx, {
+  chartInstance = new Chart(ctx, {
     type: 'line',
     data: {
       labels: props.chartData.time,

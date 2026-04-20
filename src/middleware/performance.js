@@ -30,16 +30,39 @@ export class CompressionMiddleware {
         }
 
         const originalWriteHead = res.writeHead.bind(res);
+        const originalWrite = res.write.bind(res);
         const originalEnd = res.end.bind(res);
         const chunks = [];
+
+        let isStreaming = false;
 
         res.writeHead = function(statusCode, headers) {
             res.statusCode = statusCode;
             res._headers = { ...headers };
+
+            const contentType = headers?.['Content-Type'] || headers?.['content-type'] || '';
+            if (contentType.toLowerCase().split(';')[0] === 'text/event-stream') {
+                isStreaming = true;
+                originalWriteHead(statusCode, headers);
+            }
+        };
+
+        res.write = function(data, encoding, callback) {
+            if (isStreaming) {
+                return originalWrite(data, encoding, callback);
+            }
+
+            isStreaming = true;
+            originalWriteHead(res.statusCode || 200, res._headers || {});
+            return originalWrite(data, encoding, callback);
         };
 
         const self = this;
         res.end = function(data, encoding, callback) {
+            if (isStreaming) {
+                return originalEnd.call(this, data, encoding, callback);
+            }
+
             if (!data || data.length === 0) {
                 originalWriteHead(res.statusCode || 200, res._headers || {});
                 return originalEnd.call(this, data, encoding, callback);

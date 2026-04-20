@@ -480,9 +480,10 @@ export async function handleGetProviderModels(req, res, currentConfig, providerP
     for (const type of allTypes) {
         // 本地模型始终只返回当前运行的模型（通过Python服务获取）
         if (type === MODEL_PROVIDER.LOCAL_MODEL) {
-            if (providerPoolManager) {
+            if (providerPoolManager && providerPools[type] && providerPools[type].length > 0) {
                 try {
-                    const serviceAdapter = getServiceAdapter({ ...currentConfig, MODEL_PROVIDER: type });
+                    const nodeConfig = providerPools[type][0];
+                    const serviceAdapter = getServiceAdapter({ ...currentConfig, ...nodeConfig, MODEL_PROVIDER: type });
                     if (typeof serviceAdapter.listModels === 'function') {
                         const nativeModels = await serviceAdapter.listModels();
                         const models = extractModelIdsFromNativeList(nativeModels, type);

@@ -98,7 +98,7 @@ const handleLogin = async () => {
 
     if (response.data.success) {
       setToken(response.data.token);
-      window.location.href = '/vue/';
+      window.location.href = '/';
     } else {
       error.value = response.data.message || t('login.loginFailed');
     }

@@ -221,6 +221,7 @@ async def startup_event():
 
     config_watcher.start_watching()
     _background_tasks.clear()
+    _background_tasks.append(asyncio.create_task(gpu_monitor._update_cache_loop()))
     _background_tasks.append(asyncio.create_task(broadcast_status_loop()))
     _background_tasks.append(asyncio.create_task(save_history_loop()))
     structured_logger.info("AI Controller service started", action="startup")
@@ -428,15 +429,15 @@ async def chat_completions(request: ChatCompletionRequest):
         
         vllm_port = scheduler.get_model_port(model_name)
         vllm_url = f"http://localhost:{vllm_port}/v1/chat/completions"
-        
+
         model_config = scheduler.get_model_config(model_name)
         vllm_model_name = model_config.get('model_path', model_name) if model_config else model_name
-        
+
         logger.info(f"Forwarding request to vLLM at {vllm_url} with model: {vllm_model_name}")
-        
+
         request_data = request.model_dump(exclude_unset=True)
         request_data['model'] = vllm_model_name
-        
+
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
                 vllm_url,
@@ -444,7 +445,7 @@ async def chat_completions(request: ChatCompletionRequest):
                 timeout=60
             )
             response.raise_for_status()
-            
+
             if stream:
                 async def generate():
                     async for chunk in response.aiter_lines():
@@ -456,6 +457,7 @@ async def chat_completions(request: ChatCompletionRequest):
                             try:
                                 json_chunk = json.loads(chunk_data)
                                 json_chunk['id'] = f"chatcmpl-{os.urandom(12).hex()}"
+                                json_chunk['model'] = model_name
                                 yield f"data: {json.dumps(json_chunk)}\n\n"
                             except:
                                 yield f"data: {chunk_data}\n\n"
@@ -463,6 +465,7 @@ async def chat_completions(request: ChatCompletionRequest):
             else:
                 result = response.json()
                 result['id'] = f"chatcmpl-{os.urandom(12).hex()}"
+                result['model'] = model_name
                 logger.info(f"Request completed successfully for {model_name}")
                 return result
     except (HTTPException, ControllerException) as e:

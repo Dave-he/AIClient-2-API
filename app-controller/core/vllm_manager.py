@@ -89,6 +89,40 @@ def get_available_models() -> List[Dict[str, Any]]:
     return models
 
 
+def _find_model_name_from_path(model_path: str) -> Optional[str]:
+    """
+    根据模型路径从配置中查找对应的模型名称
+    """
+    try:
+        import yaml
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        
+        if not os.path.exists(config_path):
+            return None
+        
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        if not config or 'models' not in config:
+            return None
+        
+        for model_name, model_config in config['models'].items():
+            config_model_path = model_config.get('model_path', '')
+            if config_model_path == model_path:
+                return model_name
+        
+        # 如果精确匹配失败，尝试基于目录名称匹配
+        model_dir_name = os.path.basename(model_path)
+        for model_name, model_config in config['models'].items():
+            config_model_path = model_config.get('model_path', '')
+            if os.path.basename(config_model_path) == model_dir_name:
+                return model_name
+        
+        return None
+    except Exception:
+        return None
+
+
 def _estimate_memory(model_name: str) -> Dict[str, Any]:
     """
     根据模型名称估算显存需求
@@ -130,10 +164,10 @@ def _get_model_size(model_path: str) -> int:
 
 def get_current_model_info() -> Optional[Dict[str, Any]]:
     """
-    获取当前运行的 vLLM 模型信息
+    获取当前运行的 vLLM 模型信息（返回配置文件中的模型名称）
     """
     try:
-        # 读取启动脚本获取当前模型
+        # 读取启动脚本获取当前运行的模型路径
         if not os.path.exists(VLLM_START_SCRIPT):
             return None
 
@@ -157,10 +191,11 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
         # 获取服务状态
         service_running = _is_service_running()
 
-        model_name = os.path.basename(model_path)
-
+        # 从配置中查找匹配的模型名称（而不是直接使用路径中的名称）
+        config_model_name = _find_model_name_from_path(model_path)
+        
         return {
-            "name": model_name,
+            "name": config_model_name or os.path.basename(model_path),
             "path": model_path,
             "service": VLLM_SERVICE_NAME,
             "port": VLLM_DEFAULT_PORT,

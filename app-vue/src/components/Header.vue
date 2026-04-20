@@ -75,7 +75,7 @@ const toggleTheme = () => {
 const handleLogout = async () => {
   if (confirm('确定要登出吗？')) {
     removeToken();
-    window.location.href = '/vue/login';
+    window.location.href = '/login';
   }
 };
 

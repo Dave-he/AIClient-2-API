@@ -48,3 +48,4 @@ configs/model-usage-stats.json
 configs/provider_pools_runtime.json
 configs/fetch_system_prompt.txt
 .codeflicker/
+screenshot*png

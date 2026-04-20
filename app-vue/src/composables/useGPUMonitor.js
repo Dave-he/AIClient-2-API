@@ -76,7 +76,7 @@ export function useGPUMonitor() {
       const response = await apiClient.get('/api/python-gpu/status');
       const data = response.data;
 
-      if (data.success) {
+      if (data.success && data.status !== 'unavailable') {
         pythonGpuConnected.value = true;
         pythonGpuInfo.value = {
           utilization: `${data.utilization || 0}%`,

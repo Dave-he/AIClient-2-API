@@ -61,18 +61,21 @@ class GPUMonitor:
             process = await asyncio.create_subprocess_exec(
                 "nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit,fan.speed,clocks.sm,clocks.mem", "--format=csv,noheader,nounits",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                text=True
+                stderr=asyncio.subprocess.PIPE
             )
             
             stdout, stderr = await process.communicate()
+            
+            # Decode bytes to string
+            stdout_str = stdout.decode('utf-8').strip() if stdout else ''
+            stderr_str = stderr.decode('utf-8').strip() if stderr else ''
             
             if process.returncode != 0:
                 self._status_cache = None
                 self._status_cache_time = None
                 return
             
-            output = stdout.strip()
+            output = stdout_str
             if not output:
                 self._status_cache = None
                 self._status_cache_time = None

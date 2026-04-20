@@ -15,7 +15,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -214,7 +214,7 @@
         </form>
 
         <div class="footer">
-            <p>&copy; 2077 AIClient2API. All rights reserved.</p>
+            <p id="copyright"></p>
         </div>
     </div>
 
@@ -364,6 +364,12 @@
 
         // 页面加载时聚焦到密码输入框
         passwordInput.focus();
+
+        // 设置版权年份
+        const copyrightEl = document.getElementById('copyright');
+        if (copyrightEl) {
+            copyrightEl.textContent = `© ${new Date().getFullYear()} AIClient2API. All rights reserved.`;
+        }
     </script>
     </body>
 </html>
