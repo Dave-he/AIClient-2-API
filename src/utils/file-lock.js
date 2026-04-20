@@ -117,7 +117,9 @@ export function atomicWriteFileSync(filePath, data, encoding = 'utf-8') {
         renameSync(tempPath, filePath);
     } catch (error) {
         logger.error(`[FileLock] Atomic write failed for ${filePath}:`, error.message);
-        try { unlinkSync(tempPath); } catch (e) {}
+        try { unlinkSync(tempPath); } catch (e) {
+            logger.debug(`[FileLock] Failed to cleanup temp file ${tempPath}:`, e?.message || e);
+        }
         throw error;
     }
 }
@@ -132,7 +134,9 @@ export async function atomicWriteFile(filePath, data, encoding = 'utf-8') {
         await retryRename(tempPath, filePath);
     } catch (error) {
         logger.error(`[FileLock] Atomic write (async) failed for ${filePath}:`, error.message);
-        try { await pfs.unlink(tempPath); } catch (e) {}
+        try { await pfs.unlink(tempPath); } catch (e) {
+            logger.debug(`[FileLock] Failed to cleanup temp file ${tempPath}:`, e?.message || e);
+        }
         throw error;
     }
 }

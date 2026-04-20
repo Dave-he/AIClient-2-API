@@ -221,6 +221,9 @@ function validateConfig(config) {
 
     if (config.REQUIRED_API_KEY === '123456') {
         warnings.push('[CONFIG WARNING] Using default API key (123456). For security, please change this in production.');
+        if (process.env.NODE_ENV === 'production') {
+            warnings.push('[CONFIG WARNING] SECURITY RISK: Default API key is not allowed in production environment!');
+        }
     }
 
     if (config.LOG_LEVEL === 'debug' && process.env.NODE_ENV === 'production') {

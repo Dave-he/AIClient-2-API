@@ -153,20 +153,21 @@ function initProviderSwitcher() {
     async function loadProviderList() {
         try {
             providerList.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> <span data-i18n="common.loading">加载中...</span></div>';
-            
-            const data = await window.apiClient.get('/api/providers/dynamic');
+
+            const [data, staticData] = await Promise.all([
+                window.monitorCache.getProvidersDynamic(),
+                window.monitorCache.getProvidersStatic()
+            ]);
             if (!data || !data.providers) return;
-            
+
             const providers = data.providers;
             const providerTypes = Object.keys(providers);
-            
+
             if (providerTypes.length === 0) {
                 providerList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-secondary);">暂无可用的Provider</div>';
                 return;
             }
-            
-            // 加载提供商配置以获取显示名称
-            const staticData = await window.apiClient.get('/api/providers/static');
+
             const providerConfigs = staticData?.supportedProviders || [];
             const configMap = providerConfigs.reduce((map, config) => {
                 map[config.id] = config;

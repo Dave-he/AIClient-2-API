@@ -300,6 +300,85 @@ Score = baseScore + usageScore + sequenceScore + loadScore + freshBonus
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### 7. Vue 前端架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Vue 前端 (app-vue/)                        │
+│                    独立 Vue 3 应用                           │
+├─────────────────────────────────────────────────────────────┤
+│  技术栈：                                                    │
+│  ├── Vue 3 + Composition API                               │
+│  ├── Vue Router 4（路由管理）                               │
+│  ├── Vite 8（构建工具）                                      │
+│  ├── Element Plus（UI 组件库）                              │
+│  ├── Vue I18n（国际化）                                     │
+│  ├── Axios（HTTP 请求）                                     │
+│  └── Tailwind CSS（样式框架）                               │
+│                                                             │
+│  目录结构：                                                  │
+│  ├── src/components/     # 可复用组件                       │
+│  │   ├── Header.vue       # 页头（语言/主题切换）            │
+│  │   ├── Sidebar.vue      # 侧边栏导航                      │
+│  │   ├── Layout.vue       # 布局容器                       │
+│  │   ├── Modal.vue        # 模态框                         │
+│  │   ├── Toast.vue        # 消息提示                       │
+│  │   ├── Loading.vue      # 加载状态                       │
+│  │   └── ...              # 其他组件                        │
+│  ├── src/composables/     # 组合式函数                      │
+│  │   ├── useApi.js        # API 调用封装                    │
+│  │   ├── useAuth.js       # 认证逻辑                       │
+│  │   ├── useConfig.js     # 配置管理                       │
+│  │   ├── useDashboard.js  # 仪表板数据                     │
+│  │   ├── useProviders.js  # 提供商管理                     │
+│  │   └── ...              # 其他 composables               │
+│  ├── src/views/           # 页面视图                        │
+│  │   ├── core/            # 核心页面（Dashboard/Login）      │
+│  │   ├── config/          # 配置页面                       │
+│  │   ├── providers/       # 提供商管理                     │
+│  │   ├── stats/           # 统计页面                       │
+│  │   ├── plugins/         # 插件页面                       │
+│  │   └── tools/           # 工具页面                       │
+│  ├── src/router/          # 路由配置                        │
+│  ├── src/locales/         # 国际化文件（zh-CN/en）          │
+│  └── src/utils/           # 工具函数                        │
+│                                                             │
+│  独立运行：                                                  │
+│  ├── npm run dev      # 开发模式（端口 5173）               │
+│  ├── npm run build    # 构建生产版本                       │
+│  ├── npm run preview  # 预览构建结果                       │
+│  └── 环境变量配置：.env 文件                                │
+│                                                             │
+│  与后端集成：                                               │
+│  ├── 开发模式：Vite proxy 代理到后端 API                    │
+│  └── 生产模式：构建后由 ui-manager.js 服务                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**独立开发流程**：
+```bash
+# 1. 进入 Vue 项目目录
+cd app-vue
+
+# 2. 安装依赖
+npm install
+
+# 3. 配置环境变量（复制示例文件）
+cp .env.example .env
+
+# 4. 启动开发服务器
+npm run dev
+
+# 5. 访问 http://localhost:5173
+```
+
+**环境变量配置**（`.env`）：
+```
+VITE_PORT=5173
+VITE_API_BASE_URL=http://localhost:3000
+VITE_PREVIEW_PORT=9090
+```
+
 ---
 
 ## 支持的提供商

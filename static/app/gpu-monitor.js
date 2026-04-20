@@ -837,33 +837,17 @@ export class GPUMonitorModule {
 
     async refreshGpuStatus() {
         try {
-            const cachedData = monitorCache.getCachedData();
+            const cachedData = monitorCache.getCachedData('gpuStatus');
             let result = null;
 
-            if (cachedData && cachedData.gpu) {
-                result = { success: true, ...cachedData.gpu };
+            if (cachedData && cachedData.status) {
+                result = cachedData;
             } else {
-                const token = window.authManager ? window.authManager.getToken() : null;
-                const headers = {};
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                }
-
-                const response = await fetch(`/api/python-gpu/status`, {
-                    method: 'GET',
-                    headers,
-                    timeout: 5000
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                result = await response.json();
+                result = await monitorCache.getGpuStatus();
             }
 
-            if (!result.success) {
-                throw new Error(result.error || 'Failed to get GPU status');
+            if (!result || !result.success) {
+                throw new Error(result?.error || 'Failed to get GPU status');
             }
             if (result.primary) {
                 this.updateGpuStatusFromSocket(result.primary);
@@ -882,33 +866,17 @@ export class GPUMonitorModule {
 
     async refreshModelsStatus() {
         try {
-            const cachedData = monitorCache.getCachedData();
+            const cachedData = monitorCache.getCachedData('modelsStatus');
             let models = null;
 
             if (cachedData && cachedData.models) {
                 models = cachedData.models;
             } else {
-                const token = window.authManager ? window.authManager.getToken() : null;
-                const headers = {};
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                }
-
-                const response = await fetch(`/api/python/models/status`, {
-                    method: 'GET',
-                    headers,
-                    timeout: 5000
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-                if (result.success) {
+                const result = await monitorCache.getModelsStatus();
+                if (result && result.success) {
                     models = result.models;
                 } else {
-                    throw new Error(result.error || 'Failed to get models status');
+                    throw new Error(result?.error || 'Failed to get models status');
                 }
             }
 
@@ -1096,33 +1064,17 @@ export class GPUMonitorModule {
 
     async refreshModelControls() {
         try {
-            const cachedData = monitorCache.getCachedData();
+            const cachedData = monitorCache.getCachedData('modelsStatus');
             let models = null;
 
             if (cachedData && cachedData.models) {
                 models = cachedData.models;
             } else {
-                const token = window.authManager ? window.authManager.getToken() : null;
-                const headers = {};
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                }
-
-                const response = await fetch(`/api/python/models/status`, {
-                    method: 'GET',
-                    headers,
-                    timeout: 5000
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-                if (result.success) {
+                const result = await monitorCache.getModelsStatus();
+                if (result && result.success) {
                     models = result.models;
                 } else {
-                    throw new Error(result.error || 'Failed to get model controls');
+                    throw new Error(result?.error || 'Failed to get model controls');
                 }
             }
 
@@ -1134,50 +1086,6 @@ export class GPUMonitorModule {
             console.warn(`Failed to fetch model controls: ${error.message}`);
             this.showMockQuickSwitch();
         }
-    }
-
-    renderModelControls(data, container) {
-        const t = this.i18n.t.bind(this.i18n);
-        const modelEntries = Array.isArray(data)
-            ? data.map(model => [model.name, model])
-            : Object.entries(data || {});
-
-        if (modelEntries.length === 0) {
-            container.innerHTML = `
-                <div class="status-loading">
-                    <i class="fas fa-info-circle"></i>
-                    <span>${t('gpuMonitor.noControllableModels')}</span>
-                </div>
-            `;
-            return;
-        }
-
-        const currentModelName = typeof this.currentModel === 'object' ? this.currentModel?.name : this.currentModel;
-
-        const controls = modelEntries.map(([name, status]) => `
-            <div class="control-item">
-                <span class="model-name">${name}</span>
-                <div class="control-btn-group">
-                    ${(currentModelName === name || status.running) ? `
-                        <button class="btn btn-danger btn-sm" onclick="window.GPUMonitor.stopModel('${name}')">
-                            <i class="fas fa-stop"></i> ${t('gpuMonitor.stop')}
-                        </button>
-                        <button class="btn btn-outline btn-sm" onclick="window.GPUMonitor.switchModel('${name}')">
-                            <i class="fas fa-exchange-alt"></i> ${t('gpuMonitor.switchAndTest')}
-                        </button>
-                        <button class="btn btn-info btn-sm" onclick="window.GPUMonitor.runModelTest('${name}')">
-                            <i class="fas fa-flask"></i> ${t('gpuMonitor.test')}
-                        </button>
-                    ` : `
-                        <button class="btn btn-success btn-sm" onclick="window.GPUMonitor.startModel('${name}')">
-                            <i class="fas fa-play"></i> ${t('gpuMonitor.start')}
-                        </button>
-                    `}
-                </div>
-            </div>
-        `).join('');
-
-        container.innerHTML = `<div class="control-grid">${controls}</div>`;
     }
 
     async startModel(modelName) {
@@ -1820,10 +1728,8 @@ export class GPUMonitorModule {
         try {
             let models = null;
 
-            const cachedData = monitorCache.getCachedData();
-            if (cachedData && cachedData.summary && cachedData.summary.models) {
-                models = cachedData.summary.models;
-            } else if (cachedData && cachedData.models) {
+            const cachedData = monitorCache.getCachedData('modelsStatus');
+            if (cachedData && cachedData.models) {
                 const modelList = [];
                 for (const [name, status] of Object.entries(cachedData.models)) {
                     modelList.push({
@@ -1837,24 +1743,8 @@ export class GPUMonitorModule {
                 }
                 models = modelList;
             } else {
-                const token = window.authManager ? window.authManager.getToken() : null;
-                const headers = {};
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                }
-
-                const response = await fetch('/api/python/models/status', {
-                    method: 'GET',
-                    headers,
-                    timeout: 5000
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-                if (result.success) {
+                const result = await monitorCache.getModelsStatus();
+                if (result && result.success) {
                     const modelList = [];
                     for (const [name, status] of Object.entries(result.models)) {
                         modelList.push({
@@ -1868,7 +1758,7 @@ export class GPUMonitorModule {
                     }
                     models = modelList;
                 } else {
-                    throw new Error(result.error || 'Failed to get models');
+                    throw new Error(result?.error || 'Failed to get models');
                 }
             }
 

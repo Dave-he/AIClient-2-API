@@ -148,7 +148,9 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
             model,
             isStream
         });
-    } catch (e) { /* 静默失败，不影响主流程 */ }
+    } catch (e) {
+        logger.debug('[ContentHandler] onContentGenerated hook failed:', e?.message || e);
+    }
 }
 
 function _extractModelAndStreamInfo(req, requestBody, fromProvider) {

@@ -194,7 +194,9 @@ async function gracefulShutdown() {
     // 停止 TLS sidecar
     try {
         await getTLSSidecar().stop();
-    } catch { /* ignore */ }
+    } catch (err) {
+        logger.debug('[Server] TLS sidecar stop error:', err?.message || err);
+    }
 
     if (serverInstance) {
         serverInstance.close(() => {

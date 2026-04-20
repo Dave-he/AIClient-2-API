@@ -561,12 +561,14 @@ function setupSignalHandlers() {
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-        logger.error('[Master] Unhandled rejection at:', promise, 'reason:', reason);
-        
-        // 检查是否为可重试的网络错误
-        if (reason && isRetryableNetworkError(reason)) {
-            logger.warn('[Master] Network error in promise rejection, continuing operation...');
-            return; // 不退出程序，继续运行
+        if (reason instanceof Error) {
+            logger.error('[Master] Unhandled rejection at:', promise, 'reason:', reason.message);
+            if (isRetryableNetworkError(reason)) {
+                logger.warn('[Master] Network error in promise rejection, continuing operation...');
+                return;
+            }
+        } else {
+            logger.error('[Master] Unhandled rejection with non-Error reason:', reason);
         }
     });
 }

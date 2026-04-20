@@ -199,7 +199,7 @@ function updateTimeDisplay() {
  */
 async function loadProvidersStatic() {
     try {
-        const data = await window.apiClient.get('/api/providers/static');
+        const data = await window.monitorCache.getProvidersStatic();
         if (!data || !data.supportedProviders) return;
 
         const { supportedProviders } = data;
@@ -234,7 +234,7 @@ async function loadProvidersStatic() {
  */
 async function loadProvidersDynamic() {
     try {
-        const data = await window.apiClient.get('/api/providers/dynamic');
+        const data = await window.monitorCache.getProvidersDynamic();
         if (!data || !data.providers) return;
 
         renderProviders(data.providers, cachedSupportedProviders);
@@ -249,13 +249,14 @@ async function loadProvidersDynamic() {
  */
 async function loadProviders(forceRefreshSupported = false) {
     try {
-        // 如果强制刷新或静态数据尚未更新，先加载静态数据
         if (forceRefreshSupported === true || !isStaticProviderConfigsUpdated || !cachedSupportedProviders) {
-            await loadProvidersStatic();
+            await Promise.all([
+                loadProvidersStatic(),
+                loadProvidersDynamic()
+            ]);
+        } else {
+            await loadProvidersDynamic();
         }
-        
-        // 加载动态数据
-        await loadProvidersDynamic();
     } catch (error) {
         console.error('Failed to load providers:', error);
     }

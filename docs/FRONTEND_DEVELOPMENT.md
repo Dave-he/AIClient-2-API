@@ -8,10 +8,13 @@ AIClient-2-API 前端采用现代 Vue 3 技术栈：
 
 | 技术 | 说明 | 版本 |
 |------|------|------|
-| **Vue 3** | 前端框架 | 3.x |
-| **Vue Router** | 路由管理 | 4.x |
-| **Vite** | 构建工具 | 5.x |
-| **Tailwind CSS** | CSS 框架 | 3.x |
+| **Vue 3** | 前端框架 | 3.4+ |
+| **Vue Router** | 路由管理 | 4.2+ |
+| **Vite** | 构建工具 | 8.0+ |
+| **Element Plus** | UI 组件库 | 2.5+ |
+| **Vue I18n** | 国际化 | 9.9+ |
+| **Axios** | HTTP 请求 | 1.6+ |
+| **Tailwind CSS** | CSS 框架 | 3.4+ |
 
 ### 1.2 新旧前端
 
@@ -19,8 +22,28 @@ AIClient-2-API 前端采用现代 Vue 3 技术栈：
 
 | 系统 | 技术 | 位置 | 说明 |
 |------|------|------|------|
-| **新前端** | Vue 3 + Vite | `src/` | 推荐使用，现代化架构 |
+| **新前端** | Vue 3 + Vite | `app-vue/` | 推荐使用，现代化架构，可独立运行 |
 | **旧前端** | 原生 JS + Web Components | `static/` | 保留兼容，逐步迁移 |
+
+### 1.3 独立运行
+
+Vue 前端可以完全独立于后端运行，方便前端开发调试：
+
+```bash
+# 进入 Vue 项目目录
+cd app-vue
+
+# 安装依赖
+npm install
+
+# 配置环境变量
+cp .env.example .env
+
+# 启动开发服务器
+npm run dev
+
+# 访问 http://localhost:5173
+```
 
 ---
 
@@ -29,60 +52,81 @@ AIClient-2-API 前端采用现代 Vue 3 技术栈：
 ### 2.1 新前端结构（Vue 3）
 
 ```
-src/
-├── assets/                 # 静态资源
-│   └── vue.svg
-├── components/            # 组件
-│   ├── Header.vue         # 页头
-│   ├── Layout.vue         # 布局
-│   ├── Loading.vue        # 加载
-│   ├── Modal.vue          # 模态框
-│   ├── ModelTag.vue       # 模型标签
-│   ├── ProviderCard.vue   # 提供商卡片
-│   ├── ProviderNode.vue   # 提供商节点
-│   ├── Sidebar.vue        # 侧边栏
-│   ├── StatCard.vue       # 统计卡片
-│   └── Toast.vue          # 提示
-├── composables/           # 组合式函数
-│   ├── useApi.js          # API 调用
-│   ├── useAuth.js         # 认证
-│   ├── useConfig.js       # 配置
-│   ├── useCustomModels.js # 自定义模型
-│   ├── useDashboard.js    # 仪表板
-│   ├── useGPUMonitor.js   # GPU 监控
-│   ├── useLogs.js         # 日志
-│   ├── usePlugins.js      # 插件
-│   ├── useProviders.js    # 提供商
-│   └── useStats.js        # 统计
-├── router/                # 路由
-│   └── index.js
-├── views/                 # 页面
-│   ├── config/            # 配置页面
-│   │   ├── Config.vue
-│   │   ├── CustomModels.vue
-│   │   └── UploadConfig.vue
-│   ├── core/              # 核心页面
-│   │   ├── Dashboard.vue
-│   │   ├── Login.vue
-│   │   └── NotFound.vue
-│   ├── guide/             # 指南页面
-│   │   ├── Guide.vue
-│   │   └── Tutorial.vue
-│   ├── plugins/           # 插件页面
-│   │   ├── Potluck.vue
-│   │   └── PotluckUser.vue
-│   ├── providers/         # 提供商页面
-│   │   └── GPUMonitor.vue
-│   ├── stats/             # 统计页面
-│   │   ├── ModelUsageStats.vue
-│   │   └── Usage.vue
-│   └── tools/             # 工具页面
-│       ├── Logs.vue
-│       ├── Plugins.vue
-│       └── TestAPI.vue
-├── App.vue                # 根组件
-├── main.js                # 入口文件
-└── style.css              # 全局样式
+app-vue/
+├── src/                      # 源代码
+│   ├── components/           # Vue 组件
+│   │   ├── Header.vue        # 页头（语言/主题切换）
+│   │   ├── Layout.vue       # 布局容器
+│   │   ├── Loading.vue      # 加载状态
+│   │   ├── Modal.vue        # 模态框
+│   │   ├── ModelTag.vue     # 模型标签
+│   │   ├── ProviderCard.vue # 提供商卡片
+│   │   ├── ProviderNode.vue # 提供商节点状态
+│   │   ├── Sidebar.vue      # 侧边栏导航
+│   │   ├── StatCard.vue     # 统计卡片
+│   │   └── Toast.vue        # 消息提示
+│   ├── composables/         # 组合式函数
+│   │   ├── index.js         # 导出入口
+│   │   ├── useApi.js        # API 调用封装
+│   │   ├── useAppState.js   # 应用状态管理
+│   │   ├── useAuth.js       # 认证逻辑
+│   │   ├── useConfig.js     # 配置管理
+│   │   ├── useCustomModels.js # 自定义模型
+│   │   ├── useDashboard.js  # 仪表板数据
+│   │   ├── useGPUMonitor.js # GPU 监控
+│   │   ├── useLoading.js    # 加载状态
+│   │   ├── useLogs.js       # 日志管理
+│   │   ├── usePlugins.js    # 插件管理
+│   │   ├── useProviders.js  # 提供商管理
+│   │   └── useStats.js      # 统计数据
+│   ├── views/                # 页面视图
+│   │   ├── core/            # 核心页面
+│   │   │   ├── Dashboard.vue # 仪表板
+│   │   │   ├── Login.vue    # 登录页
+│   │   │   └── NotFound.vue # 404 页面
+│   │   ├── config/          # 配置页面
+│   │   │   ├── Config.vue   # 配置管理
+│   │   │   ├── CustomModels.vue # 自定义模型
+│   │   │   └── UploadConfig.vue # 配置上传
+│   │   ├── providers/       # 提供商页面
+│   │   │   ├── Providers.vue # 提供商列表
+│   │   │   └── GPUMonitor.vue # GPU 监控
+│   │   ├── stats/           # 统计页面
+│   │   │   ├── Usage.vue    # 用量统计
+│   │   │   └── ModelUsageStats.vue # 模型统计
+│   │   ├── plugins/         # 插件页面
+│   │   │   ├── Potluck.vue  # 大锅饭管理
+│   │   │   └── PotluckUser.vue # 用户管理
+│   │   ├── guide/           # 指南页面
+│   │   │   ├── Guide.vue    # 使用指南
+│   │   │   └── Tutorial.vue # 教程
+│   │   └── tools/           # 工具页面
+│   │       ├── Logs.vue     # 日志查看
+│   │       ├── Plugins.vue  # 插件管理
+│   │       └── TestAPI.vue  # API 测试
+│   ├── router/              # 路由配置
+│   │   └── index.js         # 路由定义（含权限守卫）
+│   ├── locales/             # 国际化
+│   │   ├── index.js         # i18n 配置
+│   │   ├── zh-CN.json       # 中文翻译
+│   │   └── en.json          # 英文翻译
+│   ├── utils/               # 工具函数
+│   │   ├── api.js           # API 客户端
+│   │   ├── chart.js         # 图表配置
+│   │   ├── error-handler.js # 错误处理
+│   │   ├── logger.js        # 日志工具
+│   │   ├── performance.js   # 性能监控
+│   │   └── request-cache.js # 请求缓存
+│   ├── App.vue              # 根组件
+│   ├── main.js              # 应用入口
+│   └── style.css            # 全局样式
+├── dist/                    # 构建输出
+├── vite.config.js           # Vite 配置
+├── package.json             # 依赖管理
+├── tailwind.config.js       # Tailwind 配置
+├── postcss.config.js        # PostCSS 配置
+├── .env.example             # 环境变量示例
+└── README.md                # 项目文档
 ```
 
 ### 2.2 旧前端结构（原生 JS）
@@ -106,32 +150,65 @@ static/
 
 ## 3. 新前端开发（Vue 3）
 
+---
+
+## 3. 新前端开发（Vue 3）
+
 ### 3.1 快速开始
 
-#### 安装依赖
+#### 独立运行（推荐开发方式）
+
+Vue 前端可以完全独立运行，不需要启动后端服务：
 
 ```bash
+# 1. 进入 Vue 项目目录
+cd app-vue
+
+# 2. 安装依赖
 npm install
+
+# 3. 配置环境变量
+cp .env.example .env
+# 编辑 .env 设置 VITE_API_BASE_URL（后端 API 地址）
+
+# 4. 启动开发服务器
+npm run dev
+
+# 5. 访问 http://localhost:5173
 ```
 
-#### 开发模式
+#### 环境变量说明
+
+创建 `.env` 文件配置开发环境：
+
+```env
+# 开发服务器端口
+VITE_PORT=5173
+
+# 后端 API 地址（用于代理）
+VITE_API_BASE_URL=http://localhost:3000
+
+# 预览服务器端口
+VITE_PREVIEW_PORT=9090
+```
+
+#### 与后端联调
+
+如果需要与后端联调，确保后端服务已启动：
 
 ```bash
+# 终端 1：启动后端服务（在项目根目录）
 npm run dev
-```
 
-访问 http://localhost:5173
+# 终端 2：启动 Vue 前端（在 app-vue 目录）
+cd app-vue && npm run dev
+```
 
 #### 构建生产版本
 
 ```bash
-npm run build
-```
-
-#### 预览构建结果
-
-```bash
-npm run preview
+npm run build    # 构建到 dist/ 目录
+npm run preview  # 预览构建结果
 ```
 
 ### 3.2 路由配置

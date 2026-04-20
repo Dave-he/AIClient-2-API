@@ -562,7 +562,14 @@ export async function getProviderStatus(config, options = {}) {
         if (providerPoolManager && providerPoolManager.providerPools) {
             providerPools = providerPoolManager.providerPools;
         } else if (filePath) {
-            const fileExists = await fs.promises.access(filePath, fs.constants.F_OK).then(() => true).catch(() => false);
+            const fileExists = await (async () => {
+                try {
+                    await fs.promises.access(filePath, fs.constants.F_OK);
+                    return true;
+                } catch {
+                    return false;
+                }
+            })();
             if (fileExists) {
                 const poolsData = await fs.promises.readFile(filePath, 'utf-8');
                 providerPools = JSON.parse(poolsData);

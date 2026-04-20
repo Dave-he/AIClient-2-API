@@ -2282,22 +2282,17 @@ async function loadModelsListForSwitch(modal) {
         let currentModel = null;
 
         const { monitorCache } = await import('./monitor-cache.js');
-        const cachedData = monitorCache.getCachedData();
+        const cachedData = monitorCache.getCachedData('modelsStatus');
 
         if (cachedData && cachedData.models) {
             modelsObj = cachedData.models;
         } else {
-            const response = await fetch(`/api/python/models/status`, {
-                method: 'GET',
-                timeout: 10000
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            const result = await monitorCache.getModelsStatus();
+            if (result && result.success) {
+                modelsObj = result.models || {};
+            } else {
+                throw new Error(result?.error || 'Failed to get models status');
             }
-
-            const data = await response.json();
-            modelsObj = data?.models || {};
         }
 
         const modelsList = Object.entries(modelsObj).map(([name, status]) => ({
@@ -2305,13 +2300,14 @@ async function loadModelsListForSwitch(modal) {
             ...status
         }));
 
-        if (cachedData && cachedData.summary) {
-            if (cachedData.summary.running_model) {
-                currentModel = typeof cachedData.summary.running_model === 'string'
-                    ? cachedData.summary.running_model
-                    : cachedData.summary.running_model.name || null;
-            } else if (cachedData.summary.models) {
-                const runningModels = cachedData.summary.models.filter(m => m.running);
+        const cachedSummary = monitorCache.getCachedData('summary');
+        if (cachedSummary && cachedSummary.running_model) {
+            if (cachedSummary.running_model) {
+                currentModel = typeof cachedSummary.running_model === 'string'
+                    ? cachedSummary.running_model
+                    : cachedSummary.running_model.name || null;
+            } else if (cachedSummary.models) {
+                const runningModels = cachedSummary.models.filter(m => m.running);
                 currentModel = runningModels.length > 0 ? runningModels[0].name : null;
             }
         } else {

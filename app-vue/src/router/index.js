@@ -4,15 +4,20 @@ const loadView = (view) => {
   return () => import(/* webpackChunkName: "view-[request]" */ `@/views/${view}.vue`);
 };
 
-const loadLayout = (layout) => {
-  return () => import(/* webpackChunkName: "layout-[request]" */ `@/components/${layout}.vue`);
+const prefetchViewMap = {
+  Dashboard: () => import('@/views/core/Dashboard.vue'),
+  Guide: () => import('@/views/guide/Guide.vue'),
+  Config: () => import('@/views/config/Config.vue'),
+  Providers: () => import('@/views/providers/Providers.vue')
 };
+
+import Layout from '@/components/Layout.vue';
 
 const routes = [
   {
     path: '/',
     name: 'Layout',
-    component: loadLayout('Layout'),
+    component: Layout,
     meta: { requiresAuth: true },
     children: [
       {
@@ -139,6 +144,7 @@ router.beforeEach((to, from, next) => {
 
 router.afterEach((to) => {
   if (to.meta.prefetch) {
+    prefetchViewMap[to.name]?.();
     document.dispatchEvent(new CustomEvent('route-prefetch', { detail: to.name }));
   }
 });

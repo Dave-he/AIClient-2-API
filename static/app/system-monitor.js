@@ -356,25 +356,9 @@ export class SystemMonitor {
         if (!container) return;
 
         try {
-            const token = window.authManager ? window.authManager.getToken() : null;
-            const headers = {};
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-
-            const response = await fetch(`/api/python-gpu/status`, {
-                method: 'GET',
-                headers,
-                timeout: 5000
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
-            if (!result.success) {
-                throw new Error(result.error || 'Failed to get GPU status');
+            const result = await window.monitorCache.getGpuStatus();
+            if (!result || !result.success) {
+                throw new Error(result?.error || 'Failed to get GPU status');
             }
             const data = result;
             this.pythonGpuConnected = data.status === 'available';
@@ -814,25 +798,9 @@ export class SystemMonitor {
         if (!container) return;
 
         try {
-            const token = window.authManager ? window.authManager.getToken() : null;
-            const headers = {};
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-
-            const response = await fetch(`/api/python-gpu/status`, {
-                method: 'GET',
-                headers,
-                timeout: 5000
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
-            if (!result.success) {
-                throw new Error(result.error || 'Failed to get GPU status');
+            const result = await window.monitorCache.getGpuStatus();
+            if (!result || !result.success) {
+                throw new Error(result?.error || 'Failed to get GPU status');
             }
             const data = result;
             this.renderGpuStatus(data, container);
@@ -840,10 +808,10 @@ export class SystemMonitor {
             if (data.status === 'available') {
                 const utilization = data.utilization || 0;
                 const temperature = data.temperature || 0;
-                
+
                 this.addToHistory(this.gpuHistoryData, utilization);
                 this.addToHistory(this.gpuTempHistoryData, temperature);
-                
+
                 const gpuValEl1 = document.getElementById('gpuValue');
                 if (gpuValEl1) gpuValEl1.textContent = `${utilization}%`;
             }
