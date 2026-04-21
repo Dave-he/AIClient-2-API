@@ -45,7 +45,8 @@ function invalidateControllerCaches() {
     monitorSummaryCache.timestamp = 0;
 }
 
-export async function preloadControllerData() {
+export async function preloadControllerData(options = {}) {
+    const { silent = false } = options;
     logger.info('[Controller Cache] Starting preload of controller data...');
     const startTime = Date.now();
     
@@ -56,13 +57,14 @@ export async function preloadControllerData() {
     }
     
     try {
+        const controllerOptions = { timeout: 10000, retries: 1, silent: true };
         const [gpuData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
-            callPythonController('/manage/gpu', 'GET', null, headers).catch(() => null),
-            callPythonController('/manage/models', 'GET', null, headers).catch(() => null),
-            callPythonController('/manage/queue', 'GET', null, headers).catch(() => null),
-            callPythonController('/manage/models/summary', 'GET', null, headers).catch(() => null),
-            callPythonController('/health', 'GET', null, headers).catch(() => null),
-            callPythonController('/manage/service/status', 'GET', null, headers).catch(() => null)
+            callPythonController('/manage/gpu', 'GET', null, headers, controllerOptions).catch(() => null),
+            callPythonController('/manage/models', 'GET', null, headers, controllerOptions).catch(() => null),
+            callPythonController('/manage/queue', 'GET', null, headers, controllerOptions).catch(() => null),
+            callPythonController('/manage/models/summary', 'GET', null, headers, controllerOptions).catch(() => null),
+            callPythonController('/health', 'GET', null, headers, controllerOptions).catch(() => null),
+            callPythonController('/manage/service/status', 'GET', null, headers, controllerOptions).catch(() => null)
         ]);
 
         const now = Date.now();
@@ -146,32 +148,68 @@ function buildHeaders(req) {
     return headers;
 }
 
-async function callPythonController(endpoint, method = 'GET', body = null, headers = {}) {
+/**
+ * Call Python Controller API with timeout and retry support
+ * @param {string} endpoint - API endpoint path
+ * @param {string} method - HTTP method
+ * @param {object|null} body - Request body
+ * @param {object} headers - Request headers
+ * @param {object} options - Additional options
+ * @param {number} options.timeout - Request timeout in ms (default: 10000)
+ * @param {number} options.retries - Number of retries on failure (default: 1)
+ * @param {boolean} options.silent - Suppress error logs (default: false)
+ */
+async function callPythonController(endpoint, method = 'GET', body = null, headers = {}, options = {}) {
+    const { timeout = 10000, retries = 1, silent = false } = options;
     const controllerBaseUrl = () => getControllerBaseUrl();
     const url = `${controllerBaseUrl()}${endpoint}`;
     
-    try {
-        const response = await fetch(url, {
-            method,
-            headers: {
-                'Content-Type': 'application/json',
-                ...headers
-            },
-            body: body ? JSON.stringify(body) : null
-        });
+    const makeRequest = async (attempt) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
         
-        if (!response.ok) {
-            const errorText = await response.text();
-            logger.error(`[Python Controller API] Request failed: ${method} ${url} - ${response.status} ${errorText}`);
-            throw new Error(`HTTP error! status: ${response.status}`);
+        try {
+            const response = await fetch(url, {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...headers
+                },
+                body: body ? JSON.stringify(body) : null,
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                if (!silent) {
+                    logger.error(`[Python Controller API] Request failed: ${method} ${url} - ${response.status} ${errorText}`);
+                }
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            
+            // Check if we should retry
+            if (attempt < retries && (error.name === 'AbortError' || error.message === 'fetch failed')) {
+                logger.debug(`[Python Controller API] Retrying ${method} ${url} (attempt ${attempt + 1}/${retries + 1})`);
+                await new Promise(resolve => setTimeout(resolve, 100 * attempt)); // Exponential backoff
+                return makeRequest(attempt + 1);
+            }
+            
+            if (!silent) {
+                const level = attempt > 0 ? 'warn' : 'error';
+                logger[level](`[Python Controller API] Error calling ${method} ${url}: ${error.message}`);
+            }
+            throw error;
         }
-        
-        const data = await response.json();
-        return data;
-    } catch (error) {
-        logger.error(`[Python Controller API] Error calling ${method} ${url}: ${error.message}`);
-        throw error;
-    }
+    };
+    
+    return makeRequest(0);
 }
 
 export async function getGPUStatusData(req) {
@@ -181,16 +219,18 @@ export async function getGPUStatusData(req) {
     }
 
     const headers = buildHeaders(req);
-    const data = await callPythonController('/manage/gpu', 'GET', null, headers);
-    gpuCache.data = data;
-    gpuCache.timestamp = now;
-    return data;
+    const data = await callPythonController('/manage/gpu', 'GET', null, headers, { silent: true }).catch(() => null);
+    if (data) {
+        gpuCache.data = data;
+        gpuCache.timestamp = now;
+    }
+    return data || gpuCache.data;
 }
 
 export async function handleGetVLLMModels(req, res) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController('/v1/models', 'GET', null, headers);
+        const data = await callPythonController('/v1/models', 'GET', null, headers, { timeout: 15000 });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
@@ -244,15 +284,16 @@ export async function handleGetMonitorSummary(req, res) {
         }
 
         const historyParams = timeRange ? `?time_range=${timeRange}&count=60` : '?count=60';
+        const controllerOptions = { timeout: 10000, retries: 1, silent: true };
 
         const [gpuData, gpuHistoryData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
-            gpuCacheValid ? Promise.resolve(gpuCache.data) : callPythonController('/manage/gpu', 'GET', null, headers).catch(() => null),
-            callPythonController(`/manage/gpu/history${historyParams}`, 'GET', null, headers).catch(() => null),
-            modelsCacheValid ? Promise.resolve(modelsCache.data) : callPythonController('/manage/models', 'GET', null, headers).catch(() => null),
-            queueCacheValid ? Promise.resolve(queueCache.data) : callPythonController('/manage/queue', 'GET', null, headers).catch(() => null),
-            callPythonController('/manage/models/summary', 'GET', null, headers).catch(() => null),
-            callPythonController('/health', 'GET', null, headers).catch(() => null),
-            callPythonController('/manage/service/status', 'GET', null, headers).catch(() => null)
+            gpuCacheValid ? Promise.resolve(gpuCache.data) : callPythonController('/manage/gpu', 'GET', null, headers, controllerOptions).catch(() => null),
+            callPythonController(`/manage/gpu/history${historyParams}`, 'GET', null, headers, controllerOptions).catch(() => null),
+            modelsCacheValid ? Promise.resolve(modelsCache.data) : callPythonController('/manage/models', 'GET', null, headers, controllerOptions).catch(() => null),
+            queueCacheValid ? Promise.resolve(queueCache.data) : callPythonController('/manage/queue', 'GET', null, headers, controllerOptions).catch(() => null),
+            callPythonController('/manage/models/summary', 'GET', null, headers, controllerOptions).catch(() => null),
+            callPythonController('/health', 'GET', null, headers, controllerOptions).catch(() => null),
+            callPythonController('/manage/service/status', 'GET', null, headers, controllerOptions).catch(() => null)
         ]);
 
         if (!gpuCacheValid && gpuData) {
@@ -301,7 +342,7 @@ export async function handleGetMonitorSummary(req, res) {
 export async function handleGetModelStatus(req, res) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController('/manage/models', 'GET', null, headers);
+        const data = await callPythonController('/manage/models', 'GET', null, headers, { silent: true });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, models: data }));
     } catch (error) {
@@ -314,7 +355,7 @@ export async function handleGetModelStatus(req, res) {
 export async function handleGetModelSummary(req, res) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController('/manage/models/summary', 'GET', null, headers);
+        const data = await callPythonController('/manage/models/summary', 'GET', null, headers, { silent: true });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
@@ -327,7 +368,7 @@ export async function handleGetModelSummary(req, res) {
 export async function handleStartModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController(`/manage/models/${modelName}/start`, 'POST', null, headers);
+        const data = await callPythonController(`/manage/models/${modelName}/start`, 'POST', null, headers, { timeout: 60000 });
         invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -341,7 +382,7 @@ export async function handleStartModel(req, res, modelName) {
 export async function handleStopModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController(`/manage/models/${modelName}/stop`, 'POST', null, headers);
+        const data = await callPythonController(`/manage/models/${modelName}/stop`, 'POST', null, headers, { timeout: 60000 });
         invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -355,7 +396,7 @@ export async function handleStopModel(req, res, modelName) {
 export async function handleSwitchModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController(`/manage/models/${modelName}/switch?test_enabled=false`, 'POST', null, headers);
+        const data = await callPythonController(`/manage/models/${modelName}/switch?test_enabled=false`, 'POST', null, headers, { timeout: 120000 });
         invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -386,7 +427,7 @@ export async function handleGetGPUHistory(req, res) {
         
         const headers = buildHeaders(req);
         
-        const data = await callPythonController(`/manage/gpu/history${queryString}`, 'GET', null, headers);
+        const data = await callPythonController(`/manage/gpu/history${queryString}`, 'GET', null, headers, { silent: true });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
@@ -406,11 +447,13 @@ export async function handleGetQueueStatus(req, res) {
         }
 
         const headers = buildHeaders(req);
-        const data = await callPythonController('/manage/queue', 'GET', null, headers);
-        queueCache.data = data;
-        queueCache.timestamp = now;
+        const data = await callPythonController('/manage/queue', 'GET', null, headers, { silent: true }).catch(() => null);
+        if (data) {
+            queueCache.data = data;
+            queueCache.timestamp = now;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'MISS' });
-        res.end(JSON.stringify({ success: true, queue: data }));
+        res.end(JSON.stringify({ success: true, queue: data || queueCache.data }));
     } catch (error) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: { message: error.message } }));
@@ -428,11 +471,13 @@ export async function handleGetModelsStatus(req, res) {
         }
 
         const headers = buildHeaders(req);
-        const data = await callPythonController('/manage/models', 'GET', null, headers);
-        modelsCache.data = data;
-        modelsCache.timestamp = now;
+        const data = await callPythonController('/manage/models', 'GET', null, headers, { silent: true }).catch(() => null);
+        if (data) {
+            modelsCache.data = data;
+            modelsCache.timestamp = now;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'MISS' });
-        res.end(JSON.stringify({ success: true, models: data }));
+        res.end(JSON.stringify({ success: true, models: data || modelsCache.data }));
     } catch (error) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: { message: error.message } }));
@@ -443,7 +488,7 @@ export async function handleGetModelsStatus(req, res) {
 export async function handleGetHealthStatus(req, res) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController('/health', 'GET', null, headers);
+        const data = await callPythonController('/health', 'GET', null, headers, { silent: true });
         const controllerBaseUrl = getControllerBaseUrl();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data, controllerUrl: controllerBaseUrl }));

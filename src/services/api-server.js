@@ -414,7 +414,7 @@ async function startServer() {
         logger.info(`  • UI Management Console: http://${CONFIG.HOST}:${CONFIG.SERVER_PORT}/`);
 
         // Auto-open browser to UI (only if host is 0.0.0.0 or 127.0.0.1)
-        // if (CONFIG.HOST === '0.0.0.0' || CONFIG.HOST === '127.0.0.1') {
+        if (CONFIG.HOST === '0.0.0.0' || CONFIG.HOST === '127.0.0.1') {
             try {
                 const open = (await import('open')).default;
                 // 作为子进程启动时，需要更长的延迟确保服务完全就绪
@@ -435,7 +435,7 @@ async function startServer() {
             } catch (err) {
                 logger.info(`[UI] Login page available at: http://${CONFIG.HOST}:${CONFIG.SERVER_PORT}/login.html`);
             }
-        // }
+        }
 
         if (CONFIG.CRON_REFRESH_TOKEN) {
             logger.info(`  • Cron Near Minutes: ${CONFIG.CRON_NEAR_MINUTES}`);

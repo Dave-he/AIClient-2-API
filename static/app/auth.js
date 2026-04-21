@@ -79,16 +79,6 @@ class AuthManager {
     }
 
     isTokenValid() {
-        const token = this.getToken();
-        const expiry = this.getTokenExpiry();
-
-        if (!token) return false;
-
-        if (expiry && Date.now() > expiry) {
-            this.clearToken();
-            return false;
-        }
-
         return true;
     }
 
@@ -286,26 +276,22 @@ class ApiClient {
  * 初始化认证检查
  */
 async function initAuth() {
-    const authManager = new AuthManager();
-    
-    // 检查是否已经有有效的token
-    if (authManager.isTokenValid()) {
-        // 验证token是否仍然有效（使用validate-token接口）
-        try {
-            const apiClient = new ApiClient();
-            await apiClient.get('/validate-token');
+    try {
+        const response = await fetch('/api/validate-token', {
+            method: 'GET',
+            credentials: 'include'
+        });
+
+        const data = await response.json();
+        if (data.valid) {
             return true;
-        } catch (error) {
-            // Token无效，清除并重定向到登录页
-            authManager.clearToken();
-            window.location.href = '/login.html';
-            return false;
         }
-    } else {
-        // 没有有效token，重定向到登录页
-        window.location.href = '/login.html';
-        return false;
+    } catch (error) {
+        console.warn('Token validation failed:', error);
     }
+
+    window.location.href = '/login.html';
+    return false;
 }
 
 /**
