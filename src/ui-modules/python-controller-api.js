@@ -343,7 +343,7 @@ export async function handleStopModel(req, res, modelName) {
 export async function handleSwitchModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController(`/manage/models/${modelName}/switch`, 'POST', null, headers);
+        const data = await callPythonController(`/manage/models/${modelName}/switch?test_enabled=false`, 'POST', null, headers);
         invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));

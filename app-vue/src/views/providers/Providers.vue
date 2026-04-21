@@ -578,7 +578,7 @@ const switchModel = async () => {
   isSwitching.value = true
   try {
     const response = await apiClient.post(
-      formatPath(API_PATHS.PYTHON.TEST.SWITCH_AND_TEST, { modelName: selectedModel.value })
+      formatPath(API_PATHS.PYTHON.MODELS.SWITCH, { modelName: selectedModel.value })
     )
     
     if (response.data.success) {
