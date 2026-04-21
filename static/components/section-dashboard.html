@@ -1,6 +1,10 @@
 <link rel="stylesheet" href="components/section-dashboard.css">
 <!-- Dashboard Section -->
-<section id="dashboard" class="section active" aria-labelledby="dashboard-title">
+<section
+    id="dashboard"
+    class="section active"
+    aria-labelledby="dashboard-title"
+>
     <h2 id="dashboard-title" data-i18n="dashboard.title">系统概览</h2>
     <div class="dashboard-top-row">
         <div class="stats-grid">
@@ -9,104 +13,14 @@
                     <i class="fas fa-clock"></i>
                 </div>
                 <div class="stat-info">
-                    <h3 id="uptime" class="skeleton-text uptime-value" style="width: 100px; height: 1.5rem; margin-bottom: 0.25rem;">--</h3>
+                    <h3
+                        id="uptime"
+                        class="skeleton-text uptime-value"
+                        style="width: 100px; height: 1.5rem; margin-bottom: 0.25rem"
+                    >
+                        --
+                    </h3>
                     <p data-i18n="dashboard.uptime">运行时间</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Python服务端GPU监控面板 -->
-    <div class="python-gpu-monitor">
-        <div class="system-info-header">
-            <h3><i class="fas fa-server"></i> <span data-i18n="dashboard.pythonGpuMonitor">Python服务端GPU监控</span></h3>
-            <div class="panel-controls">
-                <div class="connection-status" id="pythonGpuConnectionStatus">
-                    <span class="status-badge offline"><i class="fas fa-circle"></i> <span>未连接</span></span>
-                </div>
-                <button id="refreshPythonGpuBtn" class="btn btn-outline btn-sm" data-i18n-title="common.refresh" title="刷新">
-                    <i class="fas fa-sync-alt"></i>
-                </button>
-            </div>
-        </div>
-        
-        <!-- Python GPU 统计卡片 -->
-        <div class="python-gpu-stats">
-            <div class="python-stat-item">
-                <div class="python-stat-icon gpu skeleton" style="width: 40px; height: 40px;"></div>
-                <div class="python-stat-content">
-                    <span class="python-stat-value skeleton-text" id="pythonGpuUtilization" style="width: 60px; height: 1.25rem;">--</span>
-                    <span class="python-stat-label" data-i18n="dashboard.gpuUtilization">GPU使用率</span>
-                </div>
-            </div>
-            <div class="python-stat-item">
-                <div class="python-stat-icon memory skeleton" style="width: 40px; height: 40px;"></div>
-                <div class="python-stat-content">
-                    <span class="python-stat-value skeleton-text" id="pythonGpuMemory" style="width: 60px; height: 1.25rem;">--</span>
-                    <span class="python-stat-label" data-i18n="dashboard.gpuMemory">显存使用</span>
-                </div>
-            </div>
-            <div class="python-stat-item">
-                <div class="python-stat-icon temp skeleton" style="width: 40px; height: 40px;"></div>
-                <div class="python-stat-content">
-                    <span class="python-stat-value skeleton-text" id="pythonGpuTemp" style="width: 60px; height: 1.25rem;">--</span>
-                    <span class="python-stat-label" data-i18n="dashboard.gpuTemperature">温度</span>
-                </div>
-            </div>
-            <div class="python-stat-item">
-                <div class="python-stat-icon power skeleton" style="width: 40px; height: 40px;"></div>
-                <div class="python-stat-content">
-                    <span class="python-stat-value skeleton-text" id="pythonGpuPower" style="width: 60px; height: 1.25rem;">--</span>
-                    <span class="python-stat-label" data-i18n="dashboard.gpuPower">功耗</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Python GPU 折线图 -->
-        <div class="python-gpu-chart-area">
-            <div class="chart-controls">
-                <div class="chart-type-tabs">
-                    <button class="chart-type-tab active" data-python-chart-type="utilization">使用率</button>
-                    <button class="chart-type-tab" data-python-chart-type="memory">显存</button>
-                    <button class="chart-type-tab" data-python-chart-type="temperature">温度</button>
-                    <button class="chart-type-tab" data-python-chart-type="all">总览</button>
-                </div>
-                <div class="time-range-tabs gpu-time-range">
-                    <button class="time-range-tab active" data-python-time-range="hour">1小时</button>
-                    <button class="time-range-tab" data-python-time-range="day">1天</button>
-                    <button class="time-range-tab" data-python-time-range="week">1周</button>
-                </div>
-            </div>
-            <canvas id="pythonGpuChart"></canvas>
-            <div class="python-chart-legend" id="pythonGpuChartLegend">
-                <div class="legend-item"><span class="legend-color gpu-util"></span><span>GPU使用率</span></div>
-                <div class="legend-item"><span class="legend-color gpu-mem"></span><span>显存使用率</span></div>
-                <div class="legend-item"><span class="legend-color gpu-temp"></span><span>GPU温度</span></div>
-            </div>
-        </div>
-
-        <!-- Python GPU 详细信息 -->
-        <div class="python-gpu-details">
-            <div class="python-gpu-info">
-                <div class="info-row">
-                    <div class="info-item">
-                        <span class="info-label"><i class="fas fa-tag"></i> <span data-i18n="dashboard.gpuName">GPU型号</span></span>
-                        <span class="info-value skeleton-text" id="pythonGpuName" style="width: 150px;">--</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label"><i class="fas fa-hdd"></i> <span data-i18n="dashboard.totalMemory">总显存</span></span>
-                        <span class="info-value skeleton-text" id="pythonGpuTotalMemory" style="width: 80px;">--</span>
-                    </div>
-                </div>
-                <div class="info-row">
-                    <div class="info-item">
-                        <span class="info-label"><i class="fas fa-chart-bar"></i> <span data-i18n="dashboard.usedMemory">已用显存</span></span>
-                        <span class="info-value skeleton-text" id="pythonGpuUsedMemory" style="width: 80px;">--</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label"><i class="fas fa-chart-line"></i> <span data-i18n="dashboard.availableMemory">可用显存</span></span>
-                        <span class="info-value skeleton-text" id="pythonGpuAvailableMemory" style="width: 80px;">--</span>
-                    </div>
                 </div>
             </div>
         </div>
@@ -115,18 +29,29 @@
     <!-- Token使用趋势面板 -->
     <div class="token-trend-panel">
         <div class="system-info-header">
-            <h3><i class="fas fa-line-chart"></i> <span data-i18n="dashboard.tokenTrend">Token使用趋势</span></h3>
+            <h3>
+                <i class="fas fa-line-chart"></i> <span
+                    data-i18n="dashboard.tokenTrend"
+                >Token使用趋势</span>
+            </h3>
             <div class="time-range-tabs">
-                <button class="time-range-tab active" data-time-range="hour">最近一小时</button>
-                <button class="time-range-tab" data-time-range="day">最近一天</button>
-                <button class="time-range-tab" data-time-range="week">最近一周</button>
+                <button class="time-range-tab active" data-time-range="hour">
+                    最近一小时
+                </button>
+                <button class="time-range-tab" data-time-range="day">
+                    最近一天
+                </button>
+                <button class="time-range-tab" data-time-range="week">
+                    最近一周
+                </button>
             </div>
         </div>
         <div class="token-chart-area">
             <canvas id="tokenTrendChart"></canvas>
         </div>
         <div class="token-chart-toolbar">
-            <span class="token-chart-hint">默认突出总 Token，点击图例可切换查看输入、输出或全部对比</span>
+            <span class="token-chart-hint"
+            >默认突出总 Token，点击图例可切换查看输入、输出或全部对比</span>
         </div>
         <div class="token-chart-legend" id="tokenChartLegend">
             <div class="legend-item" data-token-series="total">
@@ -153,85 +78,161 @@
         <div class="system-info-header">
             <h3 data-i18n="dashboard.systemInfo">系统信息</h3>
             <div class="update-controls">
-                <div id="versionSelectWrapper" style="display: none; margin-right: 8px;">
-                    <select id="versionSelect" class="form-control select-sm" style="height: 32px; padding: 0 8px; font-size: 13px; min-width: 120px;">
+                <div
+                    id="versionSelectWrapper"
+                    style="display: none; margin-right: 8px"
+                >
+                    <select
+                        id="versionSelect"
+                        class="form-control select-sm"
+                        style="height: 32px; padding: 0 8px; font-size: 13px; min-width: 120px"
+                    >
                         <!-- Versions will be loaded here -->
                     </select>
                 </div>
-                <button id="checkUpdateBtn" class="btn btn-outline btn-sm" data-i18n-title="dashboard.update.checkTitle" title="检查更新">
-                    <i class="fas fa-sync-alt"></i> <span data-i18n="dashboard.update.check">检查更新</span>
+                <button
+                    id="checkUpdateBtn"
+                    class="btn btn-outline btn-sm"
+                    data-i18n-title="dashboard.update.checkTitle"
+                    title="检查更新"
+                >
+                    <i class="fas fa-sync-alt"></i> <span
+                        data-i18n="dashboard.update.check"
+                    >检查更新</span>
                 </button>
-                <button id="performUpdateBtn" class="btn btn-primary btn-sm" style="display: none;" data-i18n-title="dashboard.update.performTitle" title="执行更新">
-                    <i class="fas fa-download"></i> <span data-i18n="dashboard.update.perform">立即更新</span>
+                <button
+                    id="performUpdateBtn"
+                    class="btn btn-primary btn-sm"
+                    style="display: none"
+                    data-i18n-title="dashboard.update.performTitle"
+                    title="执行更新"
+                >
+                    <i class="fas fa-download"></i> <span
+                        data-i18n="dashboard.update.perform"
+                    >立即更新</span>
                 </button>
             </div>
         </div>
         <div class="info-grid">
             <div class="info-item">
                 <span class="info-label">
-                    <i class="fas fa-tag"></i> <span data-i18n="dashboard.version">版本号</span>
+                    <i class="fas fa-tag"></i> <span
+                        data-i18n="dashboard.version"
+                    >版本号</span>
                 </span>
                 <div class="version-display-wrapper">
-                    <span class="info-value skeleton-text" id="appVersion" style="width: 80px;">--</span>
-                    <span class="update-badge" id="updateBadge" style="display: none;">
-                        <i class="fas fa-arrow-up"></i> <span id="latestVersionText">--</span>
+                    <span
+                        class="info-value skeleton-text"
+                        id="appVersion"
+                        style="width: 80px"
+                    >--</span>
+                    <span
+                        class="update-badge"
+                        id="updateBadge"
+                        style="display: none"
+                    >
+                        <i class="fas fa-arrow-up"></i> <span
+                            id="latestVersionText"
+                        >--</span>
                     </span>
                 </div>
             </div>
             <div class="info-item">
                 <span class="info-label">
-                    <i class="fas fa-code"></i> <span data-i18n="dashboard.nodeVersion">Node.js版本</span>
+                    <i class="fas fa-code"></i> <span
+                        data-i18n="dashboard.nodeVersion"
+                    >Node.js版本</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value skeleton-text" id="nodeVersion" style="width: 80px;">--</span>
+                    <span
+                        class="info-value skeleton-text"
+                        id="nodeVersion"
+                        style="width: 80px"
+                    >--</span>
                 </div>
             </div>
             <div class="info-item">
                 <span class="info-label">
-                    <i class="fas fa-clock"></i> <span data-i18n="dashboard.serverTime">服务器时间</span>
+                    <i class="fas fa-clock"></i> <span
+                        data-i18n="dashboard.serverTime"
+                    >服务器时间</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value skeleton-text" id="serverTime" style="width: 150px;">--</span>
+                    <span
+                        class="info-value skeleton-text"
+                        id="serverTime"
+                        style="width: 150px"
+                    >--</span>
                 </div>
             </div>
             <div class="info-item">
                 <span class="info-label">
-                    <i class="fas fa-desktop"></i> <span data-i18n="dashboard.platform">操作系统</span>
+                    <i class="fas fa-desktop"></i> <span
+                        data-i18n="dashboard.platform"
+                    >操作系统</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value skeleton-text" id="platformInfo" style="width: 100px;">--</span>
+                    <span
+                        class="info-value skeleton-text"
+                        id="platformInfo"
+                        style="width: 100px"
+                    >--</span>
                 </div>
             </div>
             <div class="info-item">
                 <span class="info-label">
-                    <i class="fas fa-memory"></i> <span data-i18n="dashboard.memoryUsage">内存使用</span>
+                    <i class="fas fa-memory"></i> <span
+                        data-i18n="dashboard.memoryUsage"
+                    >内存使用</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value skeleton-text" id="memoryUsage" style="width: 120px;">--</span>
+                    <span
+                        class="info-value skeleton-text"
+                        id="memoryUsage"
+                        style="width: 120px"
+                    >--</span>
                 </div>
             </div>
             <div class="info-item">
                 <span class="info-label">
-                    <i class="fas fa-microchip"></i> <span data-i18n="dashboard.cpuUsage">CPU 使用</span>
+                    <i class="fas fa-microchip"></i> <span
+                        data-i18n="dashboard.cpuUsage"
+                    >CPU 使用</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value skeleton-text" id="cpuUsage" style="width: 60px;">--</span>
+                    <span
+                        class="info-value skeleton-text"
+                        id="cpuUsage"
+                        style="width: 60px"
+                    >--</span>
                 </div>
             </div>
             <div class="info-item">
                 <span class="info-label">
-                    <i class="fas fa-cogs"></i> <span data-i18n="dashboard.serviceMode">运行模式</span>
+                    <i class="fas fa-cogs"></i> <span
+                        data-i18n="dashboard.serviceMode"
+                    >运行模式</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value skeleton-text" id="serviceMode" style="width: 80px;">--</span>
+                    <span
+                        class="info-value skeleton-text"
+                        id="serviceMode"
+                        style="width: 80px"
+                    >--</span>
                 </div>
             </div>
             <div class="info-item">
                 <span class="info-label">
-                    <i class="fas fa-microchip"></i> <span data-i18n="dashboard.processPid">进程 PID</span>
+                    <i class="fas fa-microchip"></i> <span
+                        data-i18n="dashboard.processPid"
+                    >进程 PID</span>
                 </span>
                 <div class="version-display-wrapper">
-                <span class="info-value skeleton-text" id="processPid" style="width: 60px;">--</span>
+                    <span
+                        class="info-value skeleton-text"
+                        id="processPid"
+                        style="width: 60px"
+                    >--</span>
                 </div>
             </div>
         </div>
@@ -240,9 +241,19 @@
     <!-- Provider Nodes Status Panel -->
     <div class="provider-status-panel">
         <div class="system-info-header">
-            <h3><i class="fas fa-network-wired"></i> <span data-i18n="dashboard.providerStatus">提供商节点状态</span></h3>
-            <button id="refreshProviderStatusBtn" class="btn btn-outline btn-sm" data-i18n-title="common.refresh" title="刷新">
-                <i class="fas fa-sync-alt"></i> <span data-i18n="common.refresh">刷新</span>
+            <h3>
+                <i class="fas fa-network-wired"></i> <span
+                    data-i18n="dashboard.providerStatus"
+                >提供商节点状态</span>
+            </h3>
+            <button
+                id="refreshProviderStatusBtn"
+                class="btn btn-outline btn-sm"
+                data-i18n-title="common.refresh"
+                title="刷新"
+            >
+                <i class="fas fa-sync-alt"></i> <span data-i18n="common.refresh"
+                >刷新</span>
             </button>
         </div>
         <div id="providerStatusGrid" class="provider-status-grid">
@@ -254,22 +265,251 @@
         </div>
     </div>
 
+    <!-- Python服务端GPU监控面板 -->
+    <div class="python-gpu-monitor">
+        <div class="system-info-header">
+            <h3>
+                <i class="fas fa-server"></i> <span
+                    data-i18n="dashboard.pythonGpuMonitor"
+                >Python服务端GPU监控</span>
+            </h3>
+            <div class="panel-controls">
+                <div class="connection-status" id="pythonGpuConnectionStatus">
+                    <span class="status-badge offline"><i
+                            class="fas fa-circle"
+                        ></i> <span>未连接</span></span>
+                </div>
+                <button
+                    id="refreshPythonGpuBtn"
+                    class="btn btn-outline btn-sm"
+                    data-i18n-title="common.refresh"
+                    title="刷新"
+                >
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Python GPU 统计卡片 -->
+        <div class="python-gpu-stats">
+            <div class="python-stat-item">
+                <div
+                    class="python-stat-icon gpu skeleton"
+                    style="width: 40px; height: 40px"
+                >
+                </div>
+                <div class="python-stat-content">
+                    <span
+                        class="python-stat-value skeleton-text"
+                        id="pythonGpuUtilization"
+                        style="width: 60px; height: 1.25rem"
+                    >--</span>
+                    <span
+                        class="python-stat-label"
+                        data-i18n="dashboard.gpuUtilization"
+                    >GPU使用率</span>
+                </div>
+            </div>
+            <div class="python-stat-item">
+                <div
+                    class="python-stat-icon memory skeleton"
+                    style="width: 40px; height: 40px"
+                >
+                </div>
+                <div class="python-stat-content">
+                    <span
+                        class="python-stat-value skeleton-text"
+                        id="pythonGpuMemory"
+                        style="width: 60px; height: 1.25rem"
+                    >--</span>
+                    <span
+                        class="python-stat-label"
+                        data-i18n="dashboard.gpuMemory"
+                    >显存使用</span>
+                </div>
+            </div>
+            <div class="python-stat-item">
+                <div
+                    class="python-stat-icon temp skeleton"
+                    style="width: 40px; height: 40px"
+                >
+                </div>
+                <div class="python-stat-content">
+                    <span
+                        class="python-stat-value skeleton-text"
+                        id="pythonGpuTemp"
+                        style="width: 60px; height: 1.25rem"
+                    >--</span>
+                    <span
+                        class="python-stat-label"
+                        data-i18n="dashboard.gpuTemperature"
+                    >温度</span>
+                </div>
+            </div>
+            <div class="python-stat-item">
+                <div
+                    class="python-stat-icon power skeleton"
+                    style="width: 40px; height: 40px"
+                >
+                </div>
+                <div class="python-stat-content">
+                    <span
+                        class="python-stat-value skeleton-text"
+                        id="pythonGpuPower"
+                        style="width: 60px; height: 1.25rem"
+                    >--</span>
+                    <span
+                        class="python-stat-label"
+                        data-i18n="dashboard.gpuPower"
+                    >功耗</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Python GPU 折线图 -->
+        <div class="python-gpu-chart-area">
+            <div class="chart-controls">
+                <div class="chart-type-tabs">
+                    <button
+                        class="chart-type-tab active"
+                        data-python-chart-type="utilization"
+                    >
+                        使用率
+                    </button>
+                    <button
+                        class="chart-type-tab"
+                        data-python-chart-type="memory"
+                    >
+                        显存
+                    </button>
+                    <button
+                        class="chart-type-tab"
+                        data-python-chart-type="temperature"
+                    >
+                        温度
+                    </button>
+                    <button class="chart-type-tab" data-python-chart-type="all">
+                        总览
+                    </button>
+                </div>
+                <div class="time-range-tabs gpu-time-range">
+                    <button
+                        class="time-range-tab active"
+                        data-python-time-range="hour"
+                    >
+                        1小时
+                    </button>
+                    <button class="time-range-tab" data-python-time-range="day">
+                        1天
+                    </button>
+                    <button
+                        class="time-range-tab"
+                        data-python-time-range="week"
+                    >
+                        1周
+                    </button>
+                </div>
+            </div>
+            <canvas id="pythonGpuChart"></canvas>
+            <div class="python-chart-legend" id="pythonGpuChartLegend">
+                <div class="legend-item">
+                    <span class="legend-color gpu-util"></span><span
+                    >GPU使用率</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color gpu-mem"></span><span
+                    >显存使用率</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color gpu-temp"></span><span
+                    >GPU温度</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Python GPU 详细信息 -->
+        <div class="python-gpu-details">
+            <div class="python-gpu-info">
+                <div class="info-row">
+                    <div class="info-item">
+                        <span class="info-label"><i class="fas fa-tag"></i>
+                            <span data-i18n="dashboard.gpuName"
+                            >GPU型号</span></span>
+                        <span
+                            class="info-value skeleton-text"
+                            id="pythonGpuName"
+                            style="width: 150px"
+                        >--</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label"><i class="fas fa-hdd"></i>
+                            <span data-i18n="dashboard.totalMemory"
+                            >总显存</span></span>
+                        <span
+                            class="info-value skeleton-text"
+                            id="pythonGpuTotalMemory"
+                            style="width: 80px"
+                        >--</span>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-item">
+                        <span class="info-label"><i
+                                class="fas fa-chart-bar"
+                            ></i> <span data-i18n="dashboard.usedMemory"
+                            >已用显存</span></span>
+                        <span
+                            class="info-value skeleton-text"
+                            id="pythonGpuUsedMemory"
+                            style="width: 80px"
+                        >--</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label"><i
+                                class="fas fa-chart-line"
+                            ></i> <span data-i18n="dashboard.availableMemory"
+                            >可用显存</span></span>
+                        <span
+                            class="info-value skeleton-text"
+                            id="pythonGpuAvailableMemory"
+                            style="width: 80px"
+                        >--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Advanced Information (Collapsible) -->
     <details class="dashboard-details" open>
         <summary class="dashboard-summary">
             <div class="summary-content">
                 <i class="fas fa-tools"></i>
-                <span data-i18n="dashboard.advancedInfo">高级信息 (路径路由与模型列表)</span>
-                <span class="expand-hint" data-i18n="dashboard.expandMore">展开更多</span>
+                <span data-i18n="dashboard.advancedInfo"
+                >高级信息 (路径路由与模型列表)</span>
+                <span class="expand-hint" data-i18n="dashboard.expandMore"
+                >展开更多</span>
             </div>
             <i class="fas fa-chevron-down caret-icon"></i>
         </summary>
 
         <!-- Path Routing Examples Panel -->
-        <div class="routing-examples-panel" style="margin-top: 1rem; border-top: none;">
-            <h3><i class="fas fa-route"></i> <span data-i18n="dashboard.routing.title">路径路由调用示例</span></h3>
-            <p class="routing-description" data-i18n="dashboard.routing.description">通过不同路径路由访问不同的AI模型提供商，支持灵活的模型切换</p>
-            
+        <div
+            class="routing-examples-panel"
+            style="margin-top: 1rem; border-top: none"
+        >
+            <h3>
+                <i class="fas fa-route"></i> <span
+                    data-i18n="dashboard.routing.title"
+                >路径路由调用示例</span>
+            </h3>
+            <p
+                class="routing-description"
+                data-i18n="dashboard.routing.description"
+            >
+                通过不同路径路由访问不同的AI模型提供商，支持灵活的模型切换
+            </p>
+
             <div class="routing-examples-grid">
                 <!-- 路径路由示例将由 routing-examples.js 动态渲染 -->
                 <div class="routing-examples-loading">
@@ -279,24 +519,41 @@
             </div>
 
             <div class="routing-tips">
-                <h4><i class="fas fa-lightbulb"></i> <span data-i18n="dashboard.routing.tips">使用提示</span></h4>
+                <h4>
+                    <i class="fas fa-lightbulb"></i> <span
+                        data-i18n="dashboard.routing.tips"
+                    >使用提示</span>
+                </h4>
                 <ul>
-                    <li data-i18n="dashboard.routing.tip1"><strong>即时切换:</strong> 通过修改URL路径即可切换不同的AI模型提供商</li>
-                    <li data-i18n="dashboard.routing.tip2"><strong>客户端配置:</strong> 在Cherry-Studio、NextChat、Cline等客户端中设置API端点为对应路径</li>
-                    <li data-i18n="dashboard.routing.tip3"><strong>跨协议调用:</strong> 支持OpenAI协议调用Claude模型，或Claude协议调用OpenAI模型</li>
+                    <li data-i18n="dashboard.routing.tip1">
+                        <strong>即时切换:</strong>
+                        通过修改URL路径即可切换不同的AI模型提供商
+                    </li>
+                    <li data-i18n="dashboard.routing.tip2">
+                        <strong>客户端配置:</strong>
+                        在Cherry-Studio、NextChat、Cline等客户端中设置API端点为对应路径
+                    </li>
+                    <li data-i18n="dashboard.routing.tip3">
+                        <strong>跨协议调用:</strong>
+                        支持OpenAI协议调用Claude模型，或Claude协议调用OpenAI模型
+                    </li>
                 </ul>
             </div>
 
             <!-- 可用模型列表 -->
             <div class="models-section">
-                <h4 class="models-section-title"><i class="fas fa-cube"></i> <span data-i18n="models.title">可用模型列表</span></h4>
+                <h4 class="models-section-title">
+                    <i class="fas fa-cube"></i> <span data-i18n="models.title"
+                    >可用模型列表</span>
+                </h4>
                 <div class="models-description">
                     <div class="highlight-note">
                         <i class="fas fa-info-circle"></i>
-                        <span data-i18n="models.note">点击模型名称可直接复制到剪贴板</span>
+                        <span data-i18n="models.note"
+                        >点击模型名称可直接复制到剪贴板</span>
                     </div>
                 </div>
-                
+
                 <!-- Models Container -->
                 <div class="models-container">
                     <div id="modelsList" class="models-list">
@@ -310,5 +567,4 @@
             </div>
         </div>
     </details>
-    
 </section>

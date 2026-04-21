@@ -16,8 +16,10 @@ export class MonitorCache {
         this._timeoutIncrement = 1000;
     }
 
-    async getSummary(forceRefresh = false) {
-        return this._getWithCache(API_PATHS.PYTHON.MONITOR.SUMMARY, 'summary', forceRefresh);
+    async getSummary(forceRefresh = false, timeRange = null) {
+        const cacheKey = timeRange ? `summary_${timeRange}` : 'summary';
+        const url = timeRange ? `${API_PATHS.PYTHON.MONITOR.SUMMARY}?time_range=${timeRange}` : API_PATHS.PYTHON.MONITOR.SUMMARY;
+        return this._getWithCache(url, cacheKey, forceRefresh);
     }
 
     async getDashboardSummary(forceRefresh = false) {

@@ -18,6 +18,11 @@ export class GPUMonitorModule {
         this.lastQueueData = null;
         this.i18n = window.i18n || { t: (key) => key };
         this._pendingUpdates = {};
+        this.selectedTimeRange = 'day';
+        this._refreshDebounceTimer = null;
+        this._refreshDebounceDelay = 1000;
+        this._lastRefreshTime = 0;
+        this._minRefreshInterval = 2000;
         this.init();
         this.setupEventBusListeners();
     }
@@ -42,7 +47,7 @@ export class GPUMonitorModule {
 
         window.addEventListener('componentsLoaded', () => {
             this.initGpuStatusElements();
-            this.refreshAllStatus(true);
+            this.debouncedRefresh(true);
         });
     }
 
@@ -249,7 +254,7 @@ export class GPUMonitorModule {
 
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible' && this.isCurrentSection('gpu-monitor')) {
-                this.refreshAllStatus(true);
+                this.debouncedRefresh();
             }
         });
 
@@ -263,6 +268,14 @@ export class GPUMonitorModule {
             });
         });
 
+        const timeRangeSelect = document.getElementById('timeRangeSelect');
+        if (timeRangeSelect) {
+            timeRangeSelect.addEventListener('change', (e) => {
+                this.selectedTimeRange = e.target.value;
+                this.refreshAllStatus(true);
+            });
+        }
+
         const saveConfigBtn = document.getElementById('saveConfigBtn');
         if (saveConfigBtn) {
             saveConfigBtn.addEventListener('click', () => this.saveConfig());
@@ -270,26 +283,41 @@ export class GPUMonitorModule {
     }
 
     setupEventBusListeners() {
+        let lastRefreshTime = 0;
+        const DEBOUNCE_MS = 1000;
+
+        const shouldRefresh = () => {
+            const now = Date.now();
+            if (now - lastRefreshTime < DEBOUNCE_MS) {
+                console.log('[GPUMonitor] Debouncing refresh, last refresh was', now - lastRefreshTime, 'ms ago');
+                return false;
+            }
+            lastRefreshTime = now;
+            return true;
+        };
+
         eventBus.on(EVENTS.CONFIG_UPDATED, () => {
             console.log('[GPUMonitor] Config updated, refreshing config');
             this.refreshConfig();
         });
-        
+
         eventBus.on(EVENTS.PROVIDERS_UPDATED, () => {
             console.log('[GPUMonitor] Providers updated');
-            if (this.shouldPoll()) {
+            if (this.shouldPoll() && shouldRefresh()) {
                 this.refreshAllStatus(true);
             }
         });
-        
+
         eventBus.on(EVENTS.MODELS_UPDATED, () => {
             console.log('[GPUMonitor] Models updated, refreshing models list');
-            this.refreshModelsList();
+            if (this.shouldPoll() && shouldRefresh()) {
+                this.refreshAllStatus(true);
+            }
         });
-        
+
         eventBus.on(EVENTS.CACHE_INVALIDATED, () => {
             console.log('[GPUMonitor] Cache invalidated, refreshing all status');
-            if (this.shouldPoll()) {
+            if (this.shouldPoll() && shouldRefresh()) {
                 this.refreshAllStatus(true);
             }
         });
@@ -775,7 +803,7 @@ export class GPUMonitorModule {
         this.stopPolling();
         this.pollingInterval = setInterval(() => {
             if (this.shouldPoll()) {
-                this.refreshAllStatus();
+                this.debouncedRefresh();
             }
         }, 30000);
     }
@@ -792,6 +820,15 @@ export class GPUMonitorModule {
         return activeSection?.id === sectionId;
     }
 
+    debouncedRefresh(force = false) {
+        if (this._refreshDebounceTimer) {
+            clearTimeout(this._refreshDebounceTimer);
+        }
+        this._refreshDebounceTimer = setTimeout(() => {
+            this.refreshAllStatus(force);
+        }, this._refreshDebounceDelay);
+    }
+
     async refreshAllStatus(forceRefresh = false) {
         if (this._isRefreshing) {
             return;
@@ -800,7 +837,7 @@ export class GPUMonitorModule {
         try {
             let data = null;
             try {
-                data = await monitorCache.getSummary(forceRefresh);
+                data = await monitorCache.getSummary(forceRefresh, this.selectedTimeRange);
             } catch (apiError) {
                 console.warn(`[GPUMonitor] API call failed: ${apiError.message}, showing mock data`);
                 this.showMockGpuStatus();
