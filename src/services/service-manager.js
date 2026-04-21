@@ -431,7 +431,25 @@ export async function getApiService(config, requestedModel = null, options = {})
             const customNameDisplay = serviceConfig.customName ? ` (${serviceConfig.customName})` : '';
             logger.info(`[API Service] Using pooled configuration for ${config.MODEL_PROVIDER}: ${serviceConfig.uuid}${customNameDisplay}${actualModelName ? ` (model: ${actualModelName})` : ''}`);
         } else {
-            const errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            const poolConfigs = config.providerPools?.[config.MODEL_PROVIDER];
+            let errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            
+            // 添加详细的诊断信息
+            if (!poolConfigs || poolConfigs.length === 0) {
+                errorMsg += `. Provider pool '${config.MODEL_PROVIDER}' is empty or not configured.`;
+            } else {
+                const healthyCount = poolConfigs.filter(p => p.isHealthy !== false && !p.isDisabled).length;
+                const totalCount = poolConfigs.length;
+                errorMsg += `. Pool has ${totalCount} node(s), but only ${healthyCount} healthy.`;
+            }
+            
+            // 添加配置建议
+            if (config.MODEL_PROVIDER === 'local-model') {
+                errorMsg += ` To use local models, please configure vLLM endpoints in configs/provider_pools.json or start the Python controller service.`;
+            } else {
+                errorMsg += ` Please check provider pool configuration in configs/provider_pools.json.`;
+            }
+            
             logger.error(errorMsg);
             throw new Error(errorMsg);
         }
@@ -507,7 +525,25 @@ export async function getApiServiceWithFallback(config, requestedModel = null, o
                 serviceConfig.MODEL_PROVIDER = actualProviderType;
             }
         } else {
-            const errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            const poolConfigs = config.providerPools?.[config.MODEL_PROVIDER];
+            let errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            
+            // 添加详细的诊断信息
+            if (!poolConfigs || poolConfigs.length === 0) {
+                errorMsg += `. Provider pool '${config.MODEL_PROVIDER}' is empty or not configured.`;
+            } else {
+                const healthyCount = poolConfigs.filter(p => p.isHealthy !== false && !p.isDisabled).length;
+                const totalCount = poolConfigs.length;
+                errorMsg += `. Pool has ${totalCount} node(s), but only ${healthyCount} healthy.`;
+            }
+            
+            // 添加配置建议
+            if (config.MODEL_PROVIDER === 'local-model') {
+                errorMsg += ` To use local models, please configure vLLM endpoints in configs/provider_pools.json or start the Python controller service.`;
+            } else {
+                errorMsg += ` Please check provider pool configuration in configs/provider_pools.json.`;
+            }
+            
             logger.error(errorMsg);
             throw new Error(errorMsg);
         }

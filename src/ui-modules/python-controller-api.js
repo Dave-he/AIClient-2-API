@@ -271,7 +271,7 @@ export async function handleGetModelSummary(req, res) {
 export async function handleStartModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController(`/manage/models/${encodeURIComponent(modelName)}/start`, 'POST', null, headers);
+        const data = await callPythonController(`/manage/models/${modelName}/start`, 'POST', null, headers);
         invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -285,7 +285,7 @@ export async function handleStartModel(req, res, modelName) {
 export async function handleStopModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController(`/manage/models/${encodeURIComponent(modelName)}/stop`, 'POST', null, headers);
+        const data = await callPythonController(`/manage/models/${modelName}/stop`, 'POST', null, headers);
         invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -299,7 +299,7 @@ export async function handleStopModel(req, res, modelName) {
 export async function handleSwitchModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController(`/manage/models/${encodeURIComponent(modelName)}/switch`, 'POST', null, headers);
+        const data = await callPythonController(`/manage/models/${modelName}/switch`, 'POST', null, headers);
         invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
@@ -401,7 +401,7 @@ export async function handleGetHealthStatus(req, res) {
 export async function handleTestModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController(`/v1/test/model/${encodeURIComponent(modelName)}`, 'POST', null, headers);
+        const data = await callPythonController(`/v1/test/model/${modelName}`, 'POST', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
@@ -414,7 +414,7 @@ export async function handleTestModel(req, res, modelName) {
 export async function handleGetModelTestReport(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController(`/v1/test/report/${encodeURIComponent(modelName)}`, 'GET', null, headers);
+        const data = await callPythonController(`/v1/test/report/${modelName}`, 'GET', null, headers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));
     } catch (error) {
@@ -440,7 +440,7 @@ export async function handleGetAllTestReports(req, res) {
 export async function handleSwitchAndTestModel(req, res, modelName) {
     try {
         const headers = buildHeaders(req);
-        const data = await callPythonController(`/v1/test/model/${encodeURIComponent(modelName)}/switch-and-test`, 'POST', null, headers);
+        const data = await callPythonController(`/v1/test/model/${modelName}/switch-and-test`, 'POST', null, headers);
         invalidateControllerCaches();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data }));

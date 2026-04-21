@@ -480,20 +480,16 @@ export async function handleGetProviderModels(req, res, currentConfig, providerP
     for (const type of allTypes) {
         // 本地模型始终只返回当前运行的模型（通过Python服务获取）
         if (type === MODEL_PROVIDER.LOCAL_MODEL) {
-            if (providerPoolManager && providerPools[type] && providerPools[type].length > 0) {
-                try {
-                    const nodeConfig = providerPools[type][0];
-                    const serviceAdapter = getServiceAdapter({ ...currentConfig, ...nodeConfig, MODEL_PROVIDER: type });
-                    if (typeof serviceAdapter.listModels === 'function') {
-                        const nativeModels = await serviceAdapter.listModels();
-                        const models = extractModelIdsFromNativeList(nativeModels, type);
-                        if (models && models.length > 0) {
-                            allModels[type] = models;
-                        }
-                    }
-                } catch (error) {
-                    logger.warn(`[UI API] Failed to get deployed models for ${type}:`, error.message);
+            try {
+                const { callPythonControllerRaw } = await import('../utils/python-controller.js');
+                const pythonModels = await callPythonControllerRaw('/manage/models', 'GET');
+                if (pythonModels && Object.keys(pythonModels).length > 0) {
+                    const modelIds = Object.keys(pythonModels);
+                    allModels[type] = modelIds;
+                    logger.info(`[UI API] Got ${modelIds.length} models from Python Controller for local-model`);
                 }
+            } catch (error) {
+                logger.warn(`[UI API] Failed to get models from Python Controller for ${type}:`, error.message);
             }
             continue;
         }

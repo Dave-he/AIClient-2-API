@@ -521,7 +521,7 @@ export class GPUMonitorModule {
         const secondaryMaxValue = secondaryValues.length ? Math.ceil(Math.max(100, ...secondaryValues) / 10) * 10 : 100;
 
         this.drawGrid(ctx, chartWidth, chartHeight, padding);
-        this.drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, secondaryMinValue, secondaryMaxValue, height);
+        this.drawAxes(ctx, chartWidth, chartHeight, padding, height, minValue, maxValue, secondaryMinValue, secondaryMaxValue);
         this.drawLines(ctx, chartWidth, chartHeight, padding, datasets, minValue, maxValue, secondaryMinValue, secondaryMaxValue, progress);
         this.drawPoints(ctx, chartWidth, chartHeight, padding, datasets, minValue, maxValue, secondaryMinValue, secondaryMaxValue);
         this.drawLegend(ctx, width, padding);
@@ -604,7 +604,7 @@ export class GPUMonitorModule {
         }
     }
 
-    drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, secondaryMinValue = 0, secondaryMaxValue = 100, height) {
+    drawAxes(ctx, chartWidth, chartHeight, padding, minValue, maxValue, secondaryMinValue = 0, secondaryMaxValue = 100) {
         ctx.strokeStyle = '#9ca3af';
         ctx.lineWidth = 2;
         
@@ -647,7 +647,7 @@ export class GPUMonitorModule {
         }
         
         ctx.save();
-        ctx.translate(20, height / 2);
+        ctx.translate(20, this.chart.height / 2);
         ctx.rotate(-Math.PI / 2);
         ctx.textAlign = 'center';
         ctx.fillText(this.i18n.t('gpuMonitor.value'), 0, 0);

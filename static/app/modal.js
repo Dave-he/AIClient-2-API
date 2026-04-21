@@ -2280,19 +2280,95 @@ async function loadModelsListForSwitch(modal) {
     try {
         let modelsObj = {};
         let currentModel = null;
+        let lastError = null;
 
         const { monitorCache } = await import('./monitor-cache.js');
+        
+        // Step 1: Try to get from cached modelsStatus
         const cachedData = monitorCache.getCachedData('modelsStatus');
-
-        if (cachedData && cachedData.models) {
+        if (cachedData && cachedData.models && typeof cachedData.models === 'object' && !Array.isArray(cachedData.models)) {
             modelsObj = cachedData.models;
+            console.log('[ModelSwitch] Loaded models from cache (modelsStatus)');
         } else {
-            const result = await monitorCache.getModelsStatus();
-            if (result && result.success) {
-                modelsObj = result.models || {};
-            } else {
-                throw new Error(result?.error || 'Failed to get models status');
+            // Step 2: Try to fetch from models status API
+            try {
+                const result = await monitorCache.getModelsStatus();
+                if (result && result.models && typeof result.models === 'object' && !Array.isArray(result.models)) {
+                    modelsObj = result.models;
+                    console.log('[ModelSwitch] Loaded models from API (/api/python/models/status)');
+                }
+            } catch (e) {
+                lastError = e.message;
+                console.log('[ModelSwitch] Failed to get models status, trying summary:', e.message);
             }
+        }
+
+        // Step 3: Fallback - try to get models from summary cache
+        if (Object.keys(modelsObj).length === 0) {
+            try {
+                const cachedSummary = monitorCache.getCachedData('modelsSummary');
+                if (cachedSummary && Array.isArray(cachedSummary.models)) {
+                    modelsObj = {};
+                    cachedSummary.models.forEach(model => {
+                        modelsObj[model.name] = {
+                            running: model.running || false,
+                            port: model.port || null,
+                            service: 'local',
+                            active_requests: 0,
+                            preloaded: model.preloaded || false,
+                            supports_images: model.supports_images || false,
+                            required_memory: model.required_memory || '',
+                            description: model.description || ''
+                        };
+                    });
+                    console.log('[ModelSwitch] Loaded models from cache (modelsSummary)');
+                }
+            } catch (e) {
+                lastError = e.message;
+                console.log('[ModelSwitch] Failed to get models from summary cache:', e.message);
+            }
+        }
+
+        // Step 4: Second fallback - directly fetch from summary API
+        if (Object.keys(modelsObj).length === 0) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                const summaryResponse = await fetch(`/api/python/models/summary`, {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                if (summaryResponse.ok) {
+                    const summaryData = await summaryResponse.json();
+                    if (summaryData && Array.isArray(summaryData.models)) {
+                        modelsObj = {};
+                        summaryData.models.forEach(model => {
+                            modelsObj[model.name] = {
+                                running: model.running || false,
+                                port: model.port || null,
+                                service: 'local',
+                                active_requests: 0,
+                                preloaded: model.preloaded || false,
+                                supports_images: model.supports_images || false,
+                                required_memory: model.required_memory || '',
+                                description: model.description || ''
+                            };
+                        });
+                        console.log('[ModelSwitch] Loaded models from API (/api/python/models/summary)');
+                    }
+                } else {
+                    lastError = `HTTP error: ${summaryResponse.status}`;
+                }
+            } catch (e) {
+                lastError = e.message;
+                console.log('[ModelSwitch] Failed to fetch models summary:', e.message);
+            }
+        }
+
+        // 确保 modelsObj 始终是对象
+        if (typeof modelsObj !== 'object' || modelsObj === null || Array.isArray(modelsObj)) {
+            modelsObj = {};
         }
 
         const modelsList = Object.entries(modelsObj).map(([name, status]) => ({
@@ -2312,10 +2388,13 @@ async function loadModelsListForSwitch(modal) {
             }
         } else {
             try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
                 const summaryResponse = await fetch(`/api/python/models/summary`, {
                     method: 'GET',
-                    timeout: 5000
+                    signal: controller.signal
                 });
+                clearTimeout(timeoutId);
                 if (summaryResponse.ok) {
                     const summaryData = await summaryResponse.json();
                     currentModel = summaryData?.running_model;
@@ -2325,7 +2404,7 @@ async function loadModelsListForSwitch(modal) {
             }
         }
 
-        renderModelSwitchPanel(container, modelsList, currentModel);
+        renderModelSwitchPanel(container, modelsList, currentModel, lastError);
     } catch (error) {
         console.log('[ModelSwitch] Failed to load models list:', error.message);
         container.innerHTML = `
@@ -2333,6 +2412,7 @@ async function loadModelsListForSwitch(modal) {
                     <i class="fas fa-exclamation-circle"></i>
                     <span>${t('modal.provider.loadModelsFailed')}</span>
                     <p class="hint">${t('modal.provider.loadModelsHint')}</p>
+                    ${lastError ? `<p class="error-detail">${escapeHtml(lastError)}</p>` : ''}
                 </div>
             `;
         }
@@ -2341,13 +2421,14 @@ async function loadModelsListForSwitch(modal) {
 /**
  * 渲染模型切换面板
  */
-function renderModelSwitchPanel(container, modelsList, currentModel) {
+function renderModelSwitchPanel(container, modelsList, currentModel, lastError) {
     if (modelsList.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-cube"></i>
                 <p>${t('modal.provider.noAvailableModels')}</p>
                 <p class="hint">${t('modal.provider.noAvailableModelsHint')}</p>
+                ${lastError ? `<p class="error-detail" style="color: var(--text-danger); font-size: 12px; margin-top: 10px;">${escapeHtml(lastError)}</p>` : ''}
             </div>
         `;
         return;

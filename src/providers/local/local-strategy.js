@@ -19,6 +19,10 @@ export class LocalApiServiceAdapter extends ApiServiceAdapter {
         return this.localApiService.listModels();
     }
 
+    async listRunningModels() {
+        return this.localApiService.listRunningModels();
+    }
+
     async refreshToken() {
         return Promise.resolve();
     }
