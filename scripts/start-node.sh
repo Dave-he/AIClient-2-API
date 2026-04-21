@@ -1,10 +1,9 @@
 #!/bin/bash
-
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$DIR")"
-PNPM = "pnpm"
+PNPM="pnpm"
 
-cdcd "$ROOT_DIR"
+cd "$ROOT_DIR"
 echo "Pulling latest changes..."
 git pull --rebase
 

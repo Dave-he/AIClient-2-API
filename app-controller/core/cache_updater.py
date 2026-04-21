@@ -62,7 +62,7 @@ class CacheUpdater:
                         "last_used": self.scheduler.get_model_last_used(model).isoformat() if self.scheduler.get_model_last_used(model) else None
                     }
                 cache_service.set("api:manage:models:status", status, ttl_seconds=10)
-                cache_service.set("api:v1:status", self._build_v1_status(), ttl_seconds=10)
+                cache_service.set("api:v1:status", await self._build_v1_status(), ttl_seconds=10)
                 logger.debug("Updated model status cache")
         except Exception as e:
             logger.error(f"Error updating model status cache: {str(e)}")
