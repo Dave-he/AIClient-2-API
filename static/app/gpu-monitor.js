@@ -699,8 +699,6 @@ export class GPUMonitorModule {
         if (this.currentChartType === 'memory' || this.currentChartType === 'all') {
             const rawData = this.gpuHistoryData.map(d => d.memory_utilization);
             datasets.push({
-            const rawData = this.gpuHistoryData.map(d => d.memory_utilization);
-            datasets.push({
                 data: this.downsampleData(rawData, maxPoints),
                 color: '#f59e0b',
                 label: t('gpuMonitor.memoryUtilization'),
