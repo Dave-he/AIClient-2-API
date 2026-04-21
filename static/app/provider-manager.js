@@ -25,7 +25,7 @@ let cachedSupportedProviders = null;
  */
 async function loadSystemInfo() {
     try {
-        const data = await window.apiClient.get('/api/system');
+        const data = await window.apiClient.get('/system');
 
         const appVersionEl = document.getElementById('appVersion');
         const nodeVersionEl = document.getElementById('nodeVersion');
@@ -98,7 +98,7 @@ async function loadSystemInfo() {
  */
 async function loadServiceModeInfo() {
     try {
-        const data = await window.apiClient.get('/api/service-mode');
+        const data = await window.apiClient.get('/service-mode');
         
         const serviceModeEl = document.getElementById('serviceMode');
         const processPidEl = document.getElementById('processPid');
@@ -3356,7 +3356,7 @@ async function checkUpdate(silent = false) {
             if (checkBtnText) checkBtnText.textContent = t('dashboard.update.checking');
         }
 
-        const data = await window.apiClient.get('/api/check-update');
+        const data = await window.apiClient.get('/check-update');
 
         // 处理版本列表
         if (versionSelect && data.availableVersions && data.availableVersions.length > 0) {

@@ -208,7 +208,7 @@ function initProviderSwitcher() {
                 providerItem.addEventListener('click', async () => {
                     try {
                         // 切换默认提供商
-                        const configData = await window.apiClient.get('/api/config');
+                        const configData = await window.apiClient.get('/config');
                         const newConfig = {
                             ...configData,
                             MODEL_PROVIDER: providerType
