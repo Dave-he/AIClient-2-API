@@ -133,6 +133,9 @@ async function fetchTokenStats(req) {
 
 async function fetchProvidersStatic(req, currentConfig, providerPoolManager) {
     try {
+        let resolve;
+        const promise = new Promise(r => resolve = r);
+
         const mockRes = {
             writeHead: () => {},
             end: (data) => {
@@ -144,14 +147,11 @@ async function fetchProvidersStatic(req, currentConfig, providerPoolManager) {
                 }
             }
         };
-        
-        let resolve;
-        const promise = new Promise(r => resolve = r);
-        
+
         const providerApi = await import('./provider-api.js');
         providerApi.handleGetProvidersStatic(req, mockRes, currentConfig, providerPoolManager)
             .then(() => {}).catch(() => resolve(null));
-        
+
         return promise;
     } catch (error) {
         logger.warn('[Dashboard API] Failed to get providers static data:', error.message);
@@ -161,6 +161,9 @@ async function fetchProvidersStatic(req, currentConfig, providerPoolManager) {
 
 async function fetchProvidersDynamic(req, currentConfig, providerPoolManager) {
     try {
+        let resolve;
+        const promise = new Promise(r => resolve = r);
+
         const mockRes = {
             writeHead: () => {},
             end: (data) => {
@@ -172,14 +175,11 @@ async function fetchProvidersDynamic(req, currentConfig, providerPoolManager) {
                 }
             }
         };
-        
-        let resolve;
-        const promise = new Promise(r => resolve = r);
-        
+
         const providerApi = await import('./provider-api.js');
         providerApi.handleGetProvidersDynamic(req, mockRes, currentConfig, providerPoolManager)
             .then(() => {}).catch(() => resolve(null));
-        
+
         return promise;
     } catch (error) {
         logger.warn('[Dashboard API] Failed to get providers dynamic data:', error.message);

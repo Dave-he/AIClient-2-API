@@ -184,6 +184,14 @@ function setupWorkerCommunication() {
         logger.info('[Worker] Disconnected from master, shutting down...');
         gracefulShutdown();
     });
+
+    // 检测父进程是否存活
+    setInterval(() => {
+        if (!process.connected) {
+            logger.warn('[Worker] Parent process disconnected, shutting down...');
+            gracefulShutdown();
+        }
+    }, 5000);
 }
 
 /**

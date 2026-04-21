@@ -82,9 +82,3 @@ export function clearLogs() {
 export function updateProviderStats(newStats) {
     providerStats = { ...providerStats, ...newStats };
 }
-
-// 导出清理函数
-export {
-    getLogCount,
-    clearOldLogs
-};

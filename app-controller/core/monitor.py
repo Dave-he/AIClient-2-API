@@ -22,7 +22,7 @@ class GPUMonitor:
         self._last_history_cleanup = datetime.min
         self._history_cleanup_interval = timedelta(minutes=5)
         self._cache_update_task: Optional[asyncio.Task] = None
-        self._cache_update_interval = 3.0  # 缓存更新间隔，单位秒
+        self._cache_update_interval = 2.0  # 缓存更新间隔，单位秒
     
     def _check_nvidia_smi(self) -> bool:
         try:
@@ -156,6 +156,53 @@ class GPUMonitor:
             "clock_mem": clock_mem,
             "memory_utilization": int(used_mb / total_mb * 100) if total_mb > 0 else 0
         }
+
+    def _get_gpu_status_sync(self) -> Optional[Dict]:
+        """同步获取GPU状态（用于定时保存历史数据）"""
+        if not self._nvidia_smi_available:
+            return None
+
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit,fan.speed,clocks.sm,clocks.mem", "--format=csv,noheader,nounits"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+
+            gpus = []
+            for line in result.stdout.strip().split('\n'):
+                gpu_info = self._parse_gpu_line(line)
+                if gpu_info:
+                    gpus.append(gpu_info)
+
+            if gpus:
+                primary_gpu = gpus[0]
+                return {
+                    "status": "available",
+                    "gpu_count": len(gpus),
+                    "name": primary_gpu["name"],
+                    "total_memory": primary_gpu["total_memory"],
+                    "used_memory": primary_gpu["used_memory"],
+                    "available_memory": primary_gpu["available_memory"],
+                    "temperature": primary_gpu["temperature"],
+                    "utilization": primary_gpu["utilization"],
+                    "power_draw": primary_gpu["power_draw"],
+                    "power_limit": primary_gpu["power_limit"],
+                    "power_percent": primary_gpu["power_percent"],
+                    "fan_speed": primary_gpu["fan_speed"],
+                    "clock_sm": primary_gpu["clock_sm"],
+                    "clock_mem": primary_gpu["clock_mem"],
+                    "memory_utilization": primary_gpu["memory_utilization"],
+                    "primary": primary_gpu,
+                    "all_gpus": gpus
+                }
+            return None
+        except Exception:
+            return None
     
     def get_gpu_status(self) -> Optional[Dict]:
         """直接从缓存返回GPU状态"""
@@ -275,15 +322,15 @@ class GPUMonitor:
     def save_gpu_history(self, max_points: Optional[int] = None):
         if not self._history_enabled:
             return False
-        
+
         if self._redis_client is None:
             return False
-        
+
         try:
-            status = self.get_gpu_status()
+            status = self._get_gpu_status_sync()
             if not status:
                 return False
-            
+
             if max_points is None:
                 max_points = self._calculate_max_history_points()
             
