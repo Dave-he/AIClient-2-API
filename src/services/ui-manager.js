@@ -687,7 +687,7 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
 
     // Python GPU status proxy endpoint (legacy - kept for backward compatibility)
     if (method === 'GET' && pathParam === '/api/python-gpu/status') {
-        return await handlePythonGpuStatus(req, res, currentConfig);
+        return await pythonControllerApi.handleGetGPUStatus(req, res);
     }
 
     // Models status proxy (proxy to /api/python/models/status)

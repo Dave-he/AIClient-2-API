@@ -8,29 +8,28 @@ export function getControllerBaseUrl() {
 const gpuCache = {
     data: null,
     timestamp: 0,
-    ttl: 5000
+    ttl: 30000
 };
 
 const queueCache = {
     data: null,
     timestamp: 0,
-    ttl: 5000
+    ttl: 30000
 };
 
 const modelsCache = {
     data: null,
     timestamp: 0,
-    ttl: 5000
+    ttl: 60000
 };
 
 const monitorSummaryCache = {
     data: null,
     timestamp: 0,
-    ttl: 5000
+    ttl: 30000
 };
 
-let refreshIntervalId = null;
-const DEFAULT_REFRESH_INTERVAL = 10000;
+const DEFAULT_REFRESH_INTERVAL = 30000;
 
 function invalidateControllerCaches() {
     gpuCache.data = null;
@@ -200,7 +199,7 @@ export async function handleGetVLLMModels(req, res) {
 export async function handleGetMonitorSummary(req, res) {
     try {
         const now = Date.now();
-        
+
         if (monitorSummaryCache.data && (now - monitorSummaryCache.timestamp) < monitorSummaryCache.ttl) {
             res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
             res.end(JSON.stringify({
@@ -212,16 +211,51 @@ export async function handleGetMonitorSummary(req, res) {
 
         const headers = buildHeaders(req);
         const controllerBaseUrl = getControllerBaseUrl();
-        
+
+        const staleThreshold = 5000;
+        const useStaleCache = (cache) => cache.data && (now - cache.timestamp) < cache.ttl + staleThreshold;
+
+        const [gpuCacheValid, queueCacheValid, modelsCacheValid] = [
+            useStaleCache(gpuCache),
+            useStaleCache(queueCache),
+            useStaleCache(modelsCache)
+        ];
+
+        const allCachesValid = gpuCacheValid && queueCacheValid && modelsCacheValid;
+
+        if (allCachesValid && monitorSummaryCache.data) {
+            const result = {
+                ...monitorSummaryCache.data,
+                timestamp: now
+            };
+            monitorSummaryCache.timestamp = now;
+            res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'STALE_REFRESH' });
+            res.end(JSON.stringify(result));
+            return true;
+        }
+
         const [gpuData, gpuHistoryData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
-            callPythonController('/manage/gpu', 'GET', null, headers).catch(() => null),
+            gpuCacheValid ? Promise.resolve(gpuCache.data) : callPythonController('/manage/gpu', 'GET', null, headers).catch(() => null),
             callPythonController('/manage/gpu/history?count=60', 'GET', null, headers).catch(() => null),
-            callPythonController('/manage/models', 'GET', null, headers).catch(() => null),
-            callPythonController('/manage/queue', 'GET', null, headers).catch(() => null),
+            modelsCacheValid ? Promise.resolve(modelsCache.data) : callPythonController('/manage/models', 'GET', null, headers).catch(() => null),
+            queueCacheValid ? Promise.resolve(queueCache.data) : callPythonController('/manage/queue', 'GET', null, headers).catch(() => null),
             callPythonController('/manage/models/summary', 'GET', null, headers).catch(() => null),
             callPythonController('/health', 'GET', null, headers).catch(() => null),
             callPythonController('/manage/service/status', 'GET', null, headers).catch(() => null)
         ]);
+
+        if (!gpuCacheValid && gpuData) {
+            gpuCache.data = gpuData;
+            gpuCache.timestamp = now;
+        }
+        if (!modelsCacheValid && modelsData) {
+            modelsCache.data = modelsData;
+            modelsCache.timestamp = now;
+        }
+        if (!queueCacheValid && queueData) {
+            queueCache.data = queueData;
+            queueCache.timestamp = now;
+        }
 
         if (gpuData && gpuHistoryData && gpuHistoryData.history) {
             gpuData.history = gpuHistoryData.history;

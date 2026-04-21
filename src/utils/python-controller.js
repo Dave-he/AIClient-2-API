@@ -16,7 +16,7 @@ function resolveControllerUrl() {
 
 let controllerUrl = null;
 
-const DEFAULT_TIMEOUT = 30000:
+const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_RETRY_DELAY = 1000;
 const DEFAULT_MAX_RETRIES = 1;
 

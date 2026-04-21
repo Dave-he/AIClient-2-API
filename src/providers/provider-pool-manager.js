@@ -2311,8 +2311,8 @@ export class ProviderPoolManager {
         };
         const serviceAdapter = getServiceAdapter(tempConfig);
 
-        // local-model 使用 listModels() (GET /v1/models) 进行健康检查
-        // 避免因 vLLM 服务器 API Key 配置不同导致的 401/403 错误
+        // local-model 使用 listRunningModels() (GET /manage/models) 进行健康检查
+        // 只返回当前运行的模型，确保 checkModelName 与当前运行模型保持一致
         if (baseProviderType === MODEL_PROVIDER.LOCAL_MODEL || providerType === 'local-model') {
             const healthCheckTimeout = 15000;
             const timeoutPromise = new Promise((_, reject) =>
@@ -2320,14 +2320,14 @@ export class ProviderPoolManager {
             );
             try {
                 const result = await Promise.race([
-                    serviceAdapter.listModels(),
+                    serviceAdapter.listRunningModels(),
                     timeoutPromise
                 ]);
                 const actualModelName = result?.data?.[0]?.id || modelName;
                 return { success: true, modelName: actualModelName, errorMessage: null };
             } catch (error) {
-                this._log('warn', `[HealthCheck] ${providerType} listModels failed: ${error?.message}`);
-                return { success: false, modelName, errorMessage: error?.message || 'listModels health check failed' };
+                this._log('warn', `[HealthCheck] ${providerType} listRunningModels failed: ${error?.message}`);
+                return { success: false, modelName, errorMessage: error?.message || 'listRunningModels health check failed' };
             }
         }
 

@@ -7,13 +7,13 @@ export class MonitorCache {
         this._timestamps = {};
         this._fetching = {};
         this._callbacks = {};
-        this._cacheTTL = 5000;
+        this._cacheTTL = 10000;
         this._preloadedData = {};
         
         // 重试配置
         this._maxRetries = 3;
-        this._initialTimeout = 3000;
-        this._timeoutIncrement = 2000;
+        this._initialTimeout = 2000;
+        this._timeoutIncrement = 1000;
     }
 
     async getSummary(forceRefresh = false) {
