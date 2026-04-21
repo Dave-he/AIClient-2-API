@@ -26,7 +26,8 @@ const modelsCache = {
 const monitorSummaryCache = {
     data: null,
     timestamp: 0,
-    ttl: 30000
+    ttl: 30000,
+    timeRange: null
 };
 
 const DEFAULT_REFRESH_INTERVAL = 30000;
@@ -91,7 +92,8 @@ export async function preloadControllerData() {
         
         monitorSummaryCache.data = result;
         monitorSummaryCache.timestamp = now;
-        
+        monitorSummaryCache.timeRange = null;
+
         const duration = Date.now() - startTime;
         logger.info(`[Controller Cache] Preload completed in ${duration}ms`);
         
@@ -204,12 +206,14 @@ export async function handleGetMonitorSummary(req, res) {
         const timeRange = url.searchParams.get('time_range');
 
         if (monitorSummaryCache.data && (now - monitorSummaryCache.timestamp) < monitorSummaryCache.ttl) {
-            res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
-            res.end(JSON.stringify({
-                ...monitorSummaryCache.data,
-                timestamp: now
-            }));
-            return true;
+            if (monitorSummaryCache.timeRange === timeRange) {
+                res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
+                res.end(JSON.stringify({
+                    ...monitorSummaryCache.data,
+                    timestamp: now
+                }));
+                return true;
+            }
         }
 
         const headers = buildHeaders(req);
@@ -226,7 +230,7 @@ export async function handleGetMonitorSummary(req, res) {
 
         const allCachesValid = gpuCacheValid && queueCacheValid && modelsCacheValid;
 
-        if (allCachesValid && monitorSummaryCache.data) {
+        if (allCachesValid && monitorSummaryCache.data && monitorSummaryCache.timeRange === timeRange) {
             const result = {
                 ...monitorSummaryCache.data,
                 timestamp: now
@@ -280,6 +284,7 @@ export async function handleGetMonitorSummary(req, res) {
 
         monitorSummaryCache.data = result;
         monitorSummaryCache.timestamp = now;
+        monitorSummaryCache.timeRange = timeRange;
 
         res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'MISS' });
         res.end(JSON.stringify(result));

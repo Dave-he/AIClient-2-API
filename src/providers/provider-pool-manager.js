@@ -2044,6 +2044,12 @@ export class ProviderPoolManager {
             for (const providerStatus of this.providerStatus[providerType]) {
                 const providerConfig = providerStatus.config;
 
+                // Skip manually disabled providers
+                if (providerConfig.isDisabled === true) {
+                    this._log('debug', `Skipping health check for ${providerConfig.uuid} (${providerType}): manually disabled`);
+                    continue;
+                }
+
                 // 如果提供商有 scheduledRecoveryTime 且未到恢复时间，跳过健康检查
                 if (providerConfig.scheduledRecoveryTime && !providerConfig.isHealthy) {
                     const recoveryTime = new Date(providerConfig.scheduledRecoveryTime);

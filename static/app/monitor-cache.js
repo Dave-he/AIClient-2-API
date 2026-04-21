@@ -33,19 +33,23 @@ export class MonitorCache {
     }
 
     async getGpuStatus(forceRefresh = false) {
-        return this._getWithCache(API_PATHS.PYTHON_GPU.STATUS, 'gpuStatus', forceRefresh);
+        const summary = await this.getSummary(forceRefresh);
+        return summary?.gpu ? { success: true, ...summary.gpu } : null;
     }
 
     async getServiceStatus(forceRefresh = false) {
-        return this._getWithCache(API_PATHS.PYTHON_GPU.SERVICE.STATUS, 'serviceStatus', forceRefresh);
+        const summary = await this.getSummary(forceRefresh);
+        return summary?.service ? { success: true, ...summary.service } : null;
     }
 
     async getHealth(forceRefresh = false) {
-        return this._getWithCache(API_PATHS.PYTHON.HEALTH, 'health', forceRefresh);
+        const summary = await this.getSummary(forceRefresh);
+        return summary?.health ? { success: true, ...summary.health } : null;
     }
 
     async getQueueStatus(forceRefresh = false) {
-        return this._getWithCache(API_PATHS.PYTHON.QUEUE.STATUS, 'queueStatus', forceRefresh);
+        const summary = await this.getSummary(forceRefresh);
+        return summary?.queue ? { success: true, queue: summary.queue } : null;
     }
 
     async getGpuConfig(forceRefresh = false) {

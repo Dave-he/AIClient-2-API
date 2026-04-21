@@ -29,9 +29,9 @@ export class GPUMonitorModule {
     init() {
         const initialize = () => {
             this.setupEventListeners();
+            this.initGpuStatusElements();
             this.preloadData();
             this.startPolling();
-            this.initGpuStatusElements();
         };
 
         if (document.readyState === 'loading') {
@@ -42,6 +42,7 @@ export class GPUMonitorModule {
 
         window.addEventListener('componentsLoaded', () => {
             this.initGpuStatusElements();
+            this.refreshAllStatus(true);
         });
     }
 
@@ -247,7 +248,7 @@ export class GPUMonitorModule {
         });
 
         document.addEventListener('visibilitychange', () => {
-            if (this.shouldPoll()) {
+            if (document.visibilityState === 'visible' && this.isCurrentSection('gpu-monitor')) {
                 this.refreshAllStatus(true);
             }
         });
@@ -301,7 +302,7 @@ export class GPUMonitorModule {
             }
             if (data.gpu.history && data.gpu.history.length > 0) {
                 this.gpuHistoryData = data.gpu.history.map(item => this.normalizeHistoryPoint(item));
-                this.updateChart();
+                this.scheduleChartUpdate();
             }
         }
         if (data.models) {
@@ -313,18 +314,20 @@ export class GPUMonitorModule {
     updateGpuStatusFromSocket(gpu) {
         if (!gpu) return;
 
-        const memoryPercent = gpu.memory_utilization || ((gpu.used_memory / gpu.total_memory) * 100);
-        const powerPercent = gpu.power_percent || (gpu.power_limit ? Math.round((gpu.power_draw / gpu.power_limit) * 100) : 0);
-        const usedGB = (gpu.used_memory / (1024**3)).toFixed(1);
-        const totalGB = (gpu.total_memory / (1024**3)).toFixed(1);
+        const usedMem = Number(gpu.used_memory) || 0;
+        const totalMem = Number(gpu.total_memory) || 0;
+        const memoryPercent = gpu.memory_utilization || (totalMem > 0 ? (usedMem / totalMem) * 100 : 0);
+        const powerPercent = gpu.power_percent || (gpu.power_limit > 0 ? Math.round((gpu.power_draw / gpu.power_limit) * 100) : 0);
+        const usedGB = (usedMem / (1024**3)).toFixed(1);
+        const totalGB = (totalMem / (1024**3)).toFixed(1);
 
         this.animateValue('memoryValue', `${usedGB} / ${totalGB} GB`);
         this.animateBar('memoryBar', memoryPercent);
         this.animateValue('memoryPercent', `${Math.round(memoryPercent)}%`);
 
-        this.animateValue('utilValue', `${gpu.utilization}%`);
-        this.animateBar('utilBar', gpu.utilization);
-        this.animateValue('utilPercent', `${gpu.utilization}%`);
+        this.animateValue('utilValue', `${gpu.utilization || 0}%`);
+        this.animateBar('utilBar', gpu.utilization || 0);
+        this.animateValue('utilPercent', `${gpu.utilization || 0}%`);
 
         this.animateValue('tempValue', `${gpu.temperature}°C`);
         this.updateTempColor(gpu.temperature);
@@ -773,9 +776,8 @@ export class GPUMonitorModule {
         this.pollingInterval = setInterval(() => {
             if (this.shouldPoll()) {
                 this.refreshAllStatus();
-                this.checkControllerConnection();
             }
-        }, 10000);
+        }, 30000);
     }
 
     stopPolling() {
@@ -796,8 +798,18 @@ export class GPUMonitorModule {
         }
         this._isRefreshing = true;
         try {
-            const data = await monitorCache.getSummary(forceRefresh);
-            
+            let data = null;
+            try {
+                data = await monitorCache.getSummary(forceRefresh);
+            } catch (apiError) {
+                console.warn(`[GPUMonitor] API call failed: ${apiError.message}, showing mock data`);
+                this.showMockGpuStatus();
+                this.showMockModelsStatus();
+                this.showMockQueueStatus();
+                this.showMockCurrentModel();
+                return;
+            }
+
             if (data && data.success) {
                 if (data.gpu) {
                     if (data.gpu.primary) {
@@ -809,11 +821,12 @@ export class GPUMonitorModule {
                     }
                     if (data.gpu.history && data.gpu.history.length > 0) {
                         this.gpuHistoryData = data.gpu.history.map(item => this.normalizeHistoryPoint(item));
-                        this.updateChart();
+                        this.scheduleChartUpdate();
                     }
                 }
                 if (data.models) {
                     this.lastModelsData = data.models;
+                    console.log('[GPUMonitor] Set lastModelsData from data.models:', Object.keys(data.models).length, 'models');
                 }
                 if (data.queue) {
                     const container = document.getElementById('queueStatusContent');
@@ -825,9 +838,16 @@ export class GPUMonitorModule {
                     this.renderCurrentModel();
                     if (data.summary.models) {
                         this.lastModelsData = data.summary.models;
+                        console.log('[GPUMonitor] Set lastModelsData from data.summary.models:', data.summary.models.length, 'models');
                     }
                 }
                 this.renderUnifiedModels();
+            } else {
+                console.warn('[GPUMonitor] API returned unsuccessful response, showing mock data');
+                this.showMockGpuStatus();
+                this.showMockModelsStatus();
+                this.showMockQueueStatus();
+                this.showMockCurrentModel();
             }
         } catch (error) {
             console.warn(`Failed to fetch monitor summary:`, error);
@@ -897,16 +917,8 @@ export class GPUMonitorModule {
         const placeholder = document.getElementById('iframePlaceholder');
 
         try {
-            const cachedData = monitorCache.getCachedData('health');
-            let healthData = cachedData;
-            let controllerBaseUrl = 'http://localhost:5000';
-
-            if (!healthData) {
-                healthData = await monitorCache.getHealth();
-                controllerBaseUrl = healthData?.controllerUrl || healthData?.url || 'http://localhost:5000';
-            } else {
-                controllerBaseUrl = healthData?.controllerUrl || healthData?.url || 'http://localhost:5000';
-            }
+            const healthData = await monitorCache.getHealth();
+            let controllerBaseUrl = healthData?.controllerUrl || healthData?.url || 'http://localhost:5000';
 
             if (healthData && (healthData.status === 'healthy' || healthData.success)) {
                 this.animateStatusChange(statusElement, true);
@@ -1070,8 +1082,12 @@ export class GPUMonitorModule {
 
     renderUnifiedModels() {
         const container = document.getElementById('quickSwitchContent');
-        if (!container) return;
+        if (!container) {
+            console.warn('[GPUMonitor] quickSwitchContent container not found');
+            return;
+        }
 
+        console.log('[GPUMonitor] Rendering unified models, data:', this.lastModelsData);
         this.renderQuickSwitch(this.lastModelsData, container);
     }
 
@@ -1832,6 +1848,8 @@ export class GPUMonitorModule {
     renderQuickSwitch(models, container) {
         const t = this.i18n.t.bind(this.i18n);
         const modelList = this.normalizeModelsForWorkbench(models);
+        console.log('[GPUMonitor] renderQuickSwitch - normalized models:', modelList.length, modelList);
+
         if (modelList.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -1924,15 +1942,15 @@ export class GPUMonitorModule {
 
     showMockGpuStatus() {
         const mockData = {
-            name: 'NVIDIA RTX PRO 6000 Blackwell Workstation Edition',
-            used_memory: 85.4 * 1024**3,
-            total_memory: 95.6 * 1024**3,
-            temperature: 27,
+            name: 'GPU未连接',
+            used_memory: 0,
+            total_memory: 0,
+            temperature: 0,
             utilization: 0,
-            power_draw: 45,
-            power_limit: 300,
-            fan_speed: 35,
-            clock_sm: 1500
+            power_draw: 0,
+            power_limit: 0,
+            fan_speed: 0,
+            clock_sm: 0
         };
         this.updateGpuStatusFromSocket(mockData);
     }

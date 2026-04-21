@@ -496,22 +496,37 @@ export async function handleGetProviderModels(req, res, currentConfig, providerP
 
         // 其他提供商：未认证用户只返回健康的已部署模型，认证用户返回全部模型
         if (!isAuthenticated) {
+            // 检查是否有健康提供商（对于非管理型列表，没有健康提供商则跳过）
+            let hasHealthyProvider = false;
             if (providerPoolManager && providerPoolManager.providerStatus[type]) {
                 const healthyProviders = providerPoolManager.providerStatus[type].filter(
                     p => p.config.isHealthy && !p.config.isDisabled
                 );
-                if (healthyProviders.length > 0) {
-                    let models = getProviderModels(type);
-                    if (usesManagedModelList(type)) {
-                        const managedModels = getManagedSupportedModels(type, healthyProviders.map(p => p.config));
-                        if (managedModels.length > 0) {
-                            models = managedModels;
-                        }
-                    }
-                    if (models && models.length > 0) {
-                        allModels[type] = models;
-                    }
+                hasHealthyProvider = healthyProviders.length > 0;
+            }
+            
+            // 对于非管理型模型列表，必须有健康提供商才返回
+            if (!usesManagedModelList(type) && !hasHealthyProvider) {
+                continue;
+            }
+            
+            // 获取模型列表
+            let models = getProviderModels(type);
+            
+            // 对于管理型模型列表，尝试从健康提供商获取配置的模型
+            if (usesManagedModelList(type) && hasHealthyProvider) {
+                const healthyProviders = providerPoolManager.providerStatus[type].filter(
+                    p => p.config.isHealthy && !p.config.isDisabled
+                );
+                const managedModels = getManagedSupportedModels(type, healthyProviders.map(p => p.config));
+                if (managedModels.length > 0) {
+                    models = managedModels;
                 }
+            }
+            
+            // 只有当有模型数据时才添加到结果
+            if (models && models.length > 0) {
+                allModels[type] = models;
             }
         } else {
             let models = getProviderModels(type);
