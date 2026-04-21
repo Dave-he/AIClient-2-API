@@ -9,11 +9,37 @@
     <div class="gpu-monitor-container">
       <div class="left-column">
         <GpuStatusPanel :loading="loading" :gpu-status="gpuStatus" />
-        <GpuHistoryChartPanel
-          v-model:chart-type="currentChartType"
-          :chart-tabs="chartTabs"
-          :chart-data="chartData"
-        />
+        <div class="chart-panel">
+          <div class="chart-header">
+            <div class="chart-tabs">
+              <button
+                v-for="tab in chartTabs"
+                :key="tab.type"
+                class="chart-tab"
+                :class="{ active: currentChartType === tab.type }"
+                @click="currentChartType = tab.type"
+              >
+                {{ tab.label }}
+              </button>
+            </div>
+            <div class="time-range-tabs">
+              <button
+                v-for="tab in timeRangeTabs"
+                :key="tab.id"
+                class="time-range-tab"
+                :class="{ active: activeTimeRange === tab.id }"
+                @click="changeTimeRange(tab.id)"
+              >
+                {{ tab.label }}
+              </button>
+            </div>
+          </div>
+          <GpuHistoryChartPanel
+            v-model:chart-type="currentChartType"
+            :chart-tabs="chartTabs"
+            :chart-data="chartData"
+          />
+        </div>
       </div>
 
       <div class="right-column">
@@ -69,6 +95,7 @@ const queueStats = ref({})
 const availableModels = ref([])
 const currentChartType = ref('all')
 const controllerConnected = ref(false)
+const activeTimeRange = ref('hour')
 const currentModel = ref(null)
 
 const testReport = ref(null)
@@ -92,7 +119,19 @@ const chartTabs = [
   { type: 'power', label: t('gpuMonitor.power') }
 ]
 
+const timeRangeTabs = [
+  { id: 'hour', label: '1小时' },
+  { id: 'day', label: '1天' },
+  { id: 'week', label: '1周' }
+]
+
 const controllerUrl = ref(API_PATHS.PYTHON.BASE + '/manage')
+
+const changeTimeRange = (newRange) => {
+  activeTimeRange.value = newRange
+  requestCache.monitorSummary.timestamp = 0
+  fetchMonitorSummary()
+}
 
 const addChartData = (utilization, temperature, memory, power, powerPercent = 0) => {
   const now = new Date()
@@ -143,7 +182,14 @@ const fetchMonitorSummary = async () => {
   loadingQueue.value = true
 
   try {
-    const response = await fetch(API_PATHS.PYTHON.MONITOR.SUMMARY, { timeout: 5000 })
+    const summaryUrl = new URL(API_PATHS.PYTHON.MONITOR.SUMMARY, window.location.origin)
+    if (activeTimeRange.value) {
+      summaryUrl.searchParams.set('time_range', activeTimeRange.value)
+    }
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    const response = await fetch(summaryUrl.toString(), { signal: controller.signal })
+    clearTimeout(timeoutId)
     if (response.ok) {
       const result = await response.json()
       if (result.success) {
@@ -333,7 +379,10 @@ const loadAvailableModels = async () => {
 
   loadingControl.value = true
   try {
-    const response = await fetch(API_PATHS.PYTHON.MODELS.STATUS, { timeout: 5000 })
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    const response = await fetch(API_PATHS.PYTHON.MODELS.STATUS, { signal: controller.signal })
+    clearTimeout(timeoutId)
     if (response.ok) {
       const result = await response.json()
       if (result.success && result.models) {
@@ -551,5 +600,52 @@ onUnmounted(() => {
     gap: 0.5rem;
     margin-bottom: 0.5rem;
   }
+}
+
+.chart-panel {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  box-shadow: var(--shadow);
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chart-tabs,
+.time-range-tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.chart-tab,
+.time-range-tab {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-secondary);
+}
+
+.chart-tab:hover,
+.time-range-tab:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.chart-tab.active,
+.time-range-tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
 }
 </style>

@@ -167,7 +167,6 @@ export const MANAGED_MODEL_LIST_PROVIDERS = [
     'openai-custom',
     'openaiResponses-custom',
     'claude-custom',
-    'local-model'
 ];
 
 export function getManagedModelListProviderType(providerType) {

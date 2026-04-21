@@ -210,15 +210,7 @@ export async function handleModelListRequest(req, res, service, endpointType, CO
                 throw new Error(`[ModelList] Service adapter is unavailable or does not implement listModels() for provider: ${toProvider}`);
             }
 
-            // 对于 local-model 提供商，只返回当前运行的模型
-            const isLocalModel = toProvider === 'local-model' || toProvider.startsWith('local-model-');
-            let nativeModelList;
-            if (isLocalModel && typeof resolvedService.listRunningModels === 'function') {
-                logger.info(`[ModelList] Using running models only for local-model provider`);
-                nativeModelList = await resolvedService.listRunningModels();
-            } else {
-                nativeModelList = await resolvedService.listModels();
-            }
+            let nativeModelList = await resolvedService.listModels();
 
             clientModelList = nativeModelList;
             if (!getProtocolPrefix(toProvider).includes(getProtocolPrefix(fromProvider))) {

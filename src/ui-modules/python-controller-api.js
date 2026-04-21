@@ -200,6 +200,9 @@ export async function handleGetMonitorSummary(req, res) {
     try {
         const now = Date.now();
 
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const timeRange = url.searchParams.get('time_range');
+
         if (monitorSummaryCache.data && (now - monitorSummaryCache.timestamp) < monitorSummaryCache.ttl) {
             res.writeHead(200, { 'Content-Type': 'application/json', 'X-Cache': 'HIT' });
             res.end(JSON.stringify({
@@ -234,9 +237,11 @@ export async function handleGetMonitorSummary(req, res) {
             return true;
         }
 
+        const historyParams = timeRange ? `?time_range=${timeRange}&count=60` : '?count=60';
+
         const [gpuData, gpuHistoryData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
             gpuCacheValid ? Promise.resolve(gpuCache.data) : callPythonController('/manage/gpu', 'GET', null, headers).catch(() => null),
-            callPythonController('/manage/gpu/history?count=60', 'GET', null, headers).catch(() => null),
+            callPythonController(`/manage/gpu/history${historyParams}`, 'GET', null, headers).catch(() => null),
             modelsCacheValid ? Promise.resolve(modelsCache.data) : callPythonController('/manage/models', 'GET', null, headers).catch(() => null),
             queueCacheValid ? Promise.resolve(queueCache.data) : callPythonController('/manage/queue', 'GET', null, headers).catch(() => null),
             callPythonController('/manage/models/summary', 'GET', null, headers).catch(() => null),

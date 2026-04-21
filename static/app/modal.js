@@ -2278,10 +2278,11 @@ async function loadModelsListForSwitch(modal) {
     const container = modal.querySelector('#modelSwitchContent');
     if (!container) return;
 
+    let lastError = null;
+
     try {
         let modelsObj = {};
         let currentModel = null;
-        let lastError = null;
 
         const { monitorCache } = await import('./monitor-cache.js');
         
