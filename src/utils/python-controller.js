@@ -1,10 +1,6 @@
 import logger from './logger.js';
 import { CONFIG } from '../core/config-manager.js';
 
-function resolveControllerUrl() {
-    return controllerUrl || CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
-}
-
 let controllerUrl = null;
 
 const DEFAULT_TIMEOUT = 30000;
@@ -19,7 +15,17 @@ export function setControllerUrl(url) {
 }
 
 export function getControllerUrl() {
-    return resolveControllerUrl();
+    if (controllerUrl) {
+        return controllerUrl;
+    }
+    if (typeof CONFIG !== 'undefined' && CONFIG.CONTROLLER_BASE_URL) {
+        return CONFIG.CONTROLLER_BASE_URL;
+    }
+    return 'http://localhost:5000';
+}
+
+function resolveControllerUrl() {
+    return getControllerUrl();
 }
 
 function createCacheKey(endpoint, method, body) {

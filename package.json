@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/core/master.js",
-    "build": "vite build",
-    "preview": "vite preview --port 9090",
+    "build": "node -e \"console.log('No root build step. Use pnpm build:vue to build the Vue UI.')\"",
+    "preview": "cd app-vue && pnpm preview --port 9090",
     "dev": "node src/services/api-server.js",
     "build:vue": "cd app-vue && pnpm build",
     "test": "jest",
