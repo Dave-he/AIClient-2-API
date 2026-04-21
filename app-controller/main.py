@@ -144,6 +144,24 @@ prometheus = PrometheusExporter()
 model_tester = ModelTestingFramework(scheduler, gpu_monitor)
 cache_updater = CacheUpdater(gpu_monitor, scheduler)
 
+VLLM_REQUEST_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+VLLM_STREAM_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=60.0, pool=60.0)
+VLLM_CLIENT_LIMITS = httpx.Limits(max_connections=200, max_keepalive_connections=50)
+
+
+def get_vllm_request_client() -> httpx.AsyncClient:
+    client = getattr(app.state, "vllm_request_client", None)
+    if client is None:
+        raise RuntimeError("vLLM request client not initialized")
+    return client
+
+
+def get_vllm_stream_client() -> httpx.AsyncClient:
+    client = getattr(app.state, "vllm_stream_client", None)
+    if client is None:
+        raise RuntimeError("vLLM stream client not initialized")
+    return client
+
 def on_config_changed(new_config: Dict):
     structured_logger.info("Configuration updated", action="config_reload")
     scheduler.config = new_config
@@ -210,6 +228,17 @@ async def save_history_loop():
 
 @app.on_event("startup")
 async def startup_event():
+    app.state.vllm_request_client = httpx.AsyncClient(
+        timeout=VLLM_REQUEST_TIMEOUT,
+        limits=VLLM_CLIENT_LIMITS,
+        http2=False
+    )
+    app.state.vllm_stream_client = httpx.AsyncClient(
+        timeout=VLLM_STREAM_TIMEOUT,
+        limits=VLLM_CLIENT_LIMITS,
+        http2=False
+    )
+
     redis_client.connect()
     if redis_client.is_connected():
         logger.info("Redis connection established successfully")
@@ -235,6 +264,17 @@ async def shutdown_event():
     if _background_tasks:
         await asyncio.gather(*_background_tasks, return_exceptions=True)
     _background_tasks.clear()
+
+    request_client = getattr(app.state, "vllm_request_client", None)
+    if request_client is not None:
+        await request_client.aclose()
+        app.state.vllm_request_client = None
+
+    stream_client = getattr(app.state, "vllm_stream_client", None)
+    if stream_client is not None:
+        await stream_client.aclose()
+        app.state.vllm_stream_client = None
+
     structured_logger.info("AI Controller service stopped", action="shutdown")
 
 class ChatCompletionRequest(BaseModel):
@@ -438,16 +478,14 @@ async def chat_completions(request: ChatCompletionRequest):
         request_data = request.model_dump(exclude_unset=True)
         request_data['model'] = vllm_model_name
 
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(
-                vllm_url,
-                json=request_data,
-                timeout=60
-            )
+        if stream:
+            stream_client = get_vllm_stream_client()
+            stream_request = stream_client.build_request('POST', vllm_url, json=request_data)
+            response = await stream_client.send(stream_request, stream=True)
             response.raise_for_status()
 
-            if stream:
-                async def generate():
+            async def generate():
+                try:
                     async for chunk in response.aiter_lines():
                         if chunk.startswith("data: "):
                             chunk_data = chunk[6:]
@@ -461,13 +499,20 @@ async def chat_completions(request: ChatCompletionRequest):
                                 yield f"data: {json.dumps(json_chunk)}\n\n"
                             except:
                                 yield f"data: {chunk_data}\n\n"
-                return StreamingResponse(generate(), media_type="text/event-stream")
-            else:
-                result = response.json()
-                result['id'] = f"chatcmpl-{os.urandom(12).hex()}"
-                result['model'] = model_name
-                logger.info(f"Request completed successfully for {model_name}")
-                return result
+                finally:
+                    await response.aclose()
+
+            return StreamingResponse(generate(), media_type="text/event-stream")
+
+        request_client = get_vllm_request_client()
+        response = await request_client.post(vllm_url, json=request_data)
+        response.raise_for_status()
+
+        result = response.json()
+        result['id'] = f"chatcmpl-{os.urandom(12).hex()}"
+        result['model'] = model_name
+        logger.info(f"Request completed successfully for {model_name}")
+        return result
     except (HTTPException, ControllerException) as e:
         status_code = getattr(e, 'status_code', getattr(e, 'code', 500))
         raise
@@ -649,10 +694,10 @@ async def generate_image(request: ImageGenerationRequest):
             "response_format": request.response_format
         }
         
-        async with httpx.AsyncClient(timeout=120) as client:
-            response = await client.post(vllm_url, json=request_data, timeout=120)
-            response.raise_for_status()
-            result = response.json()
+        request_client = get_vllm_request_client()
+        response = await request_client.post(vllm_url, json=request_data, timeout=120)
+        response.raise_for_status()
+        result = response.json()
         
         duration = (datetime.now() - start_time).total_seconds()
         metrics.record_request(
@@ -710,10 +755,10 @@ async def create_embeddings(request: EmbeddingRequest):
         if request.dimensions:
             request_data["dimensions"] = request.dimensions
         
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(vllm_url, json=request_data, timeout=60)
-            response.raise_for_status()
-            result = response.json()
+        request_client = get_vllm_request_client()
+        response = await request_client.post(vllm_url, json=request_data)
+        response.raise_for_status()
+        result = response.json()
         
         duration = (datetime.now() - start_time).total_seconds()
         metrics.record_request(
@@ -1235,26 +1280,34 @@ class ServiceControlRequest(BaseModel):
     service_name: Optional[str] = None
 
 @app.get("/manage/service/status")
-async def get_python_service_status():
+async def get_python_service_status(refresh: Optional[bool] = False):
     """获取 Python 控制器服务状态"""
+    cache_key = "api:manage:service:status"
+
+    if not refresh:
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+
     logger.info("Getting Python service status")
-    
+
     service_name = "aiclient-python"
-    is_running = sys_controller.is_service_running(service_name)
     status = sys_controller.get_service_status(service_name)
     service_info = sys_controller.get_service_info(service_name)
-    
     current_config = config_watcher.get_config()
-    
-    return {
+
+    result = {
         "service": service_name,
         "status": status,
-        "running": is_running,
+        "running": status == "active",
         "info": service_info,
         "config": current_config,
         "config_file": config_watcher.config_path,
         "timestamp": datetime.now().isoformat()
     }
+
+    cache_service.set(cache_key, result, ttl_seconds=5)
+    return result
 
 @app.post("/manage/service/start")
 async def start_python_service(request: ServiceControlRequest = None):

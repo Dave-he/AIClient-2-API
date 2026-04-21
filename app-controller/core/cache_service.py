@@ -18,12 +18,13 @@ class CacheService:
             cls._instance._redis = RedisClient()
             cls._instance._local_cache = {}
             cls._instance._local_cache_expiry = {}
+            cls._instance._initialized = False
         return cls._instance
     
     def __init__(self):
-        self._redis = RedisClient()
-        self._local_cache = {}
-        self._local_cache_expiry = {}
+        if getattr(self, '_initialized', False):
+            return
+        self._initialized = True
     
     def _is_local_cache_valid(self, key: str) -> bool:
         expiry = self._local_cache_expiry.get(key)
