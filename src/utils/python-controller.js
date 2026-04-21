@@ -40,10 +40,6 @@ export function getControllerUrl() {
     return 'http://localhost:5000';
 }
 
-function resolveControllerUrl() {
-    return getControllerUrl();
-}
-
 function createCacheKey(endpoint, method, body) {
     const bodyStr = body ? JSON.stringify(body) : '';
     return `${method}:${endpoint}:${bodyStr}`;

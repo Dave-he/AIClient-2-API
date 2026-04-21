@@ -53,9 +53,22 @@ async function collectSystemMetrics() {
     }
 }
 
-collectSystemMetrics();
+let systemMonitorInterval = null;
 
-setInterval(collectSystemMetrics, 2000);
+export function startSystemMonitor(intervalMs = 2000) {
+    if (systemMonitorInterval) {
+        clearInterval(systemMonitorInterval);
+    }
+    collectSystemMetrics();
+    systemMonitorInterval = setInterval(collectSystemMetrics, intervalMs);
+}
+
+export function stopSystemMonitor() {
+    if (systemMonitorInterval) {
+        clearInterval(systemMonitorInterval);
+        systemMonitorInterval = null;
+    }
+}
 
 /**
  * 获取系统信息

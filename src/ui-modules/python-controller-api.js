@@ -1,7 +1,7 @@
 import logger from '../utils/logger.js';
 import { CONFIG } from '../core/config-manager.js';
 
-function getControllerBaseUrl() {
+export function getControllerBaseUrl() {
     return CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
 }
 

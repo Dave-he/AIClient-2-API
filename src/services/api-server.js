@@ -11,6 +11,7 @@ import { HEALTH_CHECK } from '../utils/constants.js';
 import { setControllerUrl } from '../utils/python-controller.js';
 import { preloadControllerData, startPeriodicRefresh, stopPeriodicRefresh } from '../ui-modules/python-controller-api.js';
 import { preloadDashboardData } from '../ui-modules/dashboard-api.js';
+import { startSystemMonitor } from '../ui-modules/system-api.js';
 import { initDefaultMetrics } from '../utils/metrics.js';
 
 /**
@@ -303,6 +304,9 @@ async function startServer() {
     const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
     setControllerUrl(controllerBaseUrl);
     logger.info(`[Initialization] Set Python controller URL: ${controllerBaseUrl}`);
+
+    // Start system monitor after config is loaded
+    startSystemMonitor();
     
     // 自动关联 configs 目录中的配置文件到对应的提供商
     // logger.info('[Initialization] Checking for unlinked provider configs...');
