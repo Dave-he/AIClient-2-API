@@ -1,6 +1,19 @@
 import logger from './logger.js';
 import { CONFIG } from '../core/config-manager.js';
 
+function resolveControllerUrl() {
+    if (controllerUrl) {
+        return controllerUrl;
+    }
+    if (process.env.CONTROLLER_BASE_URL) {
+        return process.env.CONTROLLER_BASE_URL;
+    }
+    if (CONFIG.CONTROLLER_BASE_URL) {
+        return CONFIG.CONTROLLER_BASE_URL;
+    }
+    return 'http://localhost:5000';
+}
+
 let controllerUrl = null;
 
 const DEFAULT_TIMEOUT = 30000;

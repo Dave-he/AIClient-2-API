@@ -409,6 +409,8 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         { flag: '--login-min-interval',   configKey: 'LOGIN_MIN_INTERVAL',     type: 'int' },
         { flag: '--scheduled-health-check-enabled', configKey: 'SCHEDULED_HEALTH_CHECK.enabled', type: 'bool' },
         { flag: '--scheduled-health-check-interval', configKey: 'SCHEDULED_HEALTH_CHECK.interval', type: 'int' },
+        { flag: '--controller-url',       configKey: 'CONTROLLER_BASE_URL',    type: 'string' },
+        { flag: '--controller-api-key',   configKey: 'CONTROLLER_API_KEY',     type: 'string' },
     ];
 
     // Parse command-line arguments using definitions

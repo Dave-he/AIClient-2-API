@@ -1,4 +1,5 @@
 import { apiClient } from '@/utils/api.js';
+import { API_PATHS } from '@/utils/api-paths.js';
 
 export const authApi = {
   login: (username, password) => apiClient.post('/api/login', { username, password }),
@@ -23,7 +24,7 @@ export const providerApi = {
 
 export const gpuApi = {
   getStatus: () => apiClient.get('/api/gpu/status'),
-  getPythonStatus: () => apiClient.get('/api/python-gpu/status')
+  getPythonStatus: () => apiClient.get(API_PATHS.PYTHON_GPU.STATUS)
 };
 
 export const systemApi = {

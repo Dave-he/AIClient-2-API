@@ -4,6 +4,7 @@ import { escapeHtml, showToast, getFieldLabel, getProviderTypeFields } from './u
 import { handleProviderPasswordToggle } from './event-handlers.js';
 import { t } from './i18n.js';
 import { refreshModels } from './models-manager.js';
+import { API_PATHS, formatPath } from './api-paths.js';
 
 const MANAGED_MODEL_LIST_PROVIDERS = new Set(['openai-custom', 'openaiResponses-custom', 'claude-custom']);
 
@@ -2334,7 +2335,7 @@ async function loadModelsListForSwitch(modal) {
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 5000);
-                const summaryResponse = await fetch(`/api/python/models/summary`, {
+                const summaryResponse = await fetch(API_PATHS.PYTHON.MODELS.SUMMARY, {
                     method: 'GET',
                     signal: controller.signal
                 });
@@ -2390,7 +2391,7 @@ async function loadModelsListForSwitch(modal) {
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 5000);
-                const summaryResponse = await fetch(`/api/python/models/summary`, {
+                const summaryResponse = await fetch(API_PATHS.PYTHON.MODELS.SUMMARY, {
                     method: 'GET',
                     signal: controller.signal
                 });
@@ -2512,7 +2513,7 @@ async function switchModel(modelName) {
             headers['Authorization'] = `Bearer ${token}`;
         }
         
-        const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/switch`, {
+        const response = await fetch(formatPath(API_PATHS.PYTHON.MODELS.SWITCH, { modelName }), {
             method: 'POST',
             headers
         });
@@ -2580,7 +2581,7 @@ async function startModel(modelName) {
             headers['Authorization'] = `Bearer ${token}`;
         }
         
-        const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/start`, {
+        const response = await fetch(formatPath(API_PATHS.PYTHON.MODELS.START, { modelName }), {
             method: 'POST',
             headers
         });
@@ -2639,7 +2640,7 @@ async function stopModel(modelName) {
             headers['Authorization'] = `Bearer ${token}`;
         }
         
-        const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/stop`, {
+        const response = await fetch(formatPath(API_PATHS.PYTHON.MODELS.STOP, { modelName }), {
             method: 'POST',
             headers
         });

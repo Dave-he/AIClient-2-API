@@ -1,4 +1,5 @@
 import { eventBus, EVENTS } from './event-bus.js';
+import { API_PATHS } from './api-paths.js';
 
 export class MonitorCache {
     constructor() {
@@ -16,7 +17,7 @@ export class MonitorCache {
     }
 
     async getSummary(forceRefresh = false) {
-        return this._getWithCache('/api/python/monitor/summary', 'summary', forceRefresh);
+        return this._getWithCache(API_PATHS.PYTHON.MONITOR.SUMMARY, 'summary', forceRefresh);
     }
 
     async getDashboardSummary(forceRefresh = false) {
@@ -24,31 +25,31 @@ export class MonitorCache {
     }
 
     async getModelsSummary(forceRefresh = false) {
-        return this._getWithCache('/api/python/models/summary', 'modelsSummary', forceRefresh);
+        return this._getWithCache(API_PATHS.PYTHON.MODELS.SUMMARY, 'modelsSummary', forceRefresh);
     }
 
     async getModelsStatus(forceRefresh = false) {
-        return this._getWithCache('/api/python/models/status', 'modelsStatus', forceRefresh);
+        return this._getWithCache(API_PATHS.PYTHON.MODELS.STATUS, 'modelsStatus', forceRefresh);
     }
 
     async getGpuStatus(forceRefresh = false) {
-        return this._getWithCache('/api/python-gpu/status', 'gpuStatus', forceRefresh);
+        return this._getWithCache(API_PATHS.PYTHON_GPU.STATUS, 'gpuStatus', forceRefresh);
     }
 
     async getServiceStatus(forceRefresh = false) {
-        return this._getWithCache('/api/python-gpu/service/status', 'serviceStatus', forceRefresh);
+        return this._getWithCache(API_PATHS.PYTHON_GPU.SERVICE.STATUS, 'serviceStatus', forceRefresh);
     }
 
     async getHealth(forceRefresh = false) {
-        return this._getWithCache('/api/python/health', 'health', forceRefresh);
+        return this._getWithCache(API_PATHS.PYTHON.HEALTH, 'health', forceRefresh);
     }
 
     async getQueueStatus(forceRefresh = false) {
-        return this._getWithCache('/api/python/queue/status', 'queueStatus', forceRefresh);
+        return this._getWithCache(API_PATHS.PYTHON.QUEUE.STATUS, 'queueStatus', forceRefresh);
     }
 
     async getGpuConfig(forceRefresh = false) {
-        return this._getWithCache('/api/python-gpu/config', 'gpuConfig', forceRefresh);
+        return this._getWithCache(API_PATHS.PYTHON_GPU.CONFIG, 'gpuConfig', forceRefresh);
     }
 
     async getProvidersDynamic(forceRefresh = false) {

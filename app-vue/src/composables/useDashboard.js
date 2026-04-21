@@ -2,6 +2,7 @@ import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { apiClient } from '@/utils/api.js';
 import { logger } from '@/utils/logger.js';
 import { SimpleChart } from '@/utils/chart.js';
+import { API_PATHS } from '@/utils/api-paths.js';
 
 const generateMockHistoryData = (baseValue, variance, count = 20) => {
   const data = [];
@@ -352,7 +353,7 @@ export function useDashboard() {
 
   const fetchPythonGpuStatus = async () => {
     try {
-      const response = await apiClient.get('/api/python-gpu/status');
+      const response = await apiClient.get(API_PATHS.PYTHON_GPU.STATUS);
       const data = response.data;
       
       if (data.success && data.status !== 'unavailable') {

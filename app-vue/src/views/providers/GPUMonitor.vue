@@ -47,6 +47,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { API_PATHS, formatPath } from '@/utils/api-paths.js'
 import GpuMonitorHeader from '@/components/gpu-monitor/GpuMonitorHeader.vue'
 import GpuStatusPanel from '@/components/gpu-monitor/GpuStatusPanel.vue'
 import GpuHistoryChartPanel from '@/components/gpu-monitor/GpuHistoryChartPanel.vue'
@@ -91,7 +92,7 @@ const chartTabs = [
   { type: 'power', label: t('gpuMonitor.power') }
 ]
 
-const controllerUrl = ref('/api/python/manage')
+const controllerUrl = ref(API_PATHS.PYTHON.BASE + '/manage')
 
 const addChartData = (utilization, temperature, memory, power, powerPercent = 0) => {
   const now = new Date()
@@ -142,7 +143,7 @@ const fetchMonitorSummary = async () => {
   loadingQueue.value = true
 
   try {
-    const response = await fetch('/api/python/monitor/summary', { timeout: 5000 })
+    const response = await fetch(API_PATHS.PYTHON.MONITOR.SUMMARY, { timeout: 5000 })
     if (response.ok) {
       const result = await response.json()
       if (result.success) {
@@ -332,7 +333,7 @@ const loadAvailableModels = async () => {
 
   loadingControl.value = true
   try {
-    const response = await fetch('/api/python/models/status', { timeout: 5000 })
+    const response = await fetch(API_PATHS.PYTHON.MODELS.STATUS, { timeout: 5000 })
     if (response.ok) {
       const result = await response.json()
       if (result.success && result.models) {
@@ -392,7 +393,7 @@ const switchModel = async (modelName) => {
 
     window.$toast?.info(`${t('gpuMonitor.model.switch')}: ${modelName}`)
 
-    const response = await fetch(`/api/python/test/model/${encodeURIComponent(modelName)}/switch-and-test`, {
+    const response = await fetch(formatPath(API_PATHS.PYTHON.TEST.SWITCH_AND_TEST, { modelName }), {
       method: 'POST'
     })
 
@@ -428,7 +429,7 @@ const switchModel = async (modelName) => {
 
 const stopModel = async (modelName) => {
   try {
-    const response = await fetch(`/api/python/models/${modelName}/stop`, {
+    const response = await fetch(formatPath(API_PATHS.PYTHON.MODELS.STOP, { modelName }), {
       method: 'POST'
     })
     if (response.ok) {

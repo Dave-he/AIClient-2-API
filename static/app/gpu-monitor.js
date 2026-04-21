@@ -1,5 +1,6 @@
 import { monitorCache } from './monitor-cache.js';
 import { eventBus, EVENTS } from './event-bus.js';
+import { API_PATHS, formatPath } from './api-paths.js';
 
 export class GPUMonitorModule {
     constructor() {
@@ -1190,7 +1191,7 @@ export class GPUMonitorModule {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/start`, {
+            const response = await fetch(formatPath(API_PATHS.PYTHON.MODELS.START, { modelName }), {
                 method: 'POST',
                 headers
             });
@@ -1217,7 +1218,7 @@ export class GPUMonitorModule {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch(`/api/python/models/${encodeURIComponent(modelName)}/stop`, {
+            const response = await fetch(formatPath(API_PATHS.PYTHON.MODELS.STOP, { modelName }), {
                 method: 'POST',
                 headers
             });
@@ -1244,7 +1245,7 @@ export class GPUMonitorModule {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch(`/api/python/test/model/${encodeURIComponent(modelName)}/switch-and-test`, {
+            const response = await fetch(formatPath(API_PATHS.PYTHON.TEST.SWITCH_AND_TEST, { modelName }), {
                 method: 'POST',
                 headers
             });
@@ -1275,7 +1276,7 @@ export class GPUMonitorModule {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch(`/api/python/test/model/${encodeURIComponent(modelName)}`, {
+            const response = await fetch(formatPath(API_PATHS.PYTHON.TEST.MODEL, { modelName }), {
                 method: 'POST',
                 headers
             });
@@ -1551,7 +1552,7 @@ export class GPUMonitorModule {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch(`/api/python-gpu/service/start`, {
+            const response = await fetch(API_PATHS.PYTHON_GPU.SERVICE.START, {
                 method: 'POST',
                 headers
             });
@@ -1579,7 +1580,7 @@ export class GPUMonitorModule {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch(`/api/python-gpu/service/stop`, {
+            const response = await fetch(API_PATHS.PYTHON_GPU.SERVICE.STOP, {
                 method: 'POST',
                 headers
             });
@@ -1606,7 +1607,7 @@ export class GPUMonitorModule {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch(`/api/python-gpu/service/restart`, {
+            const response = await fetch(API_PATHS.PYTHON_GPU.SERVICE.RESTART, {
                 method: 'POST',
                 headers
             });
@@ -1643,7 +1644,7 @@ export class GPUMonitorModule {
                     headers['Authorization'] = `Bearer ${token}`;
                 }
 
-                const response = await fetch(`/api/python-gpu/service/status`, {
+                const response = await fetch(API_PATHS.PYTHON_GPU.SERVICE.STATUS, {
                     method: 'GET',
                     headers,
                     timeout: 5000
@@ -1758,7 +1759,7 @@ export class GPUMonitorModule {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch('/api/python-gpu/config', {
+            const response = await fetch(API_PATHS.PYTHON_GPU.CONFIG, {
                 method: 'PUT',
                 headers,
                 body: JSON.stringify({ config: configContent })

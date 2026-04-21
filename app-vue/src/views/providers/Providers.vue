@@ -325,6 +325,7 @@ import ProviderNode from '@/components/ProviderNode.vue'
 import { logger } from '@/utils/logger.js'
 import { apiClient } from '@/utils/api.js'
 import { Chart, registerables } from 'chart.js'
+import { API_PATHS, formatPath } from '@/utils/api-paths.js'
 
 Chart.register(...registerables)
 
@@ -540,7 +541,7 @@ const initUsageChart = () => {
 
 const loadAvailableModels = async () => {
   try {
-    const response = await apiClient.get('/api/python/models/status')
+    const response = await apiClient.get(API_PATHS.PYTHON.MODELS.STATUS)
     if (response.data.success && response.data.models) {
       const modelsData = response.data.models
       let modelsArray = []
@@ -577,7 +578,7 @@ const switchModel = async () => {
   isSwitching.value = true
   try {
     const response = await apiClient.post(
-      `/api/python/test/model/${encodeURIComponent(selectedModel.value)}/switch-and-test`
+      formatPath(API_PATHS.PYTHON.TEST.SWITCH_AND_TEST, { modelName: selectedModel.value })
     )
     
     if (response.data.success) {
@@ -602,7 +603,7 @@ const stopCurrentModel = async () => {
   isSwitching.value = true
   try {
     const response = await apiClient.post(
-      `/api/python/models/${encodeURIComponent(currentModel.value)}/stop`
+      formatPath(API_PATHS.PYTHON.MODELS.STOP, { modelName: currentModel.value })
     )
     
     if (response.data.success) {

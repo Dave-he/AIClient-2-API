@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { apiClient } from '@/utils/api.js';
 import { logger } from '@/utils/logger.js';
+import { API_PATHS } from '@/utils/api-paths.js';
 
 const generateMockGpuDevices = () => [
   {
@@ -73,7 +74,7 @@ export function useGPUMonitor() {
 
   const fetchPythonGpuStatus = async () => {
     try {
-      const response = await apiClient.get('/api/python-gpu/status');
+      const response = await apiClient.get(API_PATHS.PYTHON_GPU.STATUS);
       const data = response.data;
 
       if (data.success && data.status !== 'unavailable') {
