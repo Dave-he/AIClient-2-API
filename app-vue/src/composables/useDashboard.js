@@ -228,6 +228,78 @@ export function useDashboard() {
     return `${days}天 ${hours}小时 ${minutes}分钟`;
   };
 
+  const toNumber = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+  };
+
+  const formatMemoryFromBytes = (bytes) => {
+    const value = toNumber(bytes);
+    return value > 0 ? `${(value / (1024 ** 3)).toFixed(1)} GB` : '--';
+  };
+
+  const applyPythonGpuHistory = (history = []) => {
+    if (!Array.isArray(history) || history.length === 0) {
+      return;
+    }
+
+    pythonGpuUtilizationData.value = history.map(item => toNumber(item.utilization ?? item.gpu_utilization)).slice(-60);
+    pythonGpuMemoryData.value = history.map(item => {
+      const totalMemory = toNumber(item.total_memory);
+      const usedMemory = toNumber(item.used_memory);
+      return toNumber(
+        item.memory_utilization ??
+        (totalMemory > 0 ? Math.round((usedMemory / totalMemory) * 100) : 0)
+      );
+    }).slice(-60);
+    pythonGpuTemperatureData.value = history.map(item => toNumber(item.temperature)).slice(-60);
+  };
+
+  const normalizePythonGpuPayload = (payload = {}) => {
+    const gpuData = payload?.gpu && typeof payload.gpu === 'object' ? payload.gpu : payload;
+    const primaryGpu = gpuData?.primary && typeof gpuData.primary === 'object' ? gpuData.primary : {};
+    const serviceData = payload?.service && typeof payload.service === 'object' ? payload.service : null;
+
+    const totalMemoryBytes = toNumber(gpuData?.total_memory ?? primaryGpu.total_memory);
+    const usedMemoryBytes = toNumber(gpuData?.used_memory ?? primaryGpu.used_memory);
+    const availableMemoryBytes = toNumber(
+      gpuData?.available_memory ??
+      primaryGpu.available_memory ??
+      (totalMemoryBytes > 0 ? Math.max(totalMemoryBytes - usedMemoryBytes, 0) : 0)
+    );
+    const utilizationValue = toNumber(gpuData?.utilization ?? gpuData?.gpu_utilization ?? primaryGpu.utilization);
+    const temperatureValue = toNumber(gpuData?.temperature ?? primaryGpu.temperature);
+    const powerValue = toNumber(gpuData?.power_draw ?? gpuData?.power ?? primaryGpu.power_draw ?? primaryGpu.power);
+    const memoryUsageValue = toNumber(
+      gpuData?.memory_utilization ??
+      primaryGpu.memory_utilization ??
+      (totalMemoryBytes > 0 ? Math.round((usedMemoryBytes / totalMemoryBytes) * 100) : 0)
+    );
+
+    const hasGpuData = gpuData && Object.keys(gpuData).length > 0 && gpuData.status !== 'unavailable';
+    const serviceActive = serviceData?.status === 'active';
+
+    return {
+      connected: (payload?.success === true && hasGpuData) || serviceActive,
+      history: Array.isArray(gpuData?.history) ? gpuData.history : [],
+      info: {
+        utilization: `${utilizationValue}%`,
+        memory: `${formatMemoryFromBytes(usedMemoryBytes)} / ${formatMemoryFromBytes(totalMemoryBytes)}`,
+        temperature: `${temperatureValue}°C`,
+        power: `${powerValue}W`,
+        name: gpuData?.name || primaryGpu.name || '--',
+        totalMemory: formatMemoryFromBytes(totalMemoryBytes),
+        usedMemory: formatMemoryFromBytes(usedMemoryBytes),
+        availableMemory: formatMemoryFromBytes(availableMemoryBytes),
+        serverTime: gpuData?.serverTime ? new Date(gpuData.serverTime).toLocaleString('zh-CN') : '--',
+        utilizationValue,
+        memoryUsageValue,
+        temperatureValue,
+        powerValue
+      }
+    };
+  };
+
   const initCharts = async () => {
     await nextTick();
 
@@ -295,7 +367,8 @@ export function useDashboard() {
         nodeVersion: data.nodeVersion || '--',
         serverTime: new Date(data.serverTime).toLocaleString('zh-CN'),
         platform: data.platform === 'linux' ? 'Linux x64' : (data.platform === 'win32' ? 'Windows' : data.platform) || '--',
-        pid: data.pid || '--'
+        pid: data.pid || '--',
+        mode: data.mode || systemInfo.value.mode
       };
     } catch (error) {
       logger.error('Failed to fetch system info', error);
@@ -319,15 +392,16 @@ export function useDashboard() {
         gpu
       };
 
-      cpuData.value.push(cpu);
-      memoryData.value.push(memory);
-      gpuData.value.push(gpu);
-      gpuTempData.value.push(gpuTemp);
-
-      if (cpuData.value.length > 60) cpuData.value.shift();
-      if (memoryData.value.length > 60) memoryData.value.shift();
-      if (gpuData.value.length > 60) gpuData.value.shift();
-      if (gpuTempData.value.length > 60) gpuTempData.value.shift();
+      cpuData.value = Array.isArray(data.cpu?.history) && data.cpu.history.length > 0
+        ? data.cpu.history.slice(-60)
+        : [...cpuData.value.slice(-59), cpu];
+      memoryData.value = Array.isArray(data.memory?.history) && data.memory.history.length > 0
+        ? data.memory.history.slice(-60)
+        : [...memoryData.value.slice(-59), memory];
+      gpuData.value = Array.isArray(data.gpu?.history) && data.gpu.history.length > 0
+        ? data.gpu.history.slice(-60)
+        : [...gpuData.value.slice(-59), gpu];
+      gpuTempData.value = [...gpuTempData.value.slice(-(Math.max(gpuData.value.length - 1, 0))), gpuTemp].slice(-60);
 
       updateChartData();
     } catch (error) {
@@ -353,50 +427,26 @@ export function useDashboard() {
 
   const fetchPythonGpuStatus = async () => {
     try {
-      const response = await apiClient.get(API_PATHS.PYTHON_GPU.STATUS);
+      const response = await apiClient.get(API_PATHS.PYTHON.MONITOR.SUMMARY);
       const data = response.data;
-      
-      if (data.success && data.status !== 'unavailable') {
-        const utilizationValue = Number(data.utilization ?? 0);
-        const temperatureValue = Number(data.temperature ?? 0);
-        const powerValue = Number(data.power_draw ?? 0);
-        const memoryUtilValue = Number(data.memory_utilization ?? 0);
-        const totalMemoryBytes = Number(data.total_memory ?? 0);
-        const usedMemoryBytes = Number(data.used_memory ?? 0);
-        const availableMemoryBytes = Number(data.available_memory ?? 0);
-        
-        const totalMemoryGB = totalMemoryBytes > 0 ? (totalMemoryBytes / (1024 ** 3)).toFixed(1) : '--';
-        const usedMemoryGB = usedMemoryBytes > 0 ? (usedMemoryBytes / (1024 ** 3)).toFixed(1) : '--';
-        const availableMemoryGB = availableMemoryBytes > 0 ? (availableMemoryBytes / (1024 ** 3)).toFixed(1) : '--';
-        
-        pythonGpuConnected.value = true;
-        pythonGpuInfo.value = {
-          utilization: `${utilizationValue}%`,
-          memory: `${usedMemoryGB} / ${totalMemoryGB} GB`,
-          temperature: `${temperatureValue}°C`,
-          power: `${powerValue}W`,
-          name: data.name || '--',
-          totalMemory: `${totalMemoryGB} GB`,
-          usedMemory: `${usedMemoryGB} GB`,
-          availableMemory: `${availableMemoryGB} GB`,
-          serverTime: data.serverTime ? new Date(data.serverTime).toLocaleString('zh-CN') : '--',
-          utilizationValue,
-          memoryUsageValue: memoryUtilValue,
-          temperatureValue,
-          powerValue
-        };
+      const normalized = normalizePythonGpuPayload(data);
 
-        pythonGpuUtilizationData.value.push(utilizationValue);
-        pythonGpuMemoryData.value.push(memoryUtilValue);
-        pythonGpuTemperatureData.value.push(temperatureValue);
+      pythonGpuConnected.value = normalized.connected;
+      if (normalized.connected) {
+        pythonGpuInfo.value = normalized.info;
+        applyPythonGpuHistory(normalized.history);
 
-        if (pythonGpuUtilizationData.value.length > 60) pythonGpuUtilizationData.value.shift();
-        if (pythonGpuMemoryData.value.length > 60) pythonGpuMemoryData.value.shift();
-        if (pythonGpuTemperatureData.value.length > 60) pythonGpuTemperatureData.value.shift();
+        if (normalized.history.length === 0) {
+          pythonGpuUtilizationData.value.push(normalized.info.utilizationValue);
+          pythonGpuMemoryData.value.push(normalized.info.memoryUsageValue);
+          pythonGpuTemperatureData.value.push(normalized.info.temperatureValue);
+
+          if (pythonGpuUtilizationData.value.length > 60) pythonGpuUtilizationData.value.shift();
+          if (pythonGpuMemoryData.value.length > 60) pythonGpuMemoryData.value.shift();
+          if (pythonGpuTemperatureData.value.length > 60) pythonGpuTemperatureData.value.shift();
+        }
 
         updatePythonGpuChart();
-      } else {
-        pythonGpuConnected.value = false;
       }
     } catch (error) {
       pythonGpuConnected.value = false;
