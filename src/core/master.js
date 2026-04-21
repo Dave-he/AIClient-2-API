@@ -389,7 +389,7 @@ function getStatus() {
             pid: process.pid,
             uptime: process.uptime(),
             memoryUsage: process.memoryUsage(),
-            memoryPercentage: ((process.memoryUsage().rss / require('os').totalmem()) * 100).toFixed(2)
+            memoryPercentage: ((process.memoryUsage().rss / os.totalmem()) * 100).toFixed(2)
         },
         worker: {
             pid: workerStatus.pid,
