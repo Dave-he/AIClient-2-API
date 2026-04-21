@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API 测试页面</title>
+    <title data-i18n="testApi.title">API 测试页面</title>
     <style>
         * {
             box-sizing: border-box;
@@ -206,8 +206,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔌 API 测试页面</h1>
-            <p>AIClient2API - 端到端测试控制台</p>
+            <h1 data-i18n="testApi.header">🔌 API 测试页面</h1>
+            <p data-i18n="testApi.subtitle">AIClient2API - 端到端测试控制台</p>
         </div>
 
         <div class="quick-start">
@@ -219,18 +219,18 @@
         <div class="test-card">
             <h2>
                 <span class="icon health">🏥</span>
-                健康检查
-                <span id="health-status" class="status-badge offline">离线</span>
+                <span data-i18n="testApi.healthCheck">健康检查</span>
+                <span id="health-status" class="status-badge offline" data-i18n="common.offline">离线</span>
             </h2>
-            <button class="btn btn-primary" onclick="checkHealth()">检查服务器状态</button>
+            <button class="btn btn-primary" onclick="checkHealth()" data-i18n="testApi.healthDesc">检查服务器状态</button>
             <div id="health-result" class="result"></div>
         </div>
 
         <div class="test-card">
-            <h2><span class="icon auth">🔐</span> 认证测试</h2>
+            <h2><span class="icon auth">🔐</span> <span data-i18n="testApi.authTest">认证测试</span></h2>
             <div class="form-group">
-                <label for="apiKey">API Key</label>
-                <input type="text" id="apiKey" value="sk-2e3513944ecac08f466a2e01872ba91d" placeholder="输入 API Key">
+                <label for="apiKey" data-i18n="testApi.apiKey">API Key</label>
+                <input type="text" id="apiKey" value="sk-2e3513944ecac08f466a2e01872ba91d" data-i18n-placeholder="testApi.apiKeyPlaceholder" placeholder="输入 API Key">
             </div>
             <div class="form-group">
                 <label for="authMethod">认证方式</label>
@@ -246,20 +246,20 @@
         </div>
 
         <div class="test-card">
-            <h2><span class="icon models">📦</span> 模型列表</h2>
-            <button class="btn btn-primary" onclick="getModels()">获取模型列表</button>
+            <h2><span class="icon models">📦</span> <span data-i18n="testApi.modelsTest">模型列表</span></h2>
+            <button class="btn btn-primary" onclick="getModels()" data-i18n="testApi.modelsDesc">获取模型列表</button>
             <div id="models-result" class="result"></div>
         </div>
 
         <div class="test-card">
-            <h2><span class="icon chat">💬</span> 聊天测试</h2>
+            <h2><span class="icon chat">💬</span> <span data-i18n="testApi.chatTest">聊天测试</span></h2>
             <div class="form-group">
-                <label for="modelName">模型名称</label>
-                <input type="text" id="modelName" value="gpt-4" placeholder="输入模型名称">
+                <label for="modelName" data-i18n="testApi.model">模型名称</label>
+                <input type="text" id="modelName" value="gpt-4" data-i18n-placeholder="testApi.modelPlaceholder" placeholder="输入模型名称">
             </div>
             <div class="form-group">
-                <label for="messageContent">消息内容</label>
-                <textarea id="messageContent" placeholder="输入测试消息...">你好，这是一个测试消息。</textarea>
+                <label for="messageContent" data-i18n="testApi.message">消息内容</label>
+                <textarea id="messageContent" data-i18n-placeholder="testApi.messagePlaceholder" placeholder="输入测试消息...">你好，这是一个测试消息。</textarea>
             </div>
             <div class="form-group">
                 <label>
@@ -277,6 +277,15 @@
         </div>
     </div>
 
+    <script type="module">
+        import { initI18n, t } from './app/i18n.js';
+        
+        // 初始化i18n
+        initI18n();
+        
+        // 导出到 window 供全局使用
+        window.t = t;
+    </script>
     <script>
         const BASE_URL = window.location.origin;
 

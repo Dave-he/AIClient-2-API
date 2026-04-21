@@ -166,7 +166,7 @@ function initProviderSwitcher() {
             const providerTypes = Object.keys(providers);
 
             if (providerTypes.length === 0) {
-                providerList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-secondary);">暂无可用的Provider</div>';
+                providerList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-secondary);" data-i18n="provider.noProviders">暂可用的Provider</div>';
                 return;
             }
 
@@ -221,7 +221,7 @@ function initProviderSwitcher() {
                         providerDropdown.classList.remove('show');
                         
                         // 显示成功消息
-                        showToast(t('common.success'), `已切换到 ${displayName}`, 'success');
+                        showToast(t('common.success'), t('provider.switchSuccess', { name: displayName }), 'success');
                         
                         // 重新加载配置和提供商数据
                         loadConfiguration();
@@ -231,7 +231,7 @@ function initProviderSwitcher() {
                         await refreshModels();
                     } catch (error) {
                         console.error('Failed to switch provider:', error);
-                        showToast(t('common.error'), '切换Provider失败', 'error');
+                        showToast(t('common.error'), t('provider.switchFailed'), 'error');
                     }
                 });
                 
@@ -239,7 +239,7 @@ function initProviderSwitcher() {
             });
         } catch (error) {
             console.error('Failed to load provider list:', error);
-            providerList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--danger-color);">加载Provider列表失败</div>';
+            providerList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--danger-color);" data-i18n="provider.loadFailed">加载Provider列表失败</div>';
         }
     }
     

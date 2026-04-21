@@ -410,15 +410,25 @@ export function createRequestHandler(config, providerPoolManager) {
                 }
 
                 // 1. 执行认证流程（只有 type='auth' 的插件参与）
-                const authResult = await pluginManager.executeAuth(req, res, requestUrl, currentConfig);
-                if (authResult.handled) {
-                    // 认证插件已处理请求（如发送了错误响应）
-                    return;
-                }
-                if (!authResult.authorized) {
-                    // 没有认证插件授权，使用 handleError 返回 401
-                    handleError(res, { status: 401, message: 'Unauthorized: API key is invalid or missing.' }, currentConfig.MODEL_PROVIDER, null, req);
-                    return;
+                // 排除 UI 管理接口路径（这些路径在 ui-manager.js 中有单独的认证逻辑）
+                const isUIPublicPath = path.startsWith('/api/login') ||
+                    path === '/api/validate-token' ||
+                    path === '/api/health' ||
+                    path.startsWith('/api/usage/stats') ||
+                    path.startsWith('/api/token-stats') ||
+                    path.startsWith('/api/python/') ||
+                    path.startsWith('/api/python-gpu/') ||
+                    path === '/api/dashboard/summary';
+
+                if (!isUIPublicPath) {
+                    const authResult = await pluginManager.executeAuth(req, res, requestUrl, currentConfig);
+                    if (authResult.handled) {
+                        return;
+                    }
+                    if (!authResult.authorized) {
+                        handleError(res, { status: 401, message: 'Unauthorized: API key is invalid or missing.' }, currentConfig.MODEL_PROVIDER, null, req);
+                        return;
+                    }
                 }
                 
                 // 2. 执行普通中间件（type!='auth' 的插件）
