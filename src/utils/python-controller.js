@@ -16,12 +16,35 @@ function resolveControllerUrl() {
 
 let controllerUrl = null;
 
-const DEFAULT_TIMEOUT = 30000;
+const DEFAULT_TIMEOUT = 30000:
 const DEFAULT_RETRY_DELAY = 1000;
-const DEFAULT_MAX_RETRIES = 2;
+const DEFAULT_MAX_RETRIES = 1;
 
 const cacheStore = new Map();
 const pendingRequests = new Map();
+
+const connectionStatus = {
+    lastFailureTime: 0,
+    consecutiveFailures: 0,
+    fastFailDuration: 10000
+};
+
+function shouldFastFail() {
+    if (connectionStatus.consecutiveFailures < 3) {
+        return false;
+    }
+    return Date.now() - connectionStatus.lastFailureTime < connectionStatus.fastFailDuration;
+}
+
+function recordConnectionFailure() {
+    connectionStatus.lastFailureTime = Date.now();
+    connectionStatus.consecutiveFailures++;
+    logger.warn(`[Python Controller] Connection failure recorded, consecutive failures: ${connectionStatus.consecutiveFailures}`);
+}
+
+function recordConnectionSuccess() {
+    connectionStatus.consecutiveFailures = 0;
+}
 
 export function setControllerUrl(url) {
     logger.info(`[Python Controller] setControllerUrl: ${url}`);
@@ -71,6 +94,13 @@ async function retryAsync(fn, maxRetries, delay, context) {
 async function callPythonController(endpoint, method = 'GET', body = null, headers = {}, options = {}) {
     const baseUrl = resolveControllerUrl();
     const url = `${baseUrl}${endpoint}`;
+    
+    if (shouldFastFail()) {
+        const error = new Error(`Python Controller unavailable, fast fail mode active. Last failure: ${(Date.now() - connectionStatus.lastFailureTime) / 1000}s ago`);
+        logger.warn(`[Python Controller] Fast fail for ${method} ${url}: ${error.message}`);
+        throw error;
+    }
+    
     logger.info(`[Python Controller] callPythonController: ${method} ${url}`);
     const {
         timeout = DEFAULT_TIMEOUT,
@@ -134,6 +164,8 @@ async function callPythonController(endpoint, method = 'GET', body = null, heade
     try {
         const data = await requestPromise;
         
+        recordConnectionSuccess();
+        
         if (cacheKey && cacheTtl > 0) {
             cacheStore.set(cacheKey, {
                 data,
@@ -143,6 +175,7 @@ async function callPythonController(endpoint, method = 'GET', body = null, heade
 
         return data;
     } catch (error) {
+        recordConnectionFailure();
         logger.error(`[Python Controller] Error calling ${method} ${url}: ${error.message}`);
         throw error;
     } finally {

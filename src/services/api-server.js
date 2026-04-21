@@ -301,7 +301,7 @@ async function startServer() {
     await initializeConfig(process.argv.slice(2), 'configs/config.json');
     
     // Set Python controller URL from config
-    const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
+    const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
     setControllerUrl(controllerBaseUrl);
     logger.info(`[Initialization] Set Python controller URL: ${controllerBaseUrl}`);
 

@@ -55,7 +55,7 @@ async function collectSystemMetrics() {
 
 let systemMonitorInterval = null;
 
-export function startSystemMonitor(intervalMs = 2000) {
+export function startSystemMonitor(intervalMs = 10000) {
     if (systemMonitorInterval) {
         clearInterval(systemMonitorInterval);
     }
@@ -521,7 +521,7 @@ async function fetchSystemMonitorData() {
 async function fetchPythonGpuData() {
     try {
         const { CONFIG } = await import('../core/config-manager.js');
-        const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://192.168.7.103:5000';
+        const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
         
         const pythonUrl = new URL('/manage/gpu', controllerBaseUrl);
         

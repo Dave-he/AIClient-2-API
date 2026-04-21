@@ -7,7 +7,7 @@ export class IPCManager {
         this.pendingRequests = new Map();
         this.requestIdCounter = 0;
         this.heartbeatInterval = null;
-        this.heartbeatTimeout = 30000;
+        this.heartbeatTimeout = 60000;
         this.lastHeartbeatTime = 0;
         this.heartbeatFailureCount = 0;
         this.maxHeartbeatFailures = 3;
