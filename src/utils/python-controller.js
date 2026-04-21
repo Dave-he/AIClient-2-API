@@ -11,16 +11,19 @@ const cacheStore = new Map();
 const pendingRequests = new Map();
 
 export function setControllerUrl(url) {
+    logger.info(`[Python Controller] setControllerUrl: ${url}`);
     controllerUrl = url;
 }
 
 export function getControllerUrl() {
+    logger.info(`[Python Controller] getControllerUrl: controllerUrl=${controllerUrl}, CONFIG.CONTROLLER_BASE_URL=${CONFIG?.CONTROLLER_BASE_URL}`);
     if (controllerUrl) {
         return controllerUrl;
     }
     if (typeof CONFIG !== 'undefined' && CONFIG.CONTROLLER_BASE_URL) {
         return CONFIG.CONTROLLER_BASE_URL;
     }
+    logger.warn('[Python Controller] getControllerUrl: Using fallback localhost:5000');
     return 'http://localhost:5000';
 }
 
@@ -57,7 +60,9 @@ async function retryAsync(fn, maxRetries, delay, context) {
 }
 
 async function callPythonController(endpoint, method = 'GET', body = null, headers = {}, options = {}) {
-    const url = `${resolveControllerUrl()}${endpoint}`;
+    const baseUrl = resolveControllerUrl();
+    const url = `${baseUrl}${endpoint}`;
+    logger.info(`[Python Controller] callPythonController: ${method} ${url}`);
     const {
         timeout = DEFAULT_TIMEOUT,
         maxRetries = DEFAULT_MAX_RETRIES,

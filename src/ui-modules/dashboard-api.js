@@ -43,7 +43,7 @@ export async function handleGetDashboardSummary(req, res, currentConfig, provide
             python: pythonSummary,
             tokenStats,
             providers: providersStatic,
-            controllerUrl: CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000'
+            controllerUrl: pythonControllerApi.getControllerBaseUrl()
         };
 
         dashboardCache.data = result;
@@ -61,7 +61,7 @@ export async function handleGetDashboardSummary(req, res, currentConfig, provide
             python: { success: false },
             tokenStats: null,
             providers: null,
-            controllerUrl: CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000'
+            controllerUrl: pythonControllerApi.getControllerBaseUrl()
         };
 
         try {

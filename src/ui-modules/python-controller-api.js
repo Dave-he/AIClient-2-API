@@ -1,6 +1,10 @@
 import logger from '../utils/logger.js';
 import { CONFIG } from '../core/config-manager.js';
 
+function getControllerBaseUrl() {
+    return CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
+}
+
 const gpuCache = {
     data: null,
     timestamp: 0,
@@ -83,7 +87,7 @@ export async function preloadControllerData() {
             summary: summaryData,
             health: healthData,
             service: serviceData,
-            controllerUrl: CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000'
+            controllerUrl: getControllerBaseUrl()
         };
         
         monitorSummaryCache.data = result;
@@ -140,8 +144,8 @@ function buildHeaders(req) {
 }
 
 async function callPythonController(endpoint, method = 'GET', body = null, headers = {}) {
-    const CONTROLLER_BASE_URL = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
-    const url = `${CONTROLLER_BASE_URL}${endpoint}`;
+    const controllerBaseUrl = () => getControllerBaseUrl();
+    const url = `${controllerBaseUrl()}${endpoint}`;
     
     try {
         const response = await fetch(url, {
@@ -207,7 +211,7 @@ export async function handleGetMonitorSummary(req, res) {
         }
 
         const headers = buildHeaders(req);
-        const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
+        const controllerBaseUrl = getControllerBaseUrl();
         
         const [gpuData, gpuHistoryData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
             callPythonController('/manage/gpu', 'GET', null, headers).catch(() => null),
@@ -394,7 +398,7 @@ export async function handleGetHealthStatus(req, res) {
     try {
         const headers = buildHeaders(req);
         const data = await callPythonController('/health', 'GET', null, headers);
-        const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
+        const controllerBaseUrl = getControllerBaseUrl();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, ...data, controllerUrl: controllerBaseUrl }));
     } catch (error) {
