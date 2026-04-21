@@ -112,10 +112,9 @@ export class SystemMonitor {
                     this.updateFromSystemData(preloaded.system);
                 }
                 if (preloaded.python) {
-                    this.updateFromPythonGpuData(preloaded.python);
-                    if (preloaded.python.summary) {
-                        this.updateFromPythonSummary(preloaded.python);
-                    }
+                    // Pass the full python summary object (which contains gpu, service, etc.)
+                    // updateFromPythonSummary will correctly route to updateFromPythonGpuData
+                    this.updateFromPythonSummary(preloaded.python);
                 }
             }
         } catch (error) {
@@ -406,7 +405,9 @@ export class SystemMonitor {
                 if (summary.system) {
                     this.updateFromSystemData(summary.system);
                 }
-                if (summary.python && summary.python.success) {
+                // Always pass the python summary object to updateFromPythonSummary
+                // This ensures GPU data is correctly extracted and displayed
+                if (summary.python) {
                     this.updateFromPythonSummary(summary.python);
                 }
             }
@@ -492,9 +493,9 @@ export class SystemMonitor {
     }
 
     updateFromPythonSummary(data) {
-        if (data.gpu) {
-            this.updateFromPythonGpuData(data.gpu);
-        }
+        // Always update GPU data from the full summary object
+        // This ensures the GPU panel is shown/hidden correctly and data is rendered
+        this.updateFromPythonGpuData(data);
         
         if (data.summary) {
             if (data.summary.running_model || (data.summary.models && data.summary.models.length > 0)) {
@@ -563,9 +564,12 @@ export class SystemMonitor {
         const gpuData = fullResult.gpu || {};
         const serviceData = fullResult.service || {};
         
+        // Check if GPU data is valid (non-empty and not marked as unavailable)
         const hasValidData = gpuData && Object.keys(gpuData).length > 0 && gpuData.status !== 'unavailable';
+        // Check if Python service is active (alternative way to show the panel)
         const serviceActive = serviceData && serviceData.status === 'active';
         
+        // Normalize GPU data fields for consistent rendering
         const data = {
             ...gpuData,
             utilization: gpuData.utilization || gpuData.gpu_utilization || 0,
@@ -581,6 +585,7 @@ export class SystemMonitor {
             available_memory: gpuData.available_memory
         };
         
+        // Determine connection status: either valid GPU data exists, or service is active
         this.pythonGpuConnected = (fullResult.success === true && hasValidData) || serviceActive;
         this.renderPythonGpuConnectionStatus(this.pythonGpuConnected);
         this.renderPythonGpuStatus(data);

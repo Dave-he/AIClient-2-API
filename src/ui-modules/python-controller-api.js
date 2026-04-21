@@ -32,6 +32,8 @@ const monitorSummaryCache = {
 
 const DEFAULT_REFRESH_INTERVAL = 30000;
 
+let refreshIntervalId = null;
+
 function invalidateControllerCaches() {
     gpuCache.data = null;
     gpuCache.timestamp = 0;

@@ -246,7 +246,7 @@ export class GPUMonitorModule {
 
         document.addEventListener('section-change', async (event) => {
             if (event.detail.section === 'gpu-monitor') {
-                await this.refreshAllStatus(true);
+                this.debouncedRefresh();
                 this.refreshPythonServiceStatus();
                 this.refreshConfig();
             }
