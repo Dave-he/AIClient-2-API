@@ -47,12 +47,12 @@ function recordConnectionSuccess() {
 }
 
 export function setControllerUrl(url) {
-    logger.info(`[Python Controller] setControllerUrl: ${url}`);
+    logger.debug(`[Python Controller] setControllerUrl: ${url}`);
     controllerUrl = url;
 }
 
 export function getControllerUrl() {
-    logger.info(`[Python Controller] getControllerUrl: controllerUrl=${controllerUrl}, CONFIG.CONTROLLER_BASE_URL=${CONFIG?.CONTROLLER_BASE_URL}`);
+    logger.debug(`[Python Controller] getControllerUrl: controllerUrl=${controllerUrl}, CONFIG.CONTROLLER_BASE_URL=${CONFIG?.CONTROLLER_BASE_URL}`);
     if (controllerUrl) {
         return controllerUrl;
     }
@@ -101,7 +101,7 @@ async function callPythonController(endpoint, method = 'GET', body = null, heade
         throw error;
     }
     
-    logger.info(`[Python Controller] callPythonController: ${method} ${url}`);
+    logger.debug(`[Python Controller] callPythonController: ${method} ${url}`);
     const {
         timeout = DEFAULT_TIMEOUT,
         maxRetries = DEFAULT_MAX_RETRIES,
