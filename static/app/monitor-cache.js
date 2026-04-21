@@ -10,10 +10,21 @@ export class MonitorCache {
         this._cacheTTL = 10000;
         this._preloadedData = {};
         
+        // 统一的预加载状态，避免重复预加载
+        this._isPreloading = false;
+        this._preloadPromise = null;
+        
         // 重试配置
         this._maxRetries = 3;
         this._initialTimeout = 2000;
         this._timeoutIncrement = 1000;
+    }
+
+    /**
+     * 获取预加载状态，防止重复预加载
+     */
+    isPreloading() {
+        return this._isPreloading;
     }
 
     async getSummary(forceRefresh = false, timeRange = null) {
@@ -96,6 +107,24 @@ export class MonitorCache {
     }
 
     async preloadDashboardData() {
+        // 如果正在预加载，返回现有 Promise 避免重复
+        if (this._isPreloading && this._preloadPromise) {
+            return this._preloadPromise;
+        }
+        
+        this._isPreloading = true;
+        this._preloadPromise = this._doPreloadDashboardData();
+        
+        try {
+            const result = await this._preloadPromise;
+            return result;
+        } finally {
+            this._isPreloading = false;
+            this._preloadPromise = null;
+        }
+    }
+
+    async _doPreloadDashboardData() {
         const startTime = performance.now();
         
         try {
@@ -183,12 +212,12 @@ export class MonitorCache {
         this._fetching[cacheKey] = true;
 
         try {
-            const token = localStorage.getItem('authToken');
             const headers = {};
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+            const csrfToken = window.getCsrfToken ? window.getCsrfToken() : null;
+            if (csrfToken) {
+                headers['X-CSRF-Token'] = csrfToken;
             }
-            
+
             const data = await this._fetchWithRetry(url, headers, cacheKey);
             
             this._cache[cacheKey] = data;
@@ -277,6 +306,43 @@ export class MonitorCache {
     isDataCached(cacheKey) {
         return !!this._cache[cacheKey] && 
                (Date.now() - this._timestamps[cacheKey]) < this._cacheTTL;
+    }
+
+    /**
+     * 获取缓存状态概览
+     */
+    getCacheStatus() {
+        const status = {};
+        for (const key of Object.keys(this._cache)) {
+            const age = Date.now() - (this._timestamps[key] || 0);
+            status[key] = {
+                cached: true,
+                age: age,
+                expired: age >= this._cacheTTL,
+                ttl: this._cacheTTL - age
+            };
+        }
+        return status;
+    }
+
+    /**
+     * 设置特定键的 TTL
+     */
+    setKeyTTL(cacheKey, ttl) {
+        if (this._timestamps[cacheKey]) {
+            this._timestamps[cacheKey] = Date.now() - (this._cacheTTL - ttl);
+        }
+    }
+
+    /**
+     * 强制更新缓存（用于实时数据）
+     */
+    async forceRefresh(cacheKey) {
+        const method = this._getMethodForKey(cacheKey);
+        if (method) {
+            return method.call(this, true);
+        }
+        return null;
     }
 }
 

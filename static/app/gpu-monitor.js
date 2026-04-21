@@ -36,7 +36,7 @@ export class GPUMonitorModule {
             this.setupEventListeners();
             this.initGpuStatusElements();
             this.preloadData();
-            this.startPolling();
+            // 不再需要独立轮询，改为监听 SystemMonitor 的事件
         };
 
         if (document.readyState === 'loading') {
@@ -124,6 +124,69 @@ export class GPUMonitorModule {
             memory_utilization: memoryUtilization,
             power_percent: powerPercent
         };
+    }
+
+    /**
+     * 降采样数据 - Largest-Triangle-Three-Buckets (LTTB) 算法简化版
+     * 当数据点过多时，保留关键特征并减少渲染负担
+     * @param {Array} data - 原始数据数组
+     * @param {number} threshold - 目标数据点数量
+     * @returns {Array} - 降采样后的数据
+     */
+    downsampleData(data, threshold = 100) {
+        if (!data || data.length <= threshold) {
+            return data;
+        }
+
+        const result = [];
+        const bucketSize = Math.floor(data.length / threshold);
+
+        // 始终保留第一个点
+        result.push(data[0]);
+
+        for (let i = 1; i < threshold - 1; i++) {
+            const start = Math.floor(i * bucketSize);
+            const end = Math.min(start + bucketSize, data.length - 1);
+            
+            // 在每个桶中选择最大值和最小值的平均（保留波动特征）
+            let max = -Infinity;
+            let min = Infinity;
+            let maxIdx = start;
+            let minIdx = start;
+            
+            for (let j = start; j < end; j++) {
+                if (data[j] > max) {
+                    max = data[j];
+                    maxIdx = j;
+                }
+                if (data[j] < min) {
+                    min = data[j];
+                    minIdx = j;
+                }
+            }
+            
+            // 选择离平均值更远的点以保留波动
+            const avg = (max + min) / 2;
+            const selectedIdx = Math.abs(data[maxIdx] - avg) > Math.abs(data[minIdx] - avg) ? maxIdx : minIdx;
+            result.push(data[selectedIdx]);
+        }
+
+        // 始终保留最后一个点
+        result.push(data[data.length - 1]);
+
+        return result;
+    }
+
+    /**
+     * 获取当前时间范围对应的最大渲染点数
+     */
+    getMaxRenderPoints() {
+        switch (this.selectedTimeRange) {
+            case 'hour': return 150;
+            case 'day': return 200;
+            case 'week': return 300;
+            default: return 150;
+        }
     }
 
     initGpuStatusElements() {
@@ -301,6 +364,15 @@ export class GPUMonitorModule {
             this.refreshConfig();
         });
 
+        // 监听 SystemMonitor 的更新事件，避免重复轮询
+        eventBus.on(EVENTS.SYSTEM_INFO_UPDATED, () => {
+            console.log('[GPUMonitor] System info updated, refreshing GPU status');
+            if (this.isCurrentSection('gpu-monitor') && shouldRefresh()) {
+                // 从缓存读取数据，避免重复请求
+                this.updateFromCache();
+            }
+        });
+
         eventBus.on(EVENTS.PROVIDERS_UPDATED, () => {
             console.log('[GPUMonitor] Providers updated');
             if (this.shouldPoll() && shouldRefresh()) {
@@ -315,12 +387,50 @@ export class GPUMonitorModule {
             }
         });
 
+        // CACHE_INVALIDATED 事件由 SystemMonitor 处理，这里只更新本地缓存
         eventBus.on(EVENTS.CACHE_INVALIDATED, () => {
-            console.log('[GPUMonitor] Cache invalidated, refreshing all status');
-            if (this.shouldPoll() && shouldRefresh()) {
+            console.log('[GPUMonitor] Cache invalidated');
+            // 强制刷新以获取最新数据
+            if (this.isCurrentSection('gpu-monitor')) {
                 this.refreshAllStatus(true);
             }
         });
+    }
+
+    /**
+     * 从缓存更新 GPU 状态（避免重复请求）
+     */
+    updateFromCache() {
+        const summary = monitorCache.getCachedData('dashboardSummary');
+        if (summary && summary.python) {
+            const data = summary.python;
+            if (data.gpu) {
+                if (data.gpu.primary) {
+                    this.updateGpuStatusFromSocket(data.gpu.primary);
+                } else if (data.gpu.gpus && data.gpu.gpus.length > 0) {
+                    this.updateGpuStatusFromSocket(data.gpu.gpus[0]);
+                } else if (data.gpu.name) {
+                    this.updateGpuStatusFromSocket(data.gpu);
+                }
+                if (data.gpu.history && data.gpu.history.length > 0) {
+                    this.gpuHistoryData = data.gpu.history.map(item => this.normalizeHistoryPoint(item));
+                    this.scheduleChartUpdate();
+                }
+            }
+            if (data.models) {
+                this.lastModelsData = data.models;
+                this.renderUnifiedModels();
+            }
+            if (data.queue) {
+                const container = document.getElementById('queueStatusContent');
+                if (container) this.renderQueueStatus(data.queue, container);
+                this.lastQueueData = data.queue;
+            }
+            if (data.summary) {
+                this.currentModel = this.resolveCurrentModelFromSummary(data.summary);
+                this.renderCurrentModel();
+            }
+        }
     }
 
     handleWebSocketMessage(data) {
@@ -561,11 +671,13 @@ export class GPUMonitorModule {
 
     getChartDatasets() {
         const datasets = [];
+        const maxPoints = this.getMaxRenderPoints();
         
         const t = this.i18n.t.bind(this.i18n);
         if (this.currentChartType === 'utilization' || this.currentChartType === 'all') {
+            const rawData = this.gpuHistoryData.map(d => d.utilization);
             datasets.push({
-                data: this.gpuHistoryData.map(d => d.utilization),
+                data: this.downsampleData(rawData, maxPoints),
                 color: '#3b82f6',
                 label: t('gpuMonitor.gpuUtilization'),
                 gradient: this.createGradient('#3b82f6', '#1d4ed8'),
@@ -574,8 +686,9 @@ export class GPUMonitorModule {
         }
         
         if (this.currentChartType === 'temperature' || this.currentChartType === 'all') {
+            const rawData = this.gpuHistoryData.map(d => d.temperature);
             datasets.push({
-                data: this.gpuHistoryData.map(d => d.temperature),
+                data: this.downsampleData(rawData, maxPoints),
                 color: '#ef4444',
                 label: t('gpuMonitor.temperature') + '(°C)',
                 gradient: this.createGradient('#ef4444', '#dc2626'),
@@ -584,8 +697,11 @@ export class GPUMonitorModule {
         }
         
         if (this.currentChartType === 'memory' || this.currentChartType === 'all') {
+            const rawData = this.gpuHistoryData.map(d => d.memory_utilization);
             datasets.push({
-                data: this.gpuHistoryData.map(d => d.memory_utilization),
+            const rawData = this.gpuHistoryData.map(d => d.memory_utilization);
+            datasets.push({
+                data: this.downsampleData(rawData, maxPoints),
                 color: '#f59e0b',
                 label: t('gpuMonitor.memoryUtilization'),
                 gradient: this.createGradient('#f59e0b', '#d97706'),
@@ -594,8 +710,9 @@ export class GPUMonitorModule {
         }
         
         if (this.currentChartType === 'power' || this.currentChartType === 'all') {
+            const rawData = this.gpuHistoryData.map(d => d.power_percent || 0);
             datasets.push({
-                data: this.gpuHistoryData.map(d => d.power_percent || 0),
+                data: this.downsampleData(rawData, maxPoints),
                 color: '#06b6d4',
                 label: t('gpuMonitor.power') + '(%)',
                 gradient: this.createGradient('#06b6d4', '#0891b2'),
@@ -799,14 +916,7 @@ export class GPUMonitorModule {
         });
     }
 
-    startPolling() {
-        this.stopPolling();
-        this.pollingInterval = setInterval(() => {
-            if (this.shouldPoll()) {
-                this.debouncedRefresh();
-            }
-        }, 30000);
-    }
+    // startPolling 已移除 - 现在依赖 SystemMonitor 的轮询和事件
 
     stopPolling() {
         if (this.pollingInterval) {

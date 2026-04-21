@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#059669">
-  <title>模型用量统计</title>
+  <title data-i18n="modelStats.title">模型用量统计</title>
   <link rel="stylesheet" href="app/base.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
@@ -843,12 +843,12 @@
       <div class="brand">
         <span class="brand-icon"><i class="fas fa-chart-line"></i></span>
         <div>
-          <div class="brand-title">模型用量统计</div>
-          <div class="brand-sub">统一查看 Provider / Model 的请求次数与 Token 累计</div>
+          <div class="brand-title" data-i18n="modelStats.title">模型用量统计</div>
+          <div class="brand-sub" data-i18n="modelStats.subtitle">统一查看 Provider / Model 的请求次数与 Token 累计</div>
         </div>
       </div>
       <div class="nav-actions">
-        <a class="nav-btn" href="/"><i class="fas fa-arrow-left"></i><span>返回控制台</span></a>
+        <a class="nav-btn" href="/"><i class="fas fa-arrow-left"></i><span data-i18n="modelStats.backToConsole">返回控制台</span></a>
         <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换主题"><i class="fas fa-moon"></i><i class="fas fa-sun"></i></button>
       </div>
     </div>
@@ -856,69 +856,69 @@
   <main class="main">
     <section class="hero">
       <div class="panel hero-main">
-        <span class="eyebrow"><i class="fas fa-chart-pie"></i> 统计面板</span>
-        <h1>模型用量统计面板</h1>
-        <div class="copy">通过 <code>/api/model-usage-stats</code> 查看系统已累计的请求数、输入 Token、输出 Token 和 Provider / Model 维度分布。</div>
+        <span class="eyebrow"><i class="fas fa-chart-pie"></i> <span data-i18n="modelStats.panelTitle">统计面板</span></span>
+        <h1 data-i18n="modelStats.panelHeading">模型用量统计面板</h1>
+        <div class="copy" data-i18n-html="modelStats.panelDesc">通过 <code>/api/model-usage-stats</code> 查看系统已累计的请求数、输入 Token、输出 Token 和 Provider / Model 维度分布。</div>
         <div class="meta">
-          <span class="tag"><i class="fas fa-key"></i> 支持后台 Token 与 API Key</span>
-          <span class="tag"><i class="fas fa-database"></i> 基于插件持久化统计</span>
-          <span class="tag"><i class="fas fa-filter"></i> 支持搜索、排序、刷新与重置</span>
+          <span class="tag"><i class="fas fa-key"></i> <span data-i18n="modelStats.tagToken">支持后台 Token 与 API Key</span></span>
+          <span class="tag"><i class="fas fa-database"></i> <span data-i18n="modelStats.tagPersist">基于插件持久化统计</span></span>
+          <span class="tag"><i class="fas fa-filter"></i> <span data-i18n="modelStats.tagFilter">支持搜索、排序、刷新与重置</span></span>
         </div>
       </div>
       <aside class="panel auth">
-        <div class="title"><h2 class="section-title" style="margin:0"><i class="fas fa-shield-halved"></i>访问凭证</h2><span class="pill idle" id="authBadge">未连接</span></div>
-        <div class="sub">与其他管理页面一致，这里不会自动读取服务端敏感配置。输入凭证后可加载统计接口，刷新后会从本地缓存恢复。</div>
+        <div class="title"><h2 class="section-title" style="margin:0"><i class="fas fa-shield-halved"></i><span data-i18n="modelStats.authTitle">访问凭证</span></h2><span class="pill idle" id="authBadge" data-i18n="modelStats.authBadge">未连接</span></div>
+        <div class="sub" data-i18n="modelStats.authDesc">与其他管理页面一致，这里不会自动读取服务端敏感配置。输入凭证后可加载统计接口，刷新后会从本地缓存恢复。</div>
         <div class="group">
-          <label class="label" for="credentialValue">访问凭证</label>
-          <input class="input" id="credentialValue" type="password" placeholder="输入 Token 或 API Key">
-          <div class="help" id="credentialHelp">这里直接填后台登录 Token 或服务 API Key。页面会自动同时尝试 <code>Authorization: Bearer</code> 和 <code>x-api-key</code> 两种方式。</div>
+          <label class="label" for="credentialValue" data-i18n="modelStats.credentialLabel">访问凭证</label>
+          <input class="input" id="credentialValue" type="password" data-i18n-placeholder="modelStats.credentialPlaceholder" placeholder="输入 Token 或 API Key">
+          <div class="help" id="credentialHelp" data-i18n-html="modelStats.credentialHelp">这里直接填后台登录 Token 或服务 API Key。页面会自动同时尝试 <code>Authorization: Bearer</code> 和 <code>x-api-key</code> 两种方式。</div>
         </div>
         <div class="row">
-          <button class="btn btn-primary" id="connectBtn" type="button"><i class="fas fa-plug"></i><span>连接并加载</span></button>
-          <button class="btn btn-secondary" id="clearBtn" type="button"><i class="fas fa-eraser"></i><span>清空凭证</span></button>
+          <button class="btn btn-primary" id="connectBtn" type="button"><i class="fas fa-plug"></i><span data-i18n="modelStats.connectBtn">连接并加载</span></button>
+          <button class="btn btn-secondary" id="clearBtn" type="button"><i class="fas fa-eraser"></i><span data-i18n="modelStats.clearBtn">清空凭证</span></button>
         </div>
-        <div class="status info show" id="status"><i class="fas fa-circle-info"></i><span>尚未加载统计数据。</span></div>
+        <div class="status info show" id="status"><i class="fas fa-circle-info"></i><span data-i18n="modelStats.statusIdle">尚未加载统计数据。</span></div>
       </aside>
     </section>
     <section class="stats">
       <article class="card green">
-        <div class="card-label">总请求数</div>
+        <div class="card-label" data-i18n="modelStats.totalRequests">总请求数</div>
         <div class="card-value" id="totalRequests">0</div>
         <div class="note">QPS: <span id="currentQps" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxQps">0.00</span>) | RPM: <span id="currentRpm" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxRpm">0.00</span>)</div>
       </article>
-      <article class="card blue"><div class="card-label">输入 Token</div><div class="card-value" id="promptTokens">0</div><div class="note">输入 token 的累计值</div></article>
-      <article class="card cyan"><div class="card-label">缓存 Token</div><div class="card-value" id="cachedTokens">0</div><div class="note">缓存命中的累计值</div></article>
-      <article class="card indigo"><div class="card-label">输出 Token</div><div class="card-value" id="completionTokens">0</div><div class="note">输出 token 的累计值</div></article>
+      <article class="card blue"><div class="card-label" data-i18n="modelStats.promptTokens">输入 Token</div><div class="card-value" id="promptTokens">0</div><div class="note" data-i18n="modelStats.promptNote">输入 token 的累计值</div></article>
+      <article class="card cyan"><div class="card-label" data-i18n="modelStats.cachedTokens">缓存 Token</div><div class="card-value" id="cachedTokens">0</div><div class="note" data-i18n="modelStats.cachedNote">缓存命中的累计值</div></article>
+      <article class="card indigo"><div class="card-label" data-i18n="modelStats.completionTokens">输出 Token</div><div class="card-value" id="completionTokens">0</div><div class="note" data-i18n="modelStats.completionNote">输出 token 的累计值</div></article>
       <article class="card orange">
-        <div class="card-label">总 Token</div>
+        <div class="card-label" data-i18n="modelStats.totalTokens">总 Token</div>
         <div class="card-value" id="totalTokens">0</div>
-        <div class="note">TPS: <span id="currentTps" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxTps">0.00</span>) | <span id="updatedAt">等待数据</span></div>
+        <div class="note">TPS: <span id="currentTps" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxTps">0.00</span>) | <span id="updatedAt" data-i18n="modelStats.waitingData">等待数据</span></div>
       </article>
 </section>
 
     <section class="chart-container">
       <div class="chart-header">
-        <h2 class="chart-title"><i class="fas fa-line-chart"></i> Token 使用趋势</h2>
+        <h2 class="chart-title"><i class="fas fa-line-chart"></i> <span data-i18n="modelStats.chartTitle">Token 使用趋势</span></h2>
         <div class="time-range-tabs">
-          <button class="time-range-tab active" data-time-range="hour">最近一小时</button>
-          <button class="time-range-tab" data-time-range="day">最近一天</button>
-          <button class="time-range-tab" data-time-range="week">最近一周</button>
+          <button class="time-range-tab active" data-time-range="hour" data-i18n="modelStats.lastHour">最近一小时</button>
+          <button class="time-range-tab" data-time-range="day" data-i18n="modelStats.lastDay">最近一天</button>
+          <button class="time-range-tab" data-time-range="week" data-i18n="modelStats.lastWeek">最近一周</button>
         </div>
       </div>
       <div class="chart-area">
         <canvas id="usageLineChart"></canvas>
       </div>
       <div class="chart-legend">
-        <div class="legend-item"><span class="legend-color prompt"></span><span>输入 Token</span></div>
-        <div class="legend-item"><span class="legend-color completion"></span><span>输出 Token</span></div>
-        <div class="legend-item"><span class="legend-color total"></span><span>总 Token</span></div>
+        <div class="legend-item"><span class="legend-color prompt"></span><span data-i18n="modelStats.legendPrompt">输入 Token</span></div>
+        <div class="legend-item"><span class="legend-color completion"></span><span data-i18n="modelStats.legendCompletion">输出 Token</span></div>
+        <div class="legend-item"><span class="legend-color total"></span><span data-i18n="modelStats.legendTotal">总 Token</span></div>
       </div>
     </section>
     
     <section class="split" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
       <div class="panel calendar-panel" style="margin-bottom: 0;">
         <div class="calendar-header">
-          <h2 class="section-title" style="margin:0; font-size: 16px;"><i class="fas fa-calendar-days"></i> Token 使用趋势 (3个月)</h2>
+          <h2 class="section-title" style="margin:0; font-size: 16px;"><i class="fas fa-calendar-days"></i> <span data-i18n="modelStats.calendarTitle">Token 使用趋势 (3个月)</span></h2>
           <div class="calendar-legend" style="font-size: 10px;">
             <div class="level level-1"></div>
             <div class="level level-4"></div>
@@ -929,45 +929,45 @@
         </div>
         <div class="calendar-footer" id="calendarFooter" style="font-size: 11px; text-align: left; margin-top: 5px;"></div>
       </div>
-      <div class="panel"><h2 class="section-title" style="font-size: 16px;"><i class="fas fa-sitemap"></i>Provider 分布</h2><div class="bars" id="providerBars"></div></div>
-      <div class="panel"><h2 class="section-title" style="font-size: 16px;"><i class="fas fa-fire"></i>Top Models</h2><div class="bars" id="topModelBars"></div></div>
+      <div class="panel"><h2 class="section-title" style="font-size: 16px;"><i class="fas fa-sitemap"></i><span data-i18n="modelStats.providerDist">Provider 分布</span></h2><div class="bars" id="providerBars"></div></div>
+      <div class="panel"><h2 class="section-title" style="font-size: 16px;"><i class="fas fa-fire"></i><span data-i18n="modelStats.topModels">Top Models</span></h2><div class="bars" id="topModelBars"></div></div>
     </section>
     <div id="usageTooltip" class="calendar-tooltip"></div>
     <section>
       <div class="tools">
-        <h2 class="section-title" style="margin:0"><i class="fas fa-layer-group"></i>Provider 视图</h2>
+        <h2 class="section-title" style="margin:0"><i class="fas fa-layer-group"></i><span data-i18n="modelStats.providerView">Provider 视图</span></h2>
         <div class="row">
-          <button class="btn btn-secondary" id="refreshBtn" type="button"><i class="fas fa-rotate-right"></i><span>刷新</span></button>
-          <button class="btn btn-secondary" id="resetTokensBtn" type="button"><i class="fas fa-eraser"></i><span>重置 Token</span></button>
-          <button class="btn btn-danger" id="resetBtn" type="button"><i class="fas fa-trash-can"></i><span>重置统计</span></button>
+          <button class="btn btn-secondary" id="refreshBtn" type="button"><i class="fas fa-rotate-right"></i><span data-i18n="modelStats.refresh">刷新</span></button>
+          <button class="btn btn-secondary" id="resetTokensBtn" type="button"><i class="fas fa-eraser"></i><span data-i18n="modelStats.resetTokens">重置 Token</span></button>
+          <button class="btn btn-danger" id="resetBtn" type="button"><i class="fas fa-trash-can"></i><span data-i18n="modelStats.resetStats">重置统计</span></button>
         </div>
       </div>
       <div class="providers" id="providerCards"></div>
     </section>
     <section class="table-card">
       <div class="tools">
-        <h2 class="section-title" style="margin:0"><i class="fas fa-table"></i>模型明细</h2>
+        <h2 class="section-title" style="margin:0"><i class="fas fa-table"></i><span data-i18n="modelStats.modelDetails">模型明细</span></h2>
         <div class="tool-row">
-          <input class="search" id="searchInput" type="search" placeholder="搜索 provider 或 model">
+          <input class="search" id="searchInput" type="search" data-i18n-placeholder="modelStats.searchPlaceholder" placeholder="搜索 provider 或 model">
           <select class="select" id="sortSelect">
-            <option value="totalTokens-desc">按总 Token 降序</option>
-            <option value="requestCount-desc">按请求数降序</option>
-            <option value="promptTokens-desc">按输入 Token 降序</option>
-            <option value="completionTokens-desc">按输出 Token 降序</option>
-            <option value="provider-asc">按 Provider 升序</option>
-            <option value="model-asc">按 Model 升序</option>
+            <option value="totalTokens-desc" data-i18n="modelStats.sortTotalTokens">按总 Token 降序</option>
+            <option value="requestCount-desc" data-i18n="modelStats.sortRequestCount">按请求数降序</option>
+            <option value="promptTokens-desc" data-i18n="modelStats.sortPromptTokens">按输入 Token 降序</option>
+            <option value="completionTokens-desc" data-i18n="modelStats.sortCompletionTokens">按输出 Token 降序</option>
+            <option value="provider-asc" data-i18n="modelStats.sortProvider">按 Provider 升序</option>
+            <option value="model-asc" data-i18n="modelStats.sortModel">按 Model 升序</option>
           </select>
         </div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Provider</th><th>Model</th><th>请求数</th><th>Prompt</th><th>Cached</th><th>Completion</th><th>Total</th><th>最近使用</th></tr></thead>
+          <thead><tr><th data-i18n="modelStats.colProvider">Provider</th><th data-i18n="modelStats.colModel">Model</th><th data-i18n="modelStats.colRequests">请求数</th><th data-i18n="modelStats.colPrompt">Prompt</th><th data-i18n="modelStats.colCached">Cached</th><th data-i18n="modelStats.colCompletion">Completion</th><th data-i18n="modelStats.colTotal">Total</th><th data-i18n="modelStats.colLastUsed">最近使用</th></tr></thead>
           <tbody id="tableBody"></tbody>
         </table>
       </div>
     </section>
     <section class="empty" id="emptyState"></section>
-    <p class="footer">如果上游响应没有提供 usage，调用次数仍会统计，但 token 数可能保持为 0。</p>
+    <p class="footer" data-i18n="modelStats.footer">如果上游响应没有提供 usage，调用次数仍会统计，但 token 数可能保持为 0。</p>
   </main>
   <script type="module">
     import { initThemeSwitcher, setTheme, getCurrentTheme } from './app/theme-switcher.js';

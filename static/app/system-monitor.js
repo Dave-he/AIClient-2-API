@@ -880,14 +880,17 @@ export class SystemMonitor {
 
     async updateSystemStatsFromServer() {
         try {
-            const token = localStorage.getItem('authToken');
             const headers = {};
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+            const csrfToken = window.getCsrfToken ? window.getCsrfToken() : null;
+            if (csrfToken) {
+                headers['X-CSRF-Token'] = csrfToken;
             }
-            
-            const response = await fetch('/api/system/monitor', { headers });
-            
+
+            const response = await fetch('/api/system/monitor', {
+                headers,
+                credentials: 'include'
+            });
+
             if (response.ok) {
                 const data = await response.json();
                 this.updateFromSystemData(data);

@@ -2,6 +2,7 @@
 let eventSource = null;
 let autoScroll = true;
 let logs = [];
+const MAX_LOGS = 1000;
 
 // 提供商统计全局变量
 let providerStats = {
@@ -43,7 +44,8 @@ export {
     logs,
     providerStats,
     elements,
-    REFRESH_INTERVALS
+    REFRESH_INTERVALS,
+    MAX_LOGS
 };
 
 // 更新函数
@@ -57,6 +59,20 @@ export function setAutoScroll(value) {
 
 export function addLog(log) {
     logs.push(log);
+    // FIFO 队列：超出限制时移除最旧的日志
+    if (logs.length > MAX_LOGS) {
+        logs.shift();
+    }
+}
+
+export function getLogCount() {
+    return logs.length;
+}
+
+export function clearOldLogs(keepCount = 500) {
+    if (logs.length > keepCount) {
+        logs = logs.slice(-keepCount);
+    }
 }
 
 export function clearLogs() {
@@ -66,3 +82,9 @@ export function clearLogs() {
 export function updateProviderStats(newStats) {
     providerStats = { ...providerStats, ...newStats };
 }
+
+// 导出清理函数
+export {
+    getLogCount,
+    clearOldLogs
+};

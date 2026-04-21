@@ -171,6 +171,11 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await auth.handleValidateToken(req, res);
     }
 
+    // 获取CSRF Token接口（需要已登录）
+    if (method === 'GET' && pathParam === '/api/csrf-token') {
+        return await auth.handleGetCsrfToken(req, res);
+    }
+
     // 健康检查接口（用于前端token验证）
     if (method === 'GET' && pathParam === '/api/health') {
         return await systemApi.handleHealthCheck(req, res);

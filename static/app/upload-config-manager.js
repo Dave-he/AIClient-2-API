@@ -630,18 +630,20 @@ async function loadConfigList(searchTerm = '', statusFilter = '', providerFilter
  */
 async function downloadSingleConfig(filePath) {
     if (!filePath) return;
-    
+
     try {
         const fileName = filePath.split(/[/\\]/).pop();
-        
-        const token = localStorage.getItem('authToken');
-        const headers = {
-            'Authorization': token ? `Bearer ${token}` : ''
-        };
+
+        const headers = {};
+        const csrfToken = window.getCsrfToken ? window.getCsrfToken() : null;
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
 
         const response = await fetch(`/api/upload-configs/download/${encodeURIComponent(filePath)}`, {
             method: 'GET',
-            headers: headers
+            headers,
+            credentials: 'include'
         });
 
         if (!response.ok) {
@@ -1334,15 +1336,17 @@ function debounce(func, wait) {
 async function downloadAllConfigs() {
     try {
         showToast(t('common.info'), t('common.loading'), 'info');
-        
-        // 使用 window.apiClient.get 获取 Blob 数据
-        // 由于 apiClient 默认可能是处理 JSON 的，我们需要直接调用 fetch 或者确保 apiClient 支持返回原始响应
-        const token = localStorage.getItem('authToken');
-        const headers = {
-            'Authorization': token ? `Bearer ${token}` : ''
-        };
 
-        const response = await fetch('/api/upload-configs/download-all', { headers });
+        const headers = {};
+        const csrfToken = window.getCsrfToken ? window.getCsrfToken() : null;
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+
+        const response = await fetch('/api/upload-configs/download-all', {
+            headers,
+            credentials: 'include'
+        });
         
         if (!response.ok) {
             const errorData = await response.json();

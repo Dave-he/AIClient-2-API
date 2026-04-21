@@ -281,6 +281,18 @@ export function handleUploadOAuthCredentials(req, res, options = {}) {
         customUpload = null
     } = options;
 
+    // 服务端文件类型校验
+    const ALLOWED_EXTENSIONS = ['.json', '.txt', '.key', '.pem', '.p12', '.pfx'];
+    const ALLOWED_MIME_TYPES = [
+        'application/json',
+        'text/plain',
+        'application/x-pem-file',
+        'application/pkcs8',
+        'application/x-pkcs12',
+        'application/pkix-cert'
+    ];
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
     const uploadMiddleware = customUpload ? customUpload.single('file') : upload.single('file');
 
     return new Promise((resolve) => {
@@ -303,6 +315,52 @@ export function handleUploadOAuthCredentials(req, res, options = {}) {
                     res.end(JSON.stringify({
                         error: {
                             message: 'No file was uploaded'
+                        }
+                    }));
+                    resolve(true);
+                    return;
+                }
+
+                // 服务端文件类型校验
+                const originalName = req.file.originalname || '';
+                const fileExt = path.extname(originalName).toLowerCase();
+                const mimeType = req.file.mimetype || '';
+                const fileSize = req.file.size || 0;
+
+                if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
+                    logger.warn(`${logPrefix} Invalid file extension: ${fileExt}`);
+                    // 删除无效文件
+                    try { await fs.unlink(req.file.path); } catch (e) { /* ignore */ }
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        error: {
+                            message: `Invalid file type. Allowed extensions: ${ALLOWED_EXTENSIONS.join(', ')}`
+                        }
+                    }));
+                    resolve(true);
+                    return;
+                }
+
+                if (!ALLOWED_MIME_TYPES.includes(mimeType) && !fileExt) {
+                    logger.warn(`${logPrefix} Invalid MIME type: ${mimeType}`);
+                    try { await fs.unlink(req.file.path); } catch (e) { /* ignore */ }
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        error: {
+                            message: 'Invalid file MIME type'
+                        }
+                    }));
+                    resolve(true);
+                    return;
+                }
+
+                if (fileSize > MAX_FILE_SIZE) {
+                    logger.warn(`${logPrefix} File too large: ${fileSize} bytes`);
+                    try { await fs.unlink(req.file.path); } catch (e) { /* ignore */ }
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        error: {
+                            message: `File too large. Maximum size: ${MAX_FILE_SIZE / 1024 / 1024}MB`
                         }
                     }));
                     resolve(true);

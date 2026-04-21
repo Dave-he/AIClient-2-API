@@ -3473,14 +3473,19 @@ async function performUpdate() {
 async function restartServiceAfterUpdate() {
     try {
         showToast(t('common.info'), t('header.restart.requesting'), 'info');
-        
-        const token = localStorage.getItem('authToken');
+
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        const csrfToken = window.getCsrfToken ? window.getCsrfToken() : null;
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+
         const response = await fetch('/api/restart-service', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': token ? `Bearer ${token}` : ''
-            }
+            headers,
+            credentials: 'include'
         });
         
         const result = await response.json();
