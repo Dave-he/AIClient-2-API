@@ -30,7 +30,7 @@ export async function handleGetCustomModels(req, res, currentConfig) {
     }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(customModels));
+    res.end(JSON.stringify({ models: customModels }));
     return true;
 }
 

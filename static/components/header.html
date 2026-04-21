@@ -10,6 +10,22 @@
             <a href="https://a001.hubtoday.app/" target="_blank" class="kiro-buy-link" title="AI账号购买">
                 <i class="fas fa-shopping-cart"></i> <span>AI账号购买</span>
             </a>
+            <div class="provider-switcher">
+                <button id="providerSwitchBtn" class="provider-switch-btn">
+                    <i class="fas fa-exchange-alt"></i> <span id="currentProvider">切换Provider</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div id="providerDropdown" class="provider-dropdown">
+                    <div class="dropdown-header">
+                        <span data-i18n="header.providerSelect">选择Provider</span>
+                    </div>
+                    <div id="providerList" class="provider-list">
+                        <div class="loading">
+                            <i class="fas fa-spinner fa-spin"></i> <span data-i18n="common.loading">加载中...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <span class="status-badge" id="serverStatus">
                 <i class="fas fa-circle"></i> <span class="status-text" data-i18n="header.status.connecting">连接中...</span>
             </span>

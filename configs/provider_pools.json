@@ -1,0 +1,30 @@
+{
+  "local-model": [
+    {
+      "customName": "本地vLLM控制器",
+      "LOCAL_API_KEY": "123456",
+      "LOCAL_BASE_URL": "http://ssh.hamr.top:27145",
+      "checkModelName": "gemma-4-31b",
+      "checkHealth": false,
+      "uuid": "f9f1f0a4-4d22-4c20-9164-06d902f8576d",
+      "isDisabled": false,
+      "concurrencyLimit": 0,
+      "queueLimit": 0
+    }
+  ],
+  "openai-custom": [
+    {
+      "customName": "/mnt/pve_models/Gemma-4-31B-Abliterated",
+      "checkModelName": "/mnt/pve_models/Gemma-4-31B-Abliterated",
+      "checkHealth": false,
+      "concurrencyLimit": 0,
+      "queueLimit": 0,
+      "OPENAI_API_KEY": "1234",
+      "OPENAI_BASE_URL": "http://192.168.7.103:8000/v1",
+      "uuid": "36babfc8-934a-404d-826a-3dd25bef139a",
+      "isDisabled": true
+    }
+  ],
+  "providerFallbackChain": [],
+  "modelFallbackMapping": []
+}

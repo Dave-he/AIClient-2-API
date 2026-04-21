@@ -29,6 +29,36 @@ const CODEX_OAUTH_CONFIG = {
 const activeServers = new Map();
 
 /**
+ * 获取 OAuth 会话存储（使用全局变量但提供封装）
+ */
+function getOAuthSessions() {
+    if (!global.codexOAuthSessions) {
+        global.codexOAuthSessions = new Map();
+    }
+    return global.codexOAuthSessions;
+}
+
+/**
+ * 清理所有 OAuth 会话
+ */
+export function cleanupAllCodexSessions() {
+    const sessions = getOAuthSessions();
+    for (const [sessionId, session] of sessions.entries()) {
+        try {
+            if (session.pollTimer) {
+                clearInterval(session.pollTimer);
+            }
+            if (session.server && session.server.listening) {
+                session.server.close(() => {});
+            }
+        } catch (error) {
+            logger.warn(`${CODEX_OAUTH_CONFIG.logPrefix} Failed to cleanup session ${sessionId}:`, error.message);
+        }
+    }
+    sessions.clear();
+}
+
+/**
  * 关闭指定端口的活动服务器
  */
 async function closeActiveServer(provider, port = null) {
@@ -36,7 +66,13 @@ async function closeActiveServer(provider, port = null) {
     
     if (existing) {
         try {
-            // 1. 使用 Promise.race() 添加 2 秒超时
+            // 清理轮询定时器
+            if (existing.pollTimer) {
+                clearInterval(existing.pollTimer);
+                existing.pollTimer = null;
+            }
+
+            // 使用 Promise.race() 添加 2 秒超时
             const closePromise = new Promise((resolve, reject) => {
                 existing.server.close((err) => {
                     if (err) reject(err);
@@ -51,10 +87,8 @@ async function closeActiveServer(provider, port = null) {
             await Promise.race([closePromise, timeoutPromise]);
             logger.info(`[Codex Auth] ${provider} server closed successfully`);
         } catch (error) {
-            // 2. try-catch 捕获错误
             logger.warn(`[Codex Auth] Server close failed or timed out: ${error.message}`);
         } finally {
-            // 3. finally 块强制清理，防止阻塞
             activeServers.delete(provider);
         }
     }
@@ -62,7 +96,6 @@ async function closeActiveServer(provider, port = null) {
     if (port) {
         for (const [p, info] of activeServers.entries()) {
             if (info.port === port) {
-                // 递归调用处理端口冲突的情况
                 await closeActiveServer(p);
             }
         }
@@ -808,21 +841,22 @@ export async function refreshCodexTokensWithRetry(refreshToken, config = {}, max
  */
 export async function handleCodexOAuth(currentConfig, options = {}) {
     const auth = new CodexAuth(currentConfig);
+    const sessions = getOAuthSessions();
 
     try {
         logger.info('[Codex Auth] Generating OAuth URL...');
 
         // 清理所有旧的会话和服务器
-        if (global.codexOAuthSessions && global.codexOAuthSessions.size > 0) {
+        if (sessions.size > 0) {
             logger.info('[Codex Auth] Cleaning up old OAuth sessions...');
-            for (const [sessionId, session] of global.codexOAuthSessions.entries()) {
+            for (const [sessionId, session] of sessions.entries()) {
                 try {
                     // 清理定时器
                     if (session.pollTimer) {
                         clearInterval(session.pollTimer);
                     }
                     // 不在这里显式关闭 server，由 startCallbackServer 中的 closeActiveServer 处理
-                    global.codexOAuthSessions.delete(sessionId);
+                    sessions.delete(sessionId);
                 } catch (error) {
                     logger.warn(`[Codex Auth] Failed to clean up session ${sessionId}:`, error.message);
                 }
@@ -833,11 +867,6 @@ export async function handleCodexOAuth(currentConfig, options = {}) {
         const { authUrl, state, pkce, server } = await auth.generateAuthUrl();
 
         logger.info('[Codex Auth] OAuth URL generated successfully');
-
-        // 存储 OAuth 会话信息，供后续回调使用
-        if (!global.codexOAuthSessions) {
-            global.codexOAuthSessions = new Map();
-        }
 
         const sessionId = state; // 使用 state 作为 session ID
         
@@ -858,7 +887,7 @@ export async function handleCodexOAuth(currentConfig, options = {}) {
             createdAt: Date.now()
         };
         
-        global.codexOAuthSessions.set(sessionId, session);
+        sessions.set(sessionId, session);
 
         // 启动轮询日志
         pollTimer = setInterval(() => {
@@ -873,8 +902,8 @@ export async function handleCodexOAuth(currentConfig, options = {}) {
                 logger.info(`[Codex Auth] Polling timeout (${totalSeconds}s), releasing session for next authorization`);
                 
                 // 清理会话
-                if (global.codexOAuthSessions.has(sessionId)) {
-                    global.codexOAuthSessions.delete(sessionId);
+                if (sessions.has(sessionId)) {
+                    sessions.delete(sessionId);
                 }
             }
         }, pollInterval);
@@ -892,17 +921,17 @@ export async function handleCodexOAuth(currentConfig, options = {}) {
             try {
                 logger.info('[Codex Auth] Received auth callback, completing OAuth flow...');
                 
-                const session = global.codexOAuthSessions.get(sessionId);
-                if (!session) {
+                const sessionData = sessions.get(sessionId);
+                if (!sessionData) {
                     logger.error('[Codex Auth] Session not found');
                     return;
                 }
 
                 // 完成 OAuth 流程
-                const credentials = await auth.completeOAuthFlow(result.code, result.state, session.state, session.pkce);
+                const credentials = await auth.completeOAuthFlow(result.code, result.state, sessionData.state, sessionData.pkce);
 
                 // 清理会话
-                global.codexOAuthSessions.delete(sessionId);
+                sessions.delete(sessionId);
 
                 // 广播认证成功事件
                 broadcastEvent('oauth_success', {
@@ -941,7 +970,7 @@ export async function handleCodexOAuth(currentConfig, options = {}) {
             }
             
             logger.error('[Codex Auth] Auth error:', error.message);
-            global.codexOAuthSessions.delete(sessionId);
+            sessions.delete(sessionId);
             
             broadcastEvent('oauth_error', {
                 provider: 'openai-codex-oauth',
@@ -995,12 +1024,14 @@ export async function handleCodexOAuth(currentConfig, options = {}) {
  * @returns {Promise<Object>} 返回认证结果
  */
 export async function handleCodexOAuthCallback(code, state) {
+    const sessions = getOAuthSessions();
+    
     try {
-        if (!global.codexOAuthSessions || !global.codexOAuthSessions.has(state)) {
+        if (!sessions.has(state)) {
             throw new Error('Invalid or expired OAuth session');
         }
 
-        const session = global.codexOAuthSessions.get(state);
+        const session = sessions.get(state);
         const { auth, state: expectedState, pkce } = session;
 
         logger.info('[Codex Auth] Processing OAuth callback...');
@@ -1009,7 +1040,7 @@ export async function handleCodexOAuthCallback(code, state) {
         const result = await auth.completeOAuthFlow(code, state, expectedState, pkce);
 
         // 清理会话
-        global.codexOAuthSessions.delete(state);
+        sessions.delete(state);
 
         // 广播认证成功事件（与 gemini 格式一致）
         broadcastEvent('oauth_success', {

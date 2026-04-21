@@ -637,7 +637,7 @@
             <div class="stat-card pink">
                 <div class="label">今日总调用</div>
                 <div class="value" id="todayUsage">0</div>
-                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">QPS: <span id="currentQps" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxQps">0.00</span>) | RPM: <span id="currentRpm" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxRpm">0.00</span>)</div>
+<div style="font-size:12px;color:var(--text-secondary);margin-top:4px">QPS: <span id="currentQps" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxQps">0.00</span>) | RPM: <span id="currentRpm" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxRpm">0.00</span>)</div>
             </div>
             <div class="stat-card cyan">
                 <div class="label">累计调用</div>
@@ -855,7 +855,7 @@
         let systemConfig = { defaultDailyLimit: 500 };
         const API_BASE = '/api/potluck';
 
-        function getToken() { return localStorage.getItem('authToken'); }
+        function getToken() { return null; } // Token now in httpOnly cookie
         function formatNumber(num) { return new Intl.NumberFormat('zh-CN').format(Number(num || 0)); }
         function formatTokenCompact(num) {
             const value = Number(num || 0);
@@ -879,10 +879,10 @@
         function usageTokens(entry) { return typeof entry === 'number' ? 0 : Number(entry?.totalTokens || 0); }
 
         async function apiRequest(url, options = {}) {
-            const token = getToken();
             const headers = { 'Content-Type': 'application/json', ...options.headers };
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-            const response = await fetch(url, { ...options, headers });
+            const csrfToken = sessionStorage.getItem('csrfToken');
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+            const response = await fetch(url, { ...options, headers, credentials: 'include' });
             const data = await response.json();
             if (response.status === 401) { window.location.href = '/login.html'; return null; }
             return data;

@@ -9,9 +9,267 @@ export let PROMPT_LOG_FILENAME = ''; // Make PROMPT_LOG_FILENAME exportable
 
 const ALL_MODEL_PROVIDERS = Object.values(MODEL_PROVIDER);
 
+const VALIDATION_RULES = {
+    SERVER_PORT: {
+        type: 'int',
+        min: 1,
+        max: 65535,
+        required: true,
+        errorMsg: 'SERVER_PORT must be between 1 and 65535'
+    },
+    MASTER_PORT: {
+        type: 'int',
+        min: 1,
+        max: 65535,
+        errorMsg: 'MASTER_PORT must be between 1 and 65535'
+    },
+    LOGIN_EXPIRY: {
+        type: 'int',
+        min: 60,
+        max: 86400,
+        errorMsg: 'LOGIN_EXPIRY must be between 60 and 86400 seconds'
+    },
+    LOGIN_MAX_ATTEMPTS: {
+        type: 'int',
+        min: 1,
+        max: 100,
+        errorMsg: 'LOGIN_MAX_ATTEMPTS must be between 1 and 100'
+    },
+    LOGIN_LOCKOUT_DURATION: {
+        type: 'int',
+        min: 60,
+        max: 86400,
+        errorMsg: 'LOGIN_LOCKOUT_DURATION must be between 60 and 86400 seconds'
+    },
+    LOGIN_MIN_INTERVAL: {
+        type: 'int',
+        min: 1000,
+        max: 60000,
+        errorMsg: 'LOGIN_MIN_INTERVAL must be between 1000 and 60000 milliseconds'
+    },
+    REQUEST_MAX_RETRIES: {
+        type: 'int',
+        min: 0,
+        max: 10,
+        errorMsg: 'REQUEST_MAX_RETRIES must be between 0 and 10'
+    },
+    REQUEST_BASE_DELAY: {
+        type: 'int',
+        min: 100,
+        max: 60000,
+        errorMsg: 'REQUEST_BASE_DELAY must be between 100 and 60000 milliseconds'
+    },
+    CREDENTIAL_SWITCH_MAX_RETRIES: {
+        type: 'int',
+        min: 0,
+        max: 20,
+        errorMsg: 'CREDENTIAL_SWITCH_MAX_RETRIES must be between 0 and 20'
+    },
+    MAX_ERROR_COUNT: {
+        type: 'int',
+        min: 1,
+        max: 100,
+        errorMsg: 'MAX_ERROR_COUNT must be between 1 and 100'
+    },
+    CRON_NEAR_MINUTES: {
+        type: 'int',
+        min: 1,
+        max: 120,
+        errorMsg: 'CRON_NEAR_MINUTES must be between 1 and 120 minutes'
+    },
+    LOG_LEVEL: {
+        type: 'enum',
+        values: ['debug', 'info', 'warn', 'error'],
+        errorMsg: 'LOG_LEVEL must be one of: debug, info, warn, error'
+    },
+    LOG_OUTPUT_MODE: {
+        type: 'enum',
+        values: ['console', 'file', 'all', 'none'],
+        errorMsg: 'LOG_OUTPUT_MODE must be one of: console, file, all, none'
+    },
+    SYSTEM_PROMPT_MODE: {
+        type: 'enum',
+        values: ['overwrite', 'append'],
+        errorMsg: 'SYSTEM_PROMPT_MODE must be one of: overwrite, append'
+    },
+    PROMPT_LOG_MODE: {
+        type: 'enum',
+        values: ['none', 'console', 'file'],
+        errorMsg: 'PROMPT_LOG_MODE must be one of: none, console, file'
+    },
+    LOG_MAX_FILE_SIZE: {
+        type: 'int',
+        min: 1024,
+        max: 1073741824,
+        errorMsg: 'LOG_MAX_FILE_SIZE must be between 1024 bytes (1KB) and 1073741824 bytes (1GB)'
+    },
+    LOG_MAX_FILES: {
+        type: 'int',
+        min: 1,
+        max: 100,
+        errorMsg: 'LOG_MAX_FILES must be between 1 and 100'
+    },
+    SCHEDULED_HEALTH_CHECK: {
+        type: 'object',
+        properties: {
+            enabled: { type: 'bool' },
+            interval: { type: 'int', min: 10000, max: 86400000, errorMsg: 'SCHEDULED_HEALTH_CHECK.interval must be between 10000ms (10s) and 86400000ms (24h)' },
+            startupRun: { type: 'bool' }
+        }
+    },
+    TLS_SIDECAR_PORT: {
+        type: 'int',
+        min: 1,
+        max: 65535,
+        errorMsg: 'TLS_SIDECAR_PORT must be between 1 and 65535'
+    },
+    MAX_REQUEST_SIZE_MB: {
+        type: 'int',
+        min: 1,
+        max: 50,
+        errorMsg: 'MAX_REQUEST_SIZE_MB must be between 1 and 50 MB'
+    },
+    IMAGE_TIMEOUT_SECONDS: {
+        type: 'int',
+        min: 10,
+        max: 300,
+        errorMsg: 'IMAGE_TIMEOUT_SECONDS must be between 10 and 300 seconds'
+    }
+};
+
+function validateConfig(config) {
+    const errors = [];
+    const warnings = [];
+
+    for (const [key, rule] of Object.entries(VALIDATION_RULES)) {
+        const value = config[key];
+        
+        if (rule.required && value === undefined) {
+            errors.push(`[CONFIG ERROR] Missing required configuration: ${key}`);
+            continue;
+        }
+
+        if (value === undefined || value === null) {
+            continue;
+        }
+
+        switch (rule.type) {
+            case 'int':
+                if (!Number.isInteger(value)) {
+                    errors.push(`[CONFIG ERROR] ${key} must be an integer. Got: ${typeof value} (value: ${value})`);
+                } else if (rule.min !== undefined && value < rule.min) {
+                    errors.push(`[CONFIG ERROR] ${key} must be >= ${rule.min}. Got: ${value}`);
+                } else if (rule.max !== undefined && value > rule.max) {
+                    errors.push(`[CONFIG ERROR] ${key} must be <= ${rule.max}. Got: ${value}`);
+                }
+                break;
+
+            case 'enum':
+                if (!rule.values.includes(value)) {
+                    errors.push(`[CONFIG ERROR] ${key} must be one of [${rule.values.join(', ')}]. Got: ${value}`);
+                }
+                break;
+
+            case 'bool':
+                if (typeof value !== 'boolean') {
+                    errors.push(`[CONFIG ERROR] ${key} must be a boolean. Got: ${typeof value} (value: ${value})`);
+                }
+                break;
+
+            case 'string':
+                if (typeof value !== 'string') {
+                    errors.push(`[CONFIG ERROR] ${key} must be a string. Got: ${typeof value}`);
+                } else if (rule.minLength !== undefined && value.length < rule.minLength) {
+                    errors.push(`[CONFIG ERROR] ${key} must be at least ${rule.minLength} characters. Got: ${value.length}`);
+                } else if (rule.maxLength !== undefined && value.length > rule.maxLength) {
+                    errors.push(`[CONFIG ERROR] ${key} must be at most ${rule.maxLength} characters. Got: ${value.length}`);
+                } else if (rule.pattern && !rule.pattern.test(value)) {
+                    errors.push(`[CONFIG ERROR] ${key} format is invalid.`);
+                }
+                break;
+
+            case 'object':
+                if (typeof value !== 'object' || Array.isArray(value)) {
+                    errors.push(`[CONFIG ERROR] ${key} must be an object. Got: ${typeof value}`);
+                } else if (rule.properties) {
+                    for (const [propKey, propRule] of Object.entries(rule.properties)) {
+                        const propValue = value[propKey];
+                        if (propValue === undefined) continue;
+                        
+                        if (propRule.type === 'int') {
+                            if (!Number.isInteger(propValue)) {
+                                errors.push(`[CONFIG ERROR] ${key}.${propKey} must be an integer. Got: ${typeof propValue} (value: ${propValue})`);
+                            } else if (propRule.min !== undefined && propValue < propRule.min) {
+                                errors.push(propRule.errorMsg || `[CONFIG ERROR] ${key}.${propKey} must be >= ${propRule.min}. Got: ${propValue}`);
+                            } else if (propRule.max !== undefined && propValue > propRule.max) {
+                                errors.push(propRule.errorMsg || `[CONFIG ERROR] ${key}.${propKey} must be <= ${propRule.max}. Got: ${propValue}`);
+                            }
+                        } else if (propRule.type === 'bool') {
+                            if (typeof propValue !== 'boolean') {
+                                errors.push(`[CONFIG ERROR] ${key}.${propKey} must be a boolean. Got: ${typeof propValue} (value: ${propValue})`);
+                            }
+                        } else if (propRule.type === 'enum') {
+                            if (!propRule.values.includes(propValue)) {
+                                errors.push(`[CONFIG ERROR] ${key}.${propKey} must be one of [${propRule.values.join(', ')}]. Got: ${propValue}`);
+                            }
+                        }
+                    }
+                }
+                break;
+        }
+    }
+
+    if (config.REQUIRED_API_KEY === '123456') {
+        warnings.push('[CONFIG WARNING] Using default API key (123456). For security, please change this in production.');
+        if (process.env.NODE_ENV === 'production') {
+            warnings.push('[CONFIG WARNING] SECURITY RISK: Default API key is not allowed in production environment!');
+        }
+    }
+
+    if (config.LOG_LEVEL === 'debug' && process.env.NODE_ENV === 'production') {
+        warnings.push('[CONFIG WARNING] Debug log level is not recommended in production environment.');
+    }
+
+    if (config.PROXY_URL && !isValidUrl(config.PROXY_URL)) {
+        warnings.push(`[CONFIG WARNING] PROXY_URL format may be invalid: ${config.PROXY_URL}`);
+    }
+
+    return { errors, warnings };
+}
+
+function isValidUrl(string) {
+    try {
+        const url = new URL(string);
+        return ['http:', 'https:', 'socks:', 'socks5:'].includes(url.protocol);
+    } catch {
+        return false;
+    }
+}
+
+function applyConfigValidation(config) {
+    const { errors, warnings } = validateConfig(config);
+
+    if (warnings.length > 0) {
+        logger.warn('[Config Validation] Configuration warnings:');
+        warnings.forEach(warning => {
+            logger.warn(`  - ${warning}`);
+        });
+    }
+
+    if (errors.length > 0) {
+        logger.error('[Config Validation] Configuration errors detected:');
+        errors.forEach(error => {
+            logger.error(`  - ${error}`);
+        });
+        throw new Error(`Configuration validation failed with ${errors.length} error(s)`);
+    }
+
+    logger.info('[Config Validation] Configuration validation passed');
+}
+
 function normalizeConfiguredProviders(config) {
     const fallbackProvider = MODEL_PROVIDER.GEMINI_CLI;
-    const dedupedProviders = [];
+    let dedupedProviders = [];
 
     const addProvider = (value) => {
         if (typeof value !== 'string') {
@@ -31,13 +289,17 @@ function normalizeConfiguredProviders(config) {
         }
     };
 
-    const rawValue = config.MODEL_PROVIDER;
-    if (Array.isArray(rawValue)) {
-        rawValue.forEach((entry) => addProvider(typeof entry === 'string' ? entry : String(entry)));
-    } else if (typeof rawValue === 'string') {
-        rawValue.split(',').forEach(addProvider);
-    } else if (rawValue != null) {
-        addProvider(String(rawValue));
+    if (Array.isArray(config.DEFAULT_MODEL_PROVIDERS) && config.DEFAULT_MODEL_PROVIDERS.length > 0) {
+        config.DEFAULT_MODEL_PROVIDERS.forEach((entry) => addProvider(typeof entry === 'string' ? entry : String(entry)));
+    } else {
+        const rawValue = config.MODEL_PROVIDER;
+        if (Array.isArray(rawValue)) {
+            rawValue.forEach((entry) => addProvider(typeof entry === 'string' ? entry : String(entry)));
+        } else if (typeof rawValue === 'string') {
+            rawValue.split(',').forEach(addProvider);
+        } else if (rawValue != null) {
+            addProvider(String(rawValue));
+        }
     }
 
     if (dedupedProviders.length === 0) {
@@ -59,32 +321,33 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         REQUIRED_API_KEY: "123456",
         SERVER_PORT: 3000,
         HOST: '0.0.0.0',
+        MASTER_PORT: 3100,
         MODEL_PROVIDER: MODEL_PROVIDER.GEMINI_CLI,
-        SYSTEM_PROMPT_FILE_PATH: INPUT_SYSTEM_PROMPT_FILE, // Default value
+        SYSTEM_PROMPT_FILE_PATH: INPUT_SYSTEM_PROMPT_FILE,
         SYSTEM_PROMPT_MODE: 'append',
-        PROXY_URL: null, // HTTP/HTTPS/SOCKS5 代理地址，如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080
-        PROXY_ENABLED_PROVIDERS: [], // 启用代理的提供商列表，如 ['gemini-cli-oauth', 'claude-kiro-oauth']
+        PROXY_URL: null,
+        PROXY_ENABLED_PROVIDERS: [],
         PROMPT_LOG_BASE_NAME: "prompt_log",
         PROMPT_LOG_MODE: "none",
         REQUEST_MAX_RETRIES: 3,
         REQUEST_BASE_DELAY: 1000,
-        CREDENTIAL_SWITCH_MAX_RETRIES: 5, // 坏凭证切换最大重试次数（用于认证错误后切换凭证）
+        CREDENTIAL_SWITCH_MAX_RETRIES: 5,
         CRON_NEAR_MINUTES: 15,
         CRON_REFRESH_TOKEN: false,
-        LOGIN_EXPIRY: 3600, // 登录过期时间（秒），默认1小时
-        LOGIN_MAX_ATTEMPTS: 5, // 最大失败重试次数
-        LOGIN_LOCKOUT_DURATION: 1800, // 锁定持续时间（秒），默认30分钟
-        LOGIN_MIN_INTERVAL: 5000, // 两次尝试之间的最小间隔（毫秒），默认1秒
-        PROVIDER_POOLS_FILE_PATH: null, // 新增号池配置文件路径
-        MAX_ERROR_COUNT: 10, // 提供商最大错误次数
-        CUSTOM_MODELS_FILE_PATH: null, // 自定义模型配置文件路径
-        SYSTEM_PROMPT_REPLACEMENTS: [], // 系统提示词内容替换规则，例如: [{"old": "AI", "new": "Bot"}, {"old": "OpenAI", "new": "Gemini"}]
+        LOGIN_EXPIRY: 3600,
+        LOGIN_MAX_ATTEMPTS: 5,
+        LOGIN_LOCKOUT_DURATION: 1800,
+        LOGIN_MIN_INTERVAL: 5000,
+        PROVIDER_POOLS_FILE_PATH: null,
+        MAX_ERROR_COUNT: 10,
+        CUSTOM_MODELS_FILE_PATH: null,
+        SYSTEM_PROMPT_REPLACEMENTS: [],
         SCHEDULED_HEALTH_CHECK: {
             enabled: false,
             interval: 600000,
             startupRun: false
         },
-        providerFallbackChain: {}, // 跨类型 Fallback 链配置
+        providerFallbackChain: {},
         LOG_ENABLED: true,
         LOG_OUTPUT_MODE: "all",
         LOG_LEVEL: "info",
@@ -93,17 +356,26 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         LOG_INCLUDE_TIMESTAMP: true,
         LOG_MAX_FILE_SIZE: 10485760,
         LOG_MAX_FILES: 10,
-        TLS_SIDECAR_ENABLED: false, // 启用 Go uTLS sidecar（需要编译 tls-sidecar 二进制）
-        TLS_SIDECAR_ENABLED_PROVIDERS: [], // 启用 TLS Sidecar 的提供商列表
-        TLS_SIDECAR_PORT: 9090,     // sidecar 监听端口
-        TLS_SIDECAR_BINARY_PATH: null, // 自定义二进制路径（默认自动搜索）
-        TLS_SIDECAR_PROXY_URL: null    // TLS Sidecar 专用的上游代理地址
+        TLS_SIDECAR_ENABLED: false,
+        TLS_SIDECAR_ENABLED_PROVIDERS: [],
+        TLS_SIDECAR_PORT: 9090,
+        TLS_SIDECAR_BINARY_PATH: null,
+        TLS_SIDECAR_PROXY_URL: null,
+        CONTROLLER_BASE_URL: 'http://192.168.7.103:5000',
+        CONTROLLER_API_KEY: null,
+        MAX_REQUEST_SIZE_MB: 10,
+        IMAGE_TIMEOUT_SECONDS: 60,
+        HEALTH_ALERT_WEBHOOK_URL: null,
+        ALERT_DINGTALK_WEBHOOK: null,
+        ALERT_WECOM_WEBHOOK: null,
+        ALERT_MAX_HISTORY: 100,
+        ALERT_DEFAULT_SILENCE_MINUTES: 60
     };
 
     let currentConfig = { ...defaultConfig };
 
     try {
-        const configData = fs.readFileSync(configFilePath, 'utf8');
+        const configData = await pfs.readFile(configFilePath, 'utf8');
         const loadedConfig = JSON.parse(configData);
         Object.assign(currentConfig, loadedConfig);
         logger.info('[Config] Loaded configuration from configs/config.json');
@@ -135,8 +407,10 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         { flag: '--login-max-attempts',   configKey: 'LOGIN_MAX_ATTEMPTS',     type: 'int' },
         { flag: '--login-lockout-duration', configKey: 'LOGIN_LOCKOUT_DURATION', type: 'int' },
         { flag: '--login-min-interval',   configKey: 'LOGIN_MIN_INTERVAL',     type: 'int' },
-        { flag: '--scheduled-health-check-enabled', configKey: 'SCHEDULE_HEALTH_CHECK_ENABLED', type: 'bool' },
-        { flag: '--scheduled-health-check-interval', configKey: 'SCHEDULE_HEALTH_CHECK_INTERVAL', type: 'int' },
+        { flag: '--scheduled-health-check-enabled', configKey: 'SCHEDULED_HEALTH_CHECK.enabled', type: 'bool' },
+        { flag: '--scheduled-health-check-interval', configKey: 'SCHEDULED_HEALTH_CHECK.interval', type: 'int' },
+        { flag: '--controller-url',       configKey: 'CONTROLLER_BASE_URL',    type: 'string' },
+        { flag: '--controller-api-key',   configKey: 'CONTROLLER_API_KEY',     type: 'string' },
     ];
 
     // Parse command-line arguments using definitions
@@ -171,15 +445,9 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         }
     }
 
-    // 合并定时健康检查的 CLI 配置
-    if (currentConfig.SCHEDULE_HEALTH_CHECK_ENABLED !== undefined) {
-        currentConfig.SCHEDULED_HEALTH_CHECK.enabled = currentConfig.SCHEDULE_HEALTH_CHECK_ENABLED;
-    }
-    if (currentConfig.SCHEDULE_HEALTH_CHECK_INTERVAL !== undefined) {
-        currentConfig.SCHEDULED_HEALTH_CHECK.interval = currentConfig.SCHEDULE_HEALTH_CHECK_INTERVAL;
-    }
-
     normalizeConfiguredProviders(currentConfig);
+
+    applyConfigValidation(currentConfig);
 
     if (!currentConfig.SYSTEM_PROMPT_FILE_PATH) {
         currentConfig.SYSTEM_PROMPT_FILE_PATH = INPUT_SYSTEM_PROMPT_FILE;
@@ -208,8 +476,9 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
         currentConfig.CUSTOM_MODELS_FILE_PATH = 'configs/custom_models.json';
     }
     try {
-        if (fs.existsSync(currentConfig.CUSTOM_MODELS_FILE_PATH)) {
-            const customModelsData = fs.readFileSync(currentConfig.CUSTOM_MODELS_FILE_PATH, 'utf8');
+        const customModelsExists = await pfs.access(currentConfig.CUSTOM_MODELS_FILE_PATH, pfs.constants.F_OK).then(() => true).catch(() => false);
+        if (customModelsExists) {
+            const customModelsData = await pfs.readFile(currentConfig.CUSTOM_MODELS_FILE_PATH, 'utf8');
             currentConfig.customModels = JSON.parse(customModelsData);
             logger.info(`[Config] Loaded custom models from ${currentConfig.CUSTOM_MODELS_FILE_PATH}`);
         } else {
@@ -234,7 +503,7 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
     Object.assign(CONFIG, currentConfig);
 
     // Initialize logger
-    logger.initialize({
+    await logger.initialize({
         enabled: CONFIG.LOG_ENABLED ?? true,
         outputMode: CONFIG.LOG_OUTPUT_MODE || "all",
         logLevel: CONFIG.LOG_LEVEL || "info",
@@ -246,7 +515,7 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
     });
 
     // Cleanup old logs periodically
-    logger.cleanupOldLogs();
+    await logger.cleanupOldLogs();
 
     return CONFIG;
 }
@@ -281,5 +550,5 @@ export async function getSystemPromptFileContent(filePath) {
     }
 }
 
-export { ALL_MODEL_PROVIDERS };
+export { ALL_MODEL_PROVIDERS, normalizeConfiguredProviders };
 

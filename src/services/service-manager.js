@@ -414,7 +414,10 @@ export async function getApiService(config, requestedModel = null, options = {})
     if (effectiveProvider === MODEL_PROVIDER.AUTO && !actualModelName) return null;
 
     let serviceConfig = config;
-    const isPoolable = PROVIDER_MAPPINGS.some(m => m.providerType === config.MODEL_PROVIDER);
+    const isPoolable = PROVIDER_MAPPINGS.some(m => 
+            m.providerType === config.MODEL_PROVIDER || 
+            config.MODEL_PROVIDER.startsWith(m.providerType + '-')
+        );
     if (providerPoolManager && ((config.providerPools && config.providerPools[config.MODEL_PROVIDER]) || isPoolable)) {
         // 如果有号池管理器，并且当前模型提供者类型有对应的号池（或属于号池类型提供商），则从号池中选择一个提供者配置
         // selectProvider 现在是异步的，使用链式锁确保并发安全
@@ -428,7 +431,25 @@ export async function getApiService(config, requestedModel = null, options = {})
             const customNameDisplay = serviceConfig.customName ? ` (${serviceConfig.customName})` : '';
             logger.info(`[API Service] Using pooled configuration for ${config.MODEL_PROVIDER}: ${serviceConfig.uuid}${customNameDisplay}${actualModelName ? ` (model: ${actualModelName})` : ''}`);
         } else {
-            const errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            const poolConfigs = config.providerPools?.[config.MODEL_PROVIDER];
+            let errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            
+            // 添加详细的诊断信息
+            if (!poolConfigs || poolConfigs.length === 0) {
+                errorMsg += `. Provider pool '${config.MODEL_PROVIDER}' is empty or not configured.`;
+            } else {
+                const healthyCount = poolConfigs.filter(p => p.isHealthy !== false && !p.isDisabled).length;
+                const totalCount = poolConfigs.length;
+                errorMsg += `. Pool has ${totalCount} node(s), but only ${healthyCount} healthy.`;
+            }
+            
+            // 添加配置建议
+            if (config.MODEL_PROVIDER === 'local-model') {
+                errorMsg += ` To use local models, please configure vLLM endpoints in configs/provider_pools.json or start the Python controller service.`;
+            } else {
+                errorMsg += ` Please check provider pool configuration in configs/provider_pools.json.`;
+            }
+            
             logger.error(errorMsg);
             throw new Error(errorMsg);
         }
@@ -462,7 +483,10 @@ export async function getApiServiceWithFallback(config, requestedModel = null, o
     let selectedUuid = null;
     let actualModel = actualModelName;
     
-    const isPoolable = PROVIDER_MAPPINGS.some(m => m.providerType === config.MODEL_PROVIDER);
+    const isPoolable = PROVIDER_MAPPINGS.some(m => 
+            m.providerType === config.MODEL_PROVIDER || 
+            config.MODEL_PROVIDER.startsWith(m.providerType + '-')
+        );
     if (providerPoolManager && ((config.providerPools && config.providerPools[config.MODEL_PROVIDER]) || isPoolable)) {
         // selectProviderWithFallback 现在是异步的，使用链式锁确保并发安全
         // 如果开启了并发限制，则使用 acquireSlot 进行选择和占位
@@ -501,7 +525,25 @@ export async function getApiServiceWithFallback(config, requestedModel = null, o
                 serviceConfig.MODEL_PROVIDER = actualProviderType;
             }
         } else {
-            const errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            const poolConfigs = config.providerPools?.[config.MODEL_PROVIDER];
+            let errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            
+            // 添加详细的诊断信息
+            if (!poolConfigs || poolConfigs.length === 0) {
+                errorMsg += `. Provider pool '${config.MODEL_PROVIDER}' is empty or not configured.`;
+            } else {
+                const healthyCount = poolConfigs.filter(p => p.isHealthy !== false && !p.isDisabled).length;
+                const totalCount = poolConfigs.length;
+                errorMsg += `. Pool has ${totalCount} node(s), but only ${healthyCount} healthy.`;
+            }
+            
+            // 添加配置建议
+            if (config.MODEL_PROVIDER === 'local-model') {
+                errorMsg += ` To use local models, please configure vLLM endpoints in configs/provider_pools.json or start the Python controller service.`;
+            } else {
+                errorMsg += ` Please check provider pool configuration in configs/provider_pools.json.`;
+            }
+            
             logger.error(errorMsg);
             throw new Error(errorMsg);
         }
@@ -555,9 +597,19 @@ export async function getProviderStatus(config, options = {}) {
     try {
         if (providerPoolManager && providerPoolManager.providerPools) {
             providerPools = providerPoolManager.providerPools;
-        } else if (filePath && fs.existsSync(filePath)) {
-            const poolsData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-            providerPools = poolsData;
+        } else if (filePath) {
+            const fileExists = await (async () => {
+                try {
+                    await fs.promises.access(filePath, fs.constants.F_OK);
+                    return true;
+                } catch {
+                    return false;
+                }
+            })();
+            if (fileExists) {
+                const poolsData = await fs.promises.readFile(filePath, 'utf-8');
+                providerPools = JSON.parse(poolsData);
+            }
         }
     } catch (error) {
         logger.warn('[API Service] Failed to load provider pools:', error.message);
@@ -583,7 +635,8 @@ export async function getProviderStatus(config, options = {}) {
         'openai-iflow': 'IFLOW_TOKEN_FILE_PATH',
         'forward-api': 'FORWARD_BASE_URL',
         'grok-custom': 'GROK_COOKIE_TOKEN',
-        'openai-codex-oauth': 'CODEX_OAUTH_CREDS_FILE_PATH'
+        'openai-codex-oauth': 'CODEX_OAUTH_CREDS_FILE_PATH',
+        'local-model': 'LOCAL_BASE_URL'
     };
     let providerPoolsSlim = [];
     let unhealthyProvideIdentifyList = [];

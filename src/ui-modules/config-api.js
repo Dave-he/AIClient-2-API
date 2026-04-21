@@ -3,12 +3,13 @@ import logger from '../utils/logger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { CONFIG } from '../core/config-manager.js';
+import { CONFIG, normalizeConfiguredProviders } from '../core/config-manager.js';
 import { serviceInstances } from '../providers/adapter.js';
 import { initApiService } from '../services/service-manager.js';
 import { getRequestBody } from '../utils/common.js';
 import { broadcastEvent } from '../ui-modules/event-broadcast.js';
 import { HEALTH_CHECK, PASSWORD, NETWORK, RETRY } from '../utils/constants.js';
+import { ENDPOINT_TYPE } from '../utils/common.js';
 import { withFileLock, atomicWriteFile } from '../utils/file-lock.js';
 
 /**
@@ -100,8 +101,7 @@ export async function handleGetConfig(req, res, currentConfig) {
         LOG_MAX_FILE_SIZE: currentConfig.LOG_MAX_FILE_SIZE,
         LOG_MAX_FILES: currentConfig.LOG_MAX_FILES,
         SCHEDULED_HEALTH_CHECK: currentConfig.SCHEDULED_HEALTH_CHECK,
-        // 脱敏：只返回是否设置了 API Key，不返回原文
-        REQUIRED_API_KEY: currentConfig.REQUIRED_API_KEY ? '******' : '',
+        REQUIRED_API_KEY: currentConfig.REQUIRED_API_KEY || '',
         systemPrompt,
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -112,7 +112,7 @@ export async function handleGetConfig(req, res, currentConfig) {
 /**
  * 更新配置
  */
-export async function handleUpdateConfig(req, res, currentConfig) {
+export async function handleUpdateConfig(req, res, currentConfig, providerPoolManager = null) {
     try {
         const body = await getRequestBody(req);
         const configPath = 'configs/config.json';
@@ -130,8 +130,8 @@ async function _handleUpdateConfig(req, res, currentConfig, body) {
         // Update config values in memory（含类型校验）
         if (newConfig.REQUIRED_API_KEY !== undefined) {
             if (typeof newConfig.REQUIRED_API_KEY === 'string') {
-                // 如果是脱敏后的字符串，则忽略更新，保留原值
-                if (newConfig.REQUIRED_API_KEY !== '******') {
+                // 如果是脱敏后的字符串或空字符串，则忽略更新，保留原值
+                if (newConfig.REQUIRED_API_KEY !== '******' && newConfig.REQUIRED_API_KEY.trim() !== '') {
                     currentConfig.REQUIRED_API_KEY = newConfig.REQUIRED_API_KEY;
                 }
             }
@@ -143,7 +143,45 @@ async function _handleUpdateConfig(req, res, currentConfig, body) {
             const port = Number(newConfig.SERVER_PORT);
             if (Number.isInteger(port) && port >= NETWORK.MIN_PORT && port <= NETWORK.MAX_PORT) currentConfig.SERVER_PORT = port;
         }
-        if (newConfig.MODEL_PROVIDER !== undefined) currentConfig.MODEL_PROVIDER = newConfig.MODEL_PROVIDER;
+        if (newConfig.MODEL_PROVIDER !== undefined) {
+            const oldProvider = currentConfig.MODEL_PROVIDER;
+            currentConfig.MODEL_PROVIDER = newConfig.MODEL_PROVIDER;
+            currentConfig.DEFAULT_MODEL_PROVIDERS = [];
+            normalizeConfiguredProviders(currentConfig);
+            
+            // 如果提供商发生变化，需要重新初始化服务实例
+            if (oldProvider !== currentConfig.MODEL_PROVIDER) {
+                Object.keys(serviceInstances).forEach(key => delete serviceInstances[key]);
+                await initApiService(currentConfig);
+                
+                // 更新 providerPoolManager
+                if (providerPoolManager) {
+                    providerPoolManager.initializeProviderStatus();
+                }
+                
+                logger.info('[UI API] Service instances reinitialized due to MODEL_PROVIDER change');
+            }
+        }
+        
+        if (newConfig.DEFAULT_MODEL_PROVIDERS !== undefined && Array.isArray(newConfig.DEFAULT_MODEL_PROVIDERS)) {
+            const oldProviders = [...(currentConfig.DEFAULT_MODEL_PROVIDERS || [])];
+            currentConfig.DEFAULT_MODEL_PROVIDERS = [];
+            normalizeConfiguredProviders(currentConfig);
+            
+            // 如果提供商列表发生变化，需要重新初始化服务实例
+            const providersChanged = JSON.stringify(oldProviders) !== JSON.stringify(currentConfig.DEFAULT_MODEL_PROVIDERS);
+            if (providersChanged) {
+                Object.keys(serviceInstances).forEach(key => delete serviceInstances[key]);
+                await initApiService(currentConfig);
+                
+                // 更新 providerPoolManager
+                if (providerPoolManager) {
+                    providerPoolManager.initializeProviderStatus();
+                }
+                
+                logger.info('[UI API] Service instances reinitialized due to DEFAULT_MODEL_PROVIDERS change');
+            }
+        }
         if (newConfig.SYSTEM_PROMPT_FILE_PATH !== undefined) {
             const p = String(newConfig.SYSTEM_PROMPT_FILE_PATH);
             // 防止路径遍历：解析后的绝对路径必须在工作目录内
@@ -187,8 +225,26 @@ async function _handleUpdateConfig(req, res, currentConfig, body) {
         if (newConfig.MAX_ERROR_COUNT !== undefined) currentConfig.MAX_ERROR_COUNT = newConfig.MAX_ERROR_COUNT;
         if (newConfig.WARMUP_TARGET !== undefined) currentConfig.WARMUP_TARGET = newConfig.WARMUP_TARGET;
         if (newConfig.REFRESH_CONCURRENCY_PER_PROVIDER !== undefined) currentConfig.REFRESH_CONCURRENCY_PER_PROVIDER = newConfig.REFRESH_CONCURRENCY_PER_PROVIDER;
-        if (newConfig.providerFallbackChain !== undefined) currentConfig.providerFallbackChain = newConfig.providerFallbackChain;
-        if (newConfig.modelFallbackMapping !== undefined) currentConfig.modelFallbackMapping = newConfig.modelFallbackMapping;
+        if (newConfig.providerFallbackChain !== undefined) {
+            const oldFallbackChain = JSON.stringify(currentConfig.providerFallbackChain || {});
+            currentConfig.providerFallbackChain = newConfig.providerFallbackChain;
+            
+            // 更新 providerPoolManager 中的 fallbackChain
+            if (providerPoolManager && oldFallbackChain !== JSON.stringify(currentConfig.providerFallbackChain)) {
+                providerPoolManager.fallbackChain = currentConfig.providerFallbackChain;
+                logger.info('[UI API] Provider fallback chain updated');
+            }
+        }
+        if (newConfig.modelFallbackMapping !== undefined) {
+            const oldMapping = JSON.stringify(currentConfig.modelFallbackMapping || {});
+            currentConfig.modelFallbackMapping = newConfig.modelFallbackMapping;
+            
+            // 更新 providerPoolManager 中的 modelFallbackMapping
+            if (providerPoolManager && oldMapping !== JSON.stringify(currentConfig.modelFallbackMapping)) {
+                providerPoolManager.modelFallbackMapping = currentConfig.modelFallbackMapping;
+                logger.info('[UI API] Model fallback mapping updated');
+            }
+        }
         
         // Proxy settings
         if (newConfig.PROXY_URL !== undefined) currentConfig.PROXY_URL = newConfig.PROXY_URL;
@@ -305,6 +361,7 @@ async function _handleUpdateConfig(req, res, currentConfig, body) {
                 SERVER_PORT: currentConfig.SERVER_PORT,
                 HOST: currentConfig.HOST,
                 MODEL_PROVIDER: currentConfig.MODEL_PROVIDER,
+                DEFAULT_MODEL_PROVIDERS: currentConfig.DEFAULT_MODEL_PROVIDERS,
                 SYSTEM_PROMPT_FILE_PATH: currentConfig.SYSTEM_PROMPT_FILE_PATH,
                 SYSTEM_PROMPT_MODE: currentConfig.SYSTEM_PROMPT_MODE,
                 SYSTEM_PROMPT_REPLACEMENTS: currentConfig.SYSTEM_PROMPT_REPLACEMENTS,

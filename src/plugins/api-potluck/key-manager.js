@@ -567,7 +567,7 @@ export async function incrementUsage(apiKey, pName = 'unknown', mName = 'unknown
         rateManager.record(`key:${apiKey}`, usage.totalTokens);
     }
 
-    const rates = rateManager.getGlobalStats();
+const rates = rateManager.getGlobalStats();
     const updatePeaks = (target) => {
         target.maxQps = Math.max(target.maxQps || 0, rates.qps);
         target.maxRpm = Math.max(target.maxRpm || 0, rates.rpm);

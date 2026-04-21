@@ -5,6 +5,7 @@ import {
     ENDPOINT_TYPE
 } from '../utils/common.js';
 import { getProviderPoolManager } from './service-manager.js';
+import { handleModelSwitchRequest } from '../utils/model-switch-lock.js';
 import logger from '../utils/logger.js';
 /**
  * Handle API authentication and routing
@@ -31,6 +32,11 @@ export async function handleAPIRequests(method, path, req, res, currentConfig, a
             await handleModelListRequest(req, res, apiService, ENDPOINT_TYPE.GEMINI_MODEL_LIST, currentConfig, providerPoolManager, currentConfig.uuid);
             return true;
         }
+        // vLLM model list endpoint
+        if (path === '/vllm/models') {
+            await handleModelListRequest(req, res, apiService, ENDPOINT_TYPE.OPENAI_MODEL_LIST, currentConfig, providerPoolManager, currentConfig.uuid);
+            return true;
+        }
     }
 
     // Route content generation requests
@@ -52,6 +58,20 @@ export async function handleAPIRequests(method, path, req, res, currentConfig, a
             await handleContentGenerationRequest(req, res, apiService, ENDPOINT_TYPE.CLAUDE_MESSAGE, currentConfig, promptLogFilename, providerPoolManager, currentConfig.uuid, path);
             return true;
         }
+        // vLLM model management endpoints
+        if (path === '/vllm/model/switch') {
+            return await handleModelSwitchRequest(req, res);
+        }
+        if (path === '/vllm/service/start' || path === '/vllm/service/stop' || path === '/vllm/service/restart') {
+            await handleContentGenerationRequest(req, res, apiService, ENDPOINT_TYPE.OPENAI_CHAT, currentConfig, promptLogFilename, providerPoolManager, currentConfig.uuid, path);
+            return true;
+        }
+    }
+
+    // vLLM service status endpoints
+    if (method === 'GET' && (path === '/vllm/model/status' || path === '/vllm/service/status')) {
+        await handleModelListRequest(req, res, apiService, ENDPOINT_TYPE.OPENAI_MODEL_LIST, currentConfig, providerPoolManager, currentConfig.uuid);
+        return true;
     }
 
     return false;

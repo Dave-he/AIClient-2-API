@@ -37,6 +37,8 @@ const KIRO_CONSTANTS = {
     DEFAULT_MODEL_NAME: 'claude-sonnet-4-5',
     AXIOS_TIMEOUT: 120000, // 2 minutes timeout for normal requests
     TOKEN_REFRESH_TIMEOUT: 15000, // 15 seconds timeout for token refresh (shorter to avoid blocking)
+    STREAM_TIMEOUT: 300000, // 5 minutes timeout for streaming requests
+    STREAM_DATA_TIMEOUT: 60000, // 1 minute timeout waiting for data chunks
     USER_AGENT: 'KiroIDE',
     KIRO_VERSION: '0.11.63',
     CONTENT_TYPE_JSON: 'application/json',
@@ -1536,6 +1538,7 @@ async saveCredentialsToFile(filePath, newData) {
         if (!this.isInitialized) await this.initialize();
         const maxRetries = this.config.REQUEST_MAX_RETRIES || 3;
         const baseDelay = this.config.REQUEST_BASE_DELAY || 1000; // 1 second base delay
+        const requestTimeout = this.config.AXIOS_TIMEOUT || KIRO_CONSTANTS.AXIOS_TIMEOUT;
 
         // 处理不同格式的请求体（messages 或 contents）
         let messages = body.messages;
@@ -1562,6 +1565,19 @@ async saveCredentialsToFile(filePath, newData) {
 
             // 当 model 以 kiro-amazonq 开头时，使用 amazonQUrl，否则使用 baseUrl
             const requestUrl = model.startsWith('amazonq') ? this.amazonQUrl : this.baseUrl;
+            
+            // 创建超时 Promise
+            let timeoutId = null;
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    const error = new Error(`Request timeout after ${requestTimeout}ms`);
+                    error.code = 'REQUEST_TIMEOUT';
+                    error.shouldSwitchCredential = true;
+                    error.skipErrorCount = true;
+                    reject(error);
+                }, requestTimeout);
+            });
+
             const axiosConfig = {
                 method: 'post',
                 url: requestUrl,
@@ -1569,7 +1585,18 @@ async saveCredentialsToFile(filePath, newData) {
                 headers
             };
             this._applySidecar(axiosConfig);
-            const response = await this.axiosInstance.request(axiosConfig);
+            
+            // 使用 Promise.race 实现超时
+            const response = await Promise.race([
+                this.axiosInstance.request(axiosConfig),
+                timeoutPromise
+            ]);
+            
+            // 清除超时定时器
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            
             return response;
         } catch (error) {
             const status = error.response?.status;
@@ -1578,6 +1605,15 @@ async saveCredentialsToFile(filePath, newData) {
             
             // 检查是否为可重试的网络错误
             const isNetworkError = isRetryableNetworkError(error);
+            
+            // Handle request timeout error
+            if (error.code === 'REQUEST_TIMEOUT') {
+                logger.warn(`[Kiro] Request timeout error: ${error.message}`);
+                this._markCredentialNeedRefresh(`Request timeout: ${error.message}`);
+                error.shouldSwitchCredential = true;
+                error.skipErrorCount = true;
+                throw error;
+            }
             
             // Handle 401 (Unauthorized) - refresh UUID first, then try to refresh token
             if (status === 401 && !isRetry) {
@@ -1642,7 +1678,15 @@ async saveCredentialsToFile(filePath, newData) {
                 return this.callApi(method, model, body, isRetry, retryCount + 1);
             }
 
-            if (error.response && error.response.data) { logger.error('[Kiro] 400 Response body:', typeof error.response.data === 'string' ? error.response.data.substring(0, 500) : JSON.stringify(error.response.data).substring(0, 500)); }
+            // 检测免费账号限制并记录警告
+            if (status === 403 || status === 402 || status === 429) {
+                const freeAccountMessage = this._detectFreeAccountRestriction(error);
+                if (freeAccountMessage) {
+                    logger.warn(`[Kiro] Potential free account issue detected: ${freeAccountMessage}`);
+                }
+            }
+
+            if (error.response && error.response.data) { logger.error('[Kiro] Response body:', typeof error.response.data === 'string' ? error.response.data.substring(0, 500) : JSON.stringify(error.response.data).substring(0, 500)); }
             logger.error(`[Kiro] API call failed (Status: ${status}, Code: ${errorCode}):`, error.message);
             throw error;
         }
@@ -1681,7 +1725,11 @@ async saveCredentialsToFile(filePath, newData) {
             'limit exceeded',
             'payment required',
             'not authorized to access',
-            'not allowed'
+            'not allowed',
+            'free tier',
+            'free account',
+            'trial expired',
+            'limited access'
         ];
         if (nonRefreshablePatterns.some(pattern => text.includes(pattern))) {
             return false;
@@ -1698,6 +1746,28 @@ async saveCredentialsToFile(filePath, newData) {
         return tokenRelated && refreshableAuthState;
     }
 
+    _detectFreeAccountRestriction(error) {
+        const text = this._getErrorResponseText(error).toLowerCase();
+        if (!text) return null;
+
+        const freeAccountPatterns = [
+            { pattern: 'free tier', message: 'Free tier account may have limited access' },
+            { pattern: 'free account', message: 'Free account access restrictions apply' },
+            { pattern: 'trial expired', message: 'Trial period has expired' },
+            { pattern: 'limited access', message: 'Account has limited access privileges' },
+            { pattern: 'quota exceeded', message: 'Quota exceeded, please check your plan' },
+            { pattern: 'rate limit', message: 'Rate limit exceeded' },
+            { pattern: 'capacity', message: 'Service capacity issues' }
+        ];
+
+        for (const { pattern, message } of freeAccountPatterns) {
+            if (text.includes(pattern)) {
+                return message;
+            }
+        }
+        return null;
+    }
+
     _handleForbiddenCredentialError(error, context) {
         const responseText = this._getErrorResponseText(error);
         const responseSnippet = responseText ? responseText.substring(0, 500) : '';
@@ -1706,12 +1776,19 @@ async saveCredentialsToFile(filePath, newData) {
             logger.warn(`[Kiro] 403 response body (${context}): ${responseSnippet}`);
         }
 
+        // 检测免费账号限制
+        const freeAccountMessage = this._detectFreeAccountRestriction(error);
+        if (freeAccountMessage) {
+            logger.warn(`[Kiro] Free account restriction detected in ${context}: ${freeAccountMessage}`);
+        }
+
         if (this._isRefreshableForbidden(error)) {
             logger.info(`[Kiro] Received token-related 403 in ${context}. Marking credential as needs refresh.`);
             this._markCredentialNeedRefresh(`403 Forbidden (${context}) - token-related${responseSnippet ? `: ${responseSnippet}` : ''}`, error);
         } else {
             logger.info(`[Kiro] Received non-refreshable 403 in ${context}. Marking credential as unhealthy without refresh.`);
-            this._markCredentialUnhealthy(`403 Forbidden (${context})${responseSnippet ? `: ${responseSnippet}` : ''}`, error);
+            const reason = `403 Forbidden (${context})${responseSnippet ? `: ${responseSnippet}` : ''}${freeAccountMessage ? ` - ${freeAccountMessage}` : ''}`;
+            this._markCredentialUnhealthy(reason, error);
         }
     }
 
@@ -2089,6 +2166,8 @@ async saveCredentialsToFile(filePath, newData) {
         if (!this.isInitialized) await this.initialize();
         const maxRetries = this.config.REQUEST_MAX_RETRIES || 3;
         const baseDelay = this.config.REQUEST_BASE_DELAY || 1000;
+        const streamTimeout = this.config.STREAM_TIMEOUT || KIRO_CONSTANTS.STREAM_TIMEOUT;
+        const streamDataTimeout = this.config.STREAM_DATA_TIMEOUT || KIRO_CONSTANTS.STREAM_DATA_TIMEOUT;
 
         // 处理不同格式的请求体（messages 或 contents）
         let messages = body.messages;
@@ -2115,7 +2194,21 @@ async saveCredentialsToFile(filePath, newData) {
         const requestUrl = model.startsWith('amazonq') ? this.amazonQUrl : this.baseUrl;
 
         let stream = null;
+        let timeoutId = null;
+        let dataTimeoutId = null;
+        
         try {
+            // 整体流超时
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    const error = new Error(`Stream timeout after ${streamTimeout}ms`);
+                    error.code = 'STREAM_TIMEOUT';
+                    error.shouldSwitchCredential = true;
+                    error.skipErrorCount = true;
+                    reject(error);
+                }, streamTimeout);
+            });
+
             const axiosConfig = {
                 method: 'post',
                 url: requestUrl,
@@ -2124,13 +2217,39 @@ async saveCredentialsToFile(filePath, newData) {
                 responseType: 'stream'
             };
             this._applySidecar(axiosConfig);
-            const response = await this.axiosInstance.request(axiosConfig);
+
+            // 使用 Promise.race 实现整体超时
+            const response = await Promise.race([
+                this.axiosInstance.request(axiosConfig),
+                timeoutPromise
+            ]);
 
             stream = response.data;
             let buffer = '';
             let lastContentEvent = null;  // 用于检测连续重复的 content 事件
 
+            // 重置数据接收超时定时器
+            const resetDataTimeout = () => {
+                if (dataTimeoutId) {
+                    clearTimeout(dataTimeoutId);
+                }
+                dataTimeoutId = setTimeout(() => {
+                    const error = new Error(`Stream data timeout: no data received in ${streamDataTimeout}ms`);
+                    error.code = 'STREAM_DATA_TIMEOUT';
+                    error.shouldSwitchCredential = true;
+                    error.skipErrorCount = true;
+                    if (stream && typeof stream.destroy === 'function') {
+                        stream.destroy(error);
+                    }
+                }, streamDataTimeout);
+            };
+
+            resetDataTimeout();
+
             for await (const chunk of stream) {
+                // 重置数据接收超时
+                resetDataTimeout();
+                
                 buffer += chunk.toString();
                 
                 // 解析缓冲区中的事件
@@ -2224,6 +2343,15 @@ async saveCredentialsToFile(filePath, newData) {
                 throw error;
             }
 
+            // Handle stream timeout errors
+            if (error.code === 'STREAM_TIMEOUT' || error.code === 'STREAM_DATA_TIMEOUT') {
+                logger.warn(`[Kiro] Stream timeout error (${error.code}): ${error.message}`);
+                this._markCredentialNeedRefresh(`Stream timeout: ${error.message}`);
+                error.shouldSwitchCredential = true;
+                error.skipErrorCount = true;
+                throw error;
+            }
+
             // Handle network errors (ECONNRESET, ETIMEDOUT, etc.) with exponential backoff
             if (isNetworkError && retryCount < maxRetries) {
                 const delay = baseDelay * Math.pow(2, retryCount);
@@ -2237,6 +2365,13 @@ async saveCredentialsToFile(filePath, newData) {
             logger.error(`[Kiro] Stream API call failed (Status: ${status}, Code: ${errorCode}):`,  error.message);
             throw error;
         } finally {
+            // 清理定时器
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            if (dataTimeoutId) {
+                clearTimeout(dataTimeoutId);
+            }
             // 确保流被关闭，释放资源
             if (stream && typeof stream.destroy === 'function') {
                 stream.destroy();
@@ -2647,7 +2782,9 @@ async saveCredentialsToFile(filePath, newData) {
                 let parsedInput = currentToolCall.input;
                 try {
                     parsedInput = JSON.parse(currentToolCall.input);
-                } catch (e) {}
+                } catch (e) {
+                    logger.debug(`[Kiro] Failed to parse tool input: ${e.message}`);
+                }
                 toolCalls.push({
                     toolUseId: currentToolCall.toolUseId,
                     name: currentToolCall.name,

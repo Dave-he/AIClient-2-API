@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger.js';
 import { MODEL_PROTOCOL_PREFIX, getProtocolPrefix } from '../utils/common.js';
 import { ConverterFactory } from '../converters/ConverterFactory.js';
+import { protocolDetector, detectProtocol, unifiedConverter, autoConvertRequest, autoConvertResponse, autoConvertStreamChunk, autoConvertModelList } from '../converters/index.js';
 import { CONFIG } from '../core/config-manager.js';
 import {
     generateResponseCreated,
@@ -350,6 +351,68 @@ export function getOpenAIResponsesStreamChunkEnd(id) {
 }
 
 // =============================================================================
+// 自动协议检测相关函数（新增）
+// =============================================================================
+
+/**
+ * 自动检测请求数据的协议类型
+ * @param {Object} data - 请求数据
+ * @returns {string} 协议前缀
+ */
+export function detectRequestProtocol(data) {
+    return detectProtocol(data);
+}
+
+/**
+ * 自动检测并转换请求数据到目标协议
+ * @param {Object} data - 请求数据
+ * @param {string} targetProtocol - 目标协议
+ * @returns {Object} 转换后的数据
+ */
+export function autoConvertToProtocol(data, targetProtocol) {
+    return unifiedConverter.convertRequest(data, targetProtocol);
+}
+
+/**
+ * 自动检测并转换响应数据到目标协议
+ * @param {Object} data - 响应数据
+ * @param {string} targetProtocol - 目标协议
+ * @param {string} [model] - 模型名称
+ * @returns {Object} 转换后的数据
+ */
+export function autoConvertResponseToProtocol(data, targetProtocol, model = null) {
+    return unifiedConverter.convertResponse(data, targetProtocol, null, model);
+}
+
+/**
+ * 自动检测并转换流式响应块到目标协议
+ * @param {Object} chunk - 流式响应块
+ * @param {string} targetProtocol - 目标协议
+ * @param {string} [model] - 模型名称
+ * @param {string} [requestId] - 请求ID
+ * @returns {Object} 转换后的流式响应块
+ */
+export function autoConvertStreamChunkToProtocol(chunk, targetProtocol, model = null, requestId = null) {
+    return unifiedConverter.convertStreamChunk(chunk, targetProtocol, null, model, requestId);
+}
+
+/**
+ * 获取协议检测器实例
+ * @returns {ProtocolDetector} 协议检测器实例
+ */
+export function getProtocolDetector() {
+    return protocolDetector;
+}
+
+/**
+ * 获取统一转换器实例
+ * @returns {UnifiedConverter} 统一转换器实例
+ */
+export function getUnifiedConverter() {
+    return unifiedConverter;
+}
+
+// =============================================================================
 // 默认导出
 // =============================================================================
 
@@ -359,6 +422,18 @@ export default {
     isProtocolRegistered,
     clearConverterCache,
     getConverter,
+    // 自动协议检测相关（新增）
+    detectRequestProtocol,
+    detectProtocol,
+    autoConvertToProtocol,
+    autoConvertResponseToProtocol,
+    autoConvertStreamChunkToProtocol,
+    getProtocolDetector,
+    getUnifiedConverter,
+    autoConvertRequest,
+    autoConvertResponse,
+    autoConvertStreamChunk,
+    autoConvertModelList,
     // 向后兼容的函数
     toOpenAIRequestFromGemini,
     toOpenAIRequestFromClaude,

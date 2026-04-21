@@ -1,450 +1,824 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { randomUUID } from 'crypto';
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { AsyncLocalStorage } from 'async_hooks';
+import { createWriteStream, existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
+import { appendFile } from 'fs/promises';
+import { createHash } from 'crypto';
+import { hostname } from 'os';
 
-/**
- * 统一日志工具类
- * 支持控制台和文件输出，自动添加请求ID和时间戳
- */
-class Logger {
-    constructor() {
-        this.config = {
-            enabled: true,
-            outputMode: 'all', // 'console', 'file', 'all', 'none'
-            logDir: 'logs',
-            logLevel: 'info', // 'debug', 'info', 'warn', 'error'
-            includeRequestId: true,
-            includeTimestamp: true,
-            maxFileSize: 10 * 1024 * 1024, // 10MB
-            maxFiles: 10
-        };
-        this.currentLogFile = null;
-        this.logStream = null;
-        this.asyncStorage = new AsyncLocalStorage(); // 使用 AsyncLocalStorage 存储请求上下文
-        this.requestContext = new Map(); // 存储请求上下文
-        this.contextTTL = 5 * 60 * 1000; // 请求上下文 TTL：5 分钟
-        this._contextCleanupTimer = null;
-        this.levels = {
-            debug: 0,
-            info: 1,
-            warn: 2,
-            error: 3
-        };
-    }
+const isBrowser = typeof window !== 'undefined';
 
+const LOG_LEVELS = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3,
+  SILENT: 4
+};
 
-    /**
-     * 初始化日志配置
-     * @param {Object} config - 日志配置对象
-     */
-    initialize(config = {}) {
-        this.config = { ...this.config, ...config };
-        
-        if (this.config.outputMode === 'none') {
-            this.config.enabled = false;
-            return;
-        }
+const LOG_COLORS = isBrowser ? {
+  DEBUG: '#3498db',
+  INFO: '#2ecc71',
+  WARN: '#f39c12',
+  ERROR: '#e74c3c',
+  RESET: '#333333'
+} : {
+  DEBUG: '\x1b[34m',
+  INFO: '\x1b[32m',
+  WARN: '\x1b[33m',
+  ERROR: '\x1b[31m',
+  RESET: '\x1b[0m'
+};
 
-        if (this.config.outputMode === 'file' || this.config.outputMode === 'all') {
-            this.initializeFileLogging();
-        }
-    }
+const requestContextStorage = isBrowser ? null : new AsyncLocalStorage();
 
-    /**
-     * 初始化文件日志
-     */
-    initializeFileLogging() {
-        try {
-            // 确保日志目录存在
-            if (!fs.existsSync(this.config.logDir)) {
-                fs.mkdirSync(this.config.logDir, { recursive: true });
-            }
+export const TRACE_SPAN_TYPES = {
+  REQUEST: 'request',
+  DATABASE: 'database',
+  EXTERNAL_API: 'external_api',
+  PROCESSING: 'processing',
+  CACHE: 'cache'
+};
 
-            // 创建日志文件名（按本地日期）
-            const date = new Date();
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const dateStr = `${year}-${month}-${day}`;
-            this.currentLogFile = path.join(this.config.logDir, `app-${dateStr}.log`);
+class TraceSpan {
+  constructor(name, type) {
+    this.name = name;
+    this.type = type;
+    this.startTime = Date.now();
+    this.endTime = null;
+    this.duration = null;
+    this.metadata = {};
+    this.children = [];
+    this.parentId = null;
+  }
 
-            // 创建写入流
-            this.logStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
-            
-            // 监听错误
-            this.logStream.on('error', (err) => {
-                console.error('[Logger] Failed to write to log file:', err.message);
-            });
-        } catch (error) {
-            console.error('[Logger] Failed to initialize file logging:', error.message);
-        }
-    }
+  setMetadata(key, value) {
+    this.metadata[key] = value;
+  }
 
-    /**
-     * 在请求上下文中运行
-     * @param {string} requestId - 请求ID
-     * @param {Function} callback - 回调函数
-     * @returns {any}
-     */
-    runWithContext(requestId, callback) {
-        if (!requestId) {
-            requestId = randomUUID().substring(0, 8);
-        }
-        this.requestContext.set(requestId, { _createdAt: Date.now() });
-        this._ensureContextCleanup();
-        return this.asyncStorage.run(requestId, callback);
-    }
+  addChild(span) {
+    span.parentId = this.name;
+    this.children.push(span);
+  }
 
-    /**
-     * 设置请求上下文 (不推荐直接使用，建议使用 runWithContext)
-     * @param {string} requestId - 请求ID
-     * @param {Object} context - 上下文信息
-     */
-    setRequestContext(requestId, context = {}) {
-        if (!requestId) {
-            requestId = randomUUID().substring(0, 8);
-        }
-        this.asyncStorage.enterWith(requestId);
-        this.requestContext.set(requestId, { ...context, _createdAt: Date.now() });
-        this._ensureContextCleanup();
-        return requestId;
-    }
+  end() {
+    this.endTime = Date.now();
+    this.duration = this.endTime - this.startTime;
+    return this.duration;
+  }
 
-    /**
-     * 获取当前请求ID
-     * @returns {string} 请求ID
-     */
-    getCurrentRequestId() {
-        // 从 AsyncLocalStorage 中获取当前请求ID
-        return this.asyncStorage.getStore();
-    }
-
-    /**
-     * 获取当前请求上下文
-     * @param {string} requestId - 请求ID
-     * @returns {Object} 上下文信息
-     */
-    getRequestContext(requestId) {
-        if (!requestId) {
-            requestId = this.getCurrentRequestId();
-        }
-        return this.requestContext.get(requestId) || {};
-    }
-
-    /**
-     * 清除请求上下文
-     * @param {string} requestId - 请求ID
-     */
-    clearRequestContext(requestId) {
-        if (requestId) {
-            this.requestContext.delete(requestId);
-        }
-        // AsyncLocalStorage 不需要手动清除，run() 会在结束时自动处理
-        // 如果使用了 enterWith，则没有简单的方法在该异步路径中清除
-    }
-
-
-    /**
-     * 启动定期清理过期请求上下文的定时器（防止内存泄漏）
-     * 每 60 秒扫描一次，清除超过 contextTTL 的条目
-     */
-    _ensureContextCleanup() {
-        if (this._contextCleanupTimer) return;
-        this._contextCleanupTimer = setInterval(() => {
-            const now = Date.now();
-            let cleaned = 0;
-            for (const [id, ctx] of this.requestContext) {
-                if (now - (ctx._createdAt || 0) > this.contextTTL) {
-                    this.requestContext.delete(id);
-                    cleaned++;
-                }
-            }
-            if (cleaned > 0) {
-                this.log('warn', [`[Logger] Cleaned ${cleaned} stale request context(s) (TTL: ${this.contextTTL}ms)`]);
-            }
-            // 当 Map 为空时停止定时器
-            if (this.requestContext.size === 0) {
-                clearInterval(this._contextCleanupTimer);
-                this._contextCleanupTimer = null;
-            }
-        }, 60_000);
-        // 不阻止进程退出
-        if (this._contextCleanupTimer.unref) {
-            this._contextCleanupTimer.unref();
-        }
-    }
-
-    /**
-     * 格式化日志消息
-     * @param {string} level - 日志级别
-     * @param {Array} args - 日志参数
-     * @param {string} requestId - 请求ID
-     * @returns {string} 格式化后的日志
-     */
-    formatMessage(level, args, requestId) {
-        const parts = [];
-
-        // 添加本地时间戳
-        if (this.config.includeTimestamp) {
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            const ms = String(now.getMilliseconds()).padStart(3, '0');
-            const timestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
-            parts.push(`[${timestamp}]`);
-        }
-
-        // 添加请求ID
-        if (this.config.includeRequestId && requestId) {
-            parts.push(`[Req:${requestId}]`);
-        }
-
-        // 添加日志级别
-        parts.push(`[${level.toUpperCase()}]`);
-
-        // 添加消息内容
-        const message = args.map(arg => {
-            if (typeof arg === 'object') {
-                try {
-                    return JSON.stringify(arg, null, 2);
-                } catch (e) {
-                    return String(arg);
-                }
-            }
-            return String(arg);
-        }).join(' ');
-
-        parts.push(message);
-
-        return parts.join(' ');
-    }
-
-    /**
-     * 检查是否应该输出该级别的日志
-     * @param {string} level - 日志级别
-     * @returns {boolean}
-     */
-    shouldLog(level) {
-        if (!this.config.enabled) return false;
-        const currentLevel = this.levels[this.config.logLevel] ?? 1;
-        const targetLevel = this.levels[level] ?? 1;
-        return targetLevel >= currentLevel;
-    }
-
-    /**
-     * 检查并轮转日志文件
-     */
-    checkAndRotateLogFile() {
-        try {
-            if (!this.currentLogFile || !fs.existsSync(this.currentLogFile)) {
-                return;
-            }
-
-            const stats = fs.statSync(this.currentLogFile);
-            if (stats.size >= this.config.maxFileSize) {
-                // 关闭当前日志流
-                if (this.logStream && !this.logStream.destroyed) {
-                    this.logStream.end();
-                }
-
-                // 重命名当前日志文件，添加时间戳
-                const timestamp = new Date().getTime();
-                const ext = path.extname(this.currentLogFile);
-                const basename = path.basename(this.currentLogFile, ext);
-                const newName = path.join(this.config.logDir, `${basename}-${timestamp}${ext}`);
-                fs.renameSync(this.currentLogFile, newName);
-
-                // 重新创建日志流
-                this.logStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
-                this.logStream.on('error', (err) => {
-                    console.error('[Logger] Failed to write to log file:', err.message);
-                });
-
-                // 清理旧日志文件
-                this.cleanupOldLogs();
-            }
-        } catch (error) {
-            console.error('[Logger] Failed to rotate log file:', error.message);
-        }
-    }
-
-    /**
-     * 输出日志
-     * @param {string} level - 日志级别
-     * @param {Array} args - 日志参数
-     * @param {string} requestId - 请求ID
-     */
-    log(level, args, requestId = null) {
-        if (!this.shouldLog(level)) return;
-
-        const message = this.formatMessage(level, args, requestId);
-
-        // 输出到控制台
-        if (this.config.outputMode === 'console' || this.config.outputMode === 'all') {
-            const consoleMethod = level === 'error' ? console.error :
-                                  level === 'warn' ? console.warn :
-                                  level === 'debug' ? console.debug : console.log;
-            consoleMethod(message);
-        }
-
-        // 输出到文件
-        if (this.config.outputMode === 'file' || this.config.outputMode === 'all') {
-            if (this.logStream && !this.logStream.destroyed && this.logStream.writable) {
-                try {
-                    // 检查文件大小并轮转
-                    this.checkAndRotateLogFile();
-                    this.logStream.write(message + '\n');
-                } catch (err) {
-                    // 如果写入失败，输出到控制台作为备份
-                    console.error('[Logger] Failed to write to log file:', err.message);
-                }
-            }
-        }
-    }
-
-    /**
-     * Debug 级别日志
-     * @param {...any} args - 日志参数
-     */
-    debug(...args) {
-        const requestId = this.getCurrentRequestId();
-        this.log('debug', args, requestId);
-    }
-
-    /**
-     * Info 级别日志
-     * @param {...any} args - 日志参数
-     */
-    info(...args) {
-        const requestId = this.getCurrentRequestId();
-        this.log('info', args, requestId);
-    }
-
-    /**
-     * Warn 级别日志
-     * @param {...any} args - 日志参数
-     */
-    warn(...args) {
-        const requestId = this.getCurrentRequestId();
-        this.log('warn', args, requestId);
-    }
-
-    /**
-     * Error 级别日志
-     * @param {...any} args - 日志参数
-     */
-    error(...args) {
-        const requestId = this.getCurrentRequestId();
-        this.log('error', args, requestId);
-    }
-
-    /**
-     * 创建带请求ID的日志记录器
-     * @param {string} requestId - 请求ID
-     * @returns {Object} 带请求上下文的日志方法
-     */
-    withRequest(requestId) {
-        if (!requestId) {
-            requestId = this.getCurrentRequestId();
-        }
-
-        return {
-            debug: (...args) => this.log('debug', args, requestId),
-            info: (...args) => this.log('info', args, requestId),
-            warn: (...args) => this.log('warn', args, requestId),
-            error: (...args) => this.log('error', args, requestId)
-        };
-    }
-
-    /**
-     * 关闭日志流
-     */
-    close() {
-        if (this._contextCleanupTimer) {
-            clearInterval(this._contextCleanupTimer);
-            this._contextCleanupTimer = null;
-        }
-        if (this.logStream && !this.logStream.destroyed) {
-            this.logStream.end();
-            this.logStream = null;
-        }
-    }
-
-    /**
-     * 清理旧日志文件
-     */
-    cleanupOldLogs() {
-        try {
-            if (!fs.existsSync(this.config.logDir)) {
-                return;
-            }
-
-            const files = fs.readdirSync(this.config.logDir)
-                .filter(file => file.startsWith('app-') && file.endsWith('.log'))
-                .map(file => ({
-                    name: file,
-                    path: path.join(this.config.logDir, file),
-                    time: fs.statSync(path.join(this.config.logDir, file)).mtime.getTime()
-                }))
-                .sort((a, b) => b.time - a.time);
-
-            // 保留最新的 maxFiles 个文件，删除其他的
-            if (files.length > this.config.maxFiles) {
-                for (let i = this.config.maxFiles; i < files.length; i++) {
-                    try {
-                        fs.unlinkSync(files[i].path);
-                    } catch (err) {
-                        console.error('[Logger] Failed to delete old log file:', files[i].name, err.message);
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('[Logger] Failed to cleanup old logs:', error.message);
-        }
-    }
-
-    /**
-     * 清空当日日志文件
-     * @returns {boolean} 是否成功清空
-     */
-    clearTodayLog() {
-        try {
-            if (!this.currentLogFile || !fs.existsSync(this.currentLogFile)) {
-                console.warn('[Logger] No current log file to clear');
-                return false;
-            }
-
-            // 关闭当前日志流
-            if (this.logStream && !this.logStream.destroyed) {
-                this.logStream.end();
-            }
-
-            // 清空文件内容
-            fs.writeFileSync(this.currentLogFile, '');
-
-            // 重新创建日志流
-            this.logStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
-            this.logStream.on('error', (err) => {
-                console.error('[Logger] Failed to write to log file:', err.message);
-            });
-
-            console.log('[Logger] Today\'s log file cleared successfully');
-            return true;
-        } catch (error) {
-            console.error('[Logger] Failed to clear today\'s log file:', error.message);
-            return false;
-        }
-    }
+  toJSON() {
+    return {
+      name: this.name,
+      type: this.type,
+      startTime: new Date(this.startTime).toISOString(),
+      endTime: this.endTime ? new Date(this.endTime).toISOString() : null,
+      duration: this.duration,
+      metadata: this.metadata,
+      children: this.children.map(c => c.toJSON())
+    };
+  }
 }
 
-// 创建单例实例
+class Logger {
+  constructor() {
+    this.level = LOG_LEVELS.INFO;
+    this.prefix = '[AIClient]';
+    this.enableConsole = true;
+    this.logBuffer = [];
+    this.maxBufferSize = 100;
+    this.enabled = true;
+
+    this.logDir = 'logs';
+    this.maxFileSize = 10485760;
+    this.maxFiles = 10;
+    this.outputMode = 'all';
+    this.includeRequestId = true;
+    this.includeTimestamp = true;
+    this.currentLogFile = null;
+    this.currentLogSize = 0;
+    
+    this._writeStream = null;
+    this._writeQueue = [];
+    this._isFlushing = false;
+    this._logDirEnsured = false;
+
+    this.samplingRate = 1.0;
+    this.sampledRequestIds = new Set();
+    this.maxSampledRequests = 100;
+
+    this.performanceSpans = new Map();
+    this.requestTimings = [];
+    this.maxRequestTimings = 100;
+  }
+
+  initialize(options = {}) {
+    const {
+      enabled = true,
+      outputMode = 'all',
+      logLevel = 'info',
+      logDir = 'logs',
+      includeRequestId = true,
+      includeTimestamp = true,
+      maxFileSize = 10485760,
+      maxFiles = 10,
+      samplingRate = 1.0,
+      maxSampledRequests = 100,
+      maxRequestTimings = 100
+    } = options;
+
+    this.enabled = enabled;
+    this.outputMode = outputMode;
+    this.logDir = logDir;
+    this.maxFileSize = maxFileSize;
+    this.maxFiles = maxFiles;
+    this.includeRequestId = includeRequestId;
+    this.includeTimestamp = includeTimestamp;
+    this.samplingRate = samplingRate;
+    this.maxSampledRequests = maxSampledRequests;
+    this.maxRequestTimings = maxRequestTimings;
+
+    const levelValue = LOG_LEVELS[logLevel.toUpperCase()] ?? LOG_LEVELS.INFO;
+    this.setLevel(levelValue);
+  }
+
+  setLevel(level) {
+    if (Object.values(LOG_LEVELS).includes(level)) {
+      this.level = level;
+    }
+  }
+
+  setPrefix(prefix) {
+    this.prefix = prefix;
+  }
+
+  shouldLog(level) {
+    return this.enabled && level >= this.level;
+  }
+
+  _shouldSample(requestId) {
+    if (this.samplingRate >= 1.0) return true;
+    if (this.samplingRate <= 0) return false;
+    
+    if (this.sampledRequestIds.has(requestId)) return true;
+    
+    if (Math.random() < this.samplingRate) {
+      if (this.sampledRequestIds.size >= this.maxSampledRequests) {
+        const oldest = Array.from(this.sampledRequestIds)[0];
+        this.sampledRequestIds.delete(oldest);
+      }
+      this.sampledRequestIds.add(requestId);
+      return true;
+    }
+    
+    return false;
+  }
+
+  getLogFilePath() {
+    if (isBrowser) {
+      return null;
+    }
+    const now = new Date();
+    const pad = (num) => String(num).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    return `${this.logDir}/aiclient-${dateStr}.log`;
+  }
+
+  getStructuredLogFilePath() {
+    if (isBrowser) {
+      return null;
+    }
+    const now = new Date();
+    const pad = (num) => String(num).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    return `${this.logDir}/aiclient-${dateStr}-structured.log`;
+  }
+
+  ensureLogDirSync() {
+    if (isBrowser || this._logDirEnsured) {
+      return;
+    }
+    try {
+      if (!existsSync(this.logDir)) {
+        mkdirSync(this.logDir, { recursive: true });
+      }
+      this._logDirEnsured = true;
+    } catch (error) {
+      console.error('Failed to create log directory:', error.message);
+    }
+  }
+
+  _rotateStreamIfNeeded() {
+    const logFile = this.getLogFilePath();
+    if (!logFile) {
+      return false;
+    }
+    if (this.currentLogFile && logFile !== this.currentLogFile) {
+      this._closeStream();
+      return true;
+    }
+    if (this.currentLogFile && this.currentLogSize >= this.maxFileSize) {
+      this._closeStream();
+      this._cleanupOldLogsSync();
+      return true;
+    }
+    return false;
+  }
+
+  _closeStream() {
+    if (this._writeStream) {
+      this._writeStream.end();
+      this._writeStream = null;
+    }
+    this.currentLogFile = null;
+    this.currentLogSize = 0;
+  }
+
+  _enqueueLog(message, structuredMessage = null) {
+    this._writeQueue.push({ message, structuredMessage });
+    if (!this._isFlushing) {
+      this._flushQueue();
+    }
+  }
+
+  async _flushQueue() {
+    if (this._isFlushing || this._writeQueue.length === 0) {
+      return;
+    }
+    this._isFlushing = true;
+
+    try {
+      this.ensureLogDirSync();
+      this._rotateStreamIfNeeded();
+
+      const logFile = this.getLogFilePath();
+      const structuredLogFile = this.getStructuredLogFilePath();
+      
+      if (!logFile) {
+        this._writeQueue = [];
+        this._isFlushing = false;
+        return;
+      }
+
+      if (!this._writeStream) {
+        this._writeStream = createWriteStream(logFile, { flags: 'a' });
+        this._writeStream.on('error', (err) => {
+          console.error('Log stream error:', err.message);
+          this._writeStream = null;
+        });
+        this.currentLogFile = logFile;
+        if (existsSync(logFile)) {
+          this.currentLogSize = statSync(logFile).size;
+        }
+      }
+
+      const batch = this._writeQueue.splice(0, 50);
+      let textContent = '';
+      let structuredContent = '';
+      
+      for (const item of batch) {
+        textContent += item.message + '\n';
+        if (item.structuredMessage) {
+          structuredContent += JSON.stringify(item.structuredMessage) + '\n';
+        }
+      }
+      
+      this._writeStream.write(textContent);
+      this.currentLogSize += Buffer.byteLength(textContent, 'utf8');
+
+      if (structuredContent && structuredLogFile) {
+        try {
+          await appendFile(structuredLogFile, structuredContent);
+        } catch (e) {
+          console.error('Failed to write structured log:', e.message);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to flush log queue:', error.message);
+    } finally {
+      this._isFlushing = false;
+      if (this._writeQueue.length > 0) {
+        this._flushQueue();
+      }
+    }
+  }
+
+  getCurrentRequestId() {
+    if (isBrowser) {
+      return null;
+    }
+    const store = requestContextStorage.getStore();
+    return store ? store.requestId : null;
+  }
+
+  getCurrentTraceId() {
+    if (isBrowser) {
+      return null;
+    }
+    const store = requestContextStorage.getStore();
+    return store ? store.traceId : null;
+  }
+
+  formatMessage(level, message, ...args) {
+    const requestId = this.getCurrentRequestId();
+    const traceId = this.getCurrentTraceId();
+    const levelName = Object.keys(LOG_LEVELS).find(key => LOG_LEVELS[key] === level);
+    const color = LOG_COLORS[levelName] || LOG_COLORS.RESET;
+
+    const structuredMessage = {
+      timestamp: new Date().toISOString(),
+      level: levelName.toLowerCase(),
+      message,
+      requestId,
+      traceId,
+      service: 'AIClient-2-API',
+      host: isBrowser ? 'browser' : hostname()
+    };
+
+    if (args.length > 0) {
+      try {
+        const extraInfo = [];
+        const metadata = {};
+        for (const arg of args) {
+          if (arg instanceof Error) {
+            metadata.error = {
+              message: arg.message,
+              stack: arg.stack
+            };
+            extraInfo.push(arg.message);
+          } else if (typeof arg === 'object') {
+            Object.assign(metadata, arg);
+            extraInfo.push(JSON.stringify(arg));
+          } else {
+            extraInfo.push(String(arg));
+          }
+        }
+        if (Object.keys(metadata).length > 0) {
+          structuredMessage.metadata = metadata;
+        }
+        structuredMessage.extra = extraInfo.join(' ');
+      } catch (e) {
+        structuredMessage.extra = '[Arguments serialization error]';
+      }
+    }
+
+    const parts = [];
+    if (this.includeTimestamp) {
+      parts.push(structuredMessage.timestamp);
+    }
+    parts.push(this.prefix);
+    
+    if (!isBrowser) {
+      parts.push(`${color}[${levelName}]${LOG_COLORS.RESET}`);
+    } else {
+      parts.push(`[${levelName}]`);
+    }
+    
+    parts.push(message);
+    
+    if (this.includeRequestId && requestId) {
+      parts.push(`[req:${requestId}]`);
+    }
+    
+    if (traceId) {
+      parts.push(`[trace:${traceId}]`);
+    }
+    
+    if (args.length > 0) {
+      try {
+        const extraInfo = args.map(arg => {
+          if (typeof arg === 'object') {
+            return JSON.stringify(arg, null, 2);
+          }
+          return String(arg);
+        }).join(' ');
+        parts.push(extraInfo);
+      } catch (e) {
+        parts.push('[Arguments serialization error]');
+      }
+    }
+
+    return {
+      console: parts.join(' '),
+      file: parts.join(' '),
+      color,
+      levelName,
+      structured: structuredMessage
+    };
+  }
+
+  _log(level, message, ...args) {
+    if (!this.shouldLog(level)) return;
+
+    const requestId = this.getCurrentRequestId();
+    if (!this._shouldSample(requestId)) {
+      if (level >= LOG_LEVELS.WARN) {
+      } else {
+        return;
+      }
+    }
+
+    const { console: consoleMsg, file: fileMsg, color, levelName, structured } = this.formatMessage(level, message, ...args);
+
+    this.logBuffer.push({
+      timestamp: new Date().toISOString(),
+      level: levelName,
+      message: consoleMsg,
+      requestId,
+      structured
+    });
+
+    if (this.logBuffer.length > this.maxBufferSize) {
+      this.logBuffer.shift();
+    }
+
+    if (this.enableConsole) {
+      if (isBrowser) {
+        const logMethod = level === LOG_LEVELS.DEBUG ? 'debug' :
+                          level === LOG_LEVELS.INFO ? 'info' :
+                          level === LOG_LEVELS.WARN ? 'warn' : 'error';
+        console[logMethod](`%c${consoleMsg}`, `color: ${color}`);
+      } else {
+        const logMethod = level === LOG_LEVELS.DEBUG ? 'debug' :
+                          level === LOG_LEVELS.INFO ? 'info' :
+                          level === LOG_LEVELS.WARN ? 'warn' : 'error';
+        console[logMethod](consoleMsg);
+      }
+    }
+
+    if (this.outputMode !== 'console' && this.outputMode !== 'browser') {
+      this._enqueueLog(fileMsg, structured);
+    }
+  }
+
+  debug(message, ...args) {
+    this._log(LOG_LEVELS.DEBUG, message, ...args);
+  }
+
+  info(message, ...args) {
+    this._log(LOG_LEVELS.INFO, message, ...args);
+  }
+
+  warn(message, ...args) {
+    this._log(LOG_LEVELS.WARN, message, ...args);
+  }
+
+  error(message, ...args) {
+    let fullMessage = message;
+    const extraArgs = [...args];
+    if (args[0] instanceof Error) {
+      fullMessage += ` - ${args[0].message}`;
+      if (args[0].stack) {
+        extraArgs.push({ stack: args[0].stack });
+      }
+    }
+    this._log(LOG_LEVELS.ERROR, fullMessage, ...extraArgs);
+  }
+
+  startSpan(name, type = TRACE_SPAN_TYPES.PROCESSING) {
+    const span = new TraceSpan(name, type);
+    const requestId = this.getCurrentRequestId();
+    if (requestId) {
+      span.setMetadata('requestId', requestId);
+    }
+    
+    const activeSpans = this.performanceSpans.get(requestId) || [];
+    if (activeSpans.length > 0) {
+      const parent = activeSpans[activeSpans.length - 1];
+      parent.addChild(span);
+    }
+    activeSpans.push(span);
+    this.performanceSpans.set(requestId, activeSpans);
+    
+    return span;
+  }
+
+  endSpan(span, requestId = null) {
+    const duration = span.end();
+    const reqId = requestId || this.getCurrentRequestId();
+    
+    const timing = {
+      requestId: reqId,
+      spanName: span.name,
+      type: span.type,
+      duration,
+      timestamp: new Date().toISOString(),
+      metadata: span.metadata
+    };
+    
+    this.requestTimings.unshift(timing);
+    if (this.requestTimings.length > this.maxRequestTimings) {
+      this.requestTimings.pop();
+    }
+
+    if (duration > 1000) {
+      this.warn(`Slow operation detected: ${span.name} took ${duration}ms`, { duration, type: span.type });
+    }
+
+    if (reqId) {
+      const activeSpans = this.performanceSpans.get(reqId) || [];
+      const index = activeSpans.indexOf(span);
+      if (index !== -1) {
+        activeSpans.splice(index, 1);
+        this.performanceSpans.set(reqId, activeSpans);
+      }
+    }
+
+    return duration;
+  }
+
+  logRequestTiming(requestId, path, method, duration, statusCode, error = null) {
+    const timing = {
+      requestId,
+      path,
+      method,
+      duration,
+      statusCode,
+      error: error ? error.message : null,
+      timestamp: new Date().toISOString()
+    };
+    
+    this.requestTimings.unshift(timing);
+    if (this.requestTimings.length > this.maxRequestTimings) {
+      this.requestTimings.pop();
+    }
+
+    if (duration > 5000) {
+      this.warn(`Slow request detected: ${method} ${path} took ${duration}ms`, timing);
+    }
+  }
+
+  generateRequestId() {
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).substr(2, 9);
+    return `${timestamp}${random}`;
+  }
+
+  generateTraceId() {
+    const hash = createHash('sha256');
+    hash.update(`${Date.now()}-${Math.random()}-${process.pid}`);
+    return hash.digest('hex').substr(0, 32);
+  }
+
+  runWithContext(requestId, fn, traceId = null) {
+    if (isBrowser) {
+      return fn();
+    }
+    const effectiveTraceId = traceId || this.generateTraceId();
+    return requestContextStorage.run({ requestId, traceId: effectiveTraceId }, fn);
+  }
+
+  runWithNewContext(fn) {
+    if (isBrowser) {
+      return fn();
+    }
+    const requestId = this.generateRequestId();
+    const traceId = this.generateTraceId();
+    return requestContextStorage.run({ requestId, traceId }, fn);
+  }
+
+  addToBuffer(message) {
+    this.logBuffer.push({
+      timestamp: new Date().toISOString(),
+      level: 'LOG',
+      message
+    });
+    if (this.logBuffer.length > this.maxBufferSize) {
+      this.logBuffer.shift();
+    }
+  }
+
+  getBuffer() {
+    return [...this.logBuffer];
+  }
+
+  clearBuffer() {
+    this.logBuffer = [];
+  }
+
+  enableConsoleLogging(enabled) {
+    this.enableConsole = enabled;
+  }
+
+  getRequestId() {
+    return this.getCurrentRequestId();
+  }
+
+  getTraceId() {
+    return this.getCurrentTraceId();
+  }
+
+  clearRequestContext(requestId = null) {
+    if (isBrowser) {
+      return;
+    }
+    const store = requestContextStorage.getStore();
+    if (store) {
+      if (!requestId || store.requestId === requestId) {
+        store.requestId = null;
+      }
+    }
+    this.performanceSpans.delete(requestId);
+  }
+
+  async flush() {
+    await this._flushQueue();
+  }
+
+  _cleanupOldLogsSync() {
+    if (isBrowser) {
+      return;
+    }
+    try {
+      if (!existsSync(this.logDir)) {
+        return;
+      }
+      const files = readdirSync(this.logDir).filter(f => f.endsWith('.log'));
+      if (files.length <= this.maxFiles * 2) {
+        return;
+      }
+      const fileStats = files.map(f => ({
+        name: f,
+        mtime: statSync(`${this.logDir}/${f}`).mtime.getTime()
+      }));
+      fileStats.sort((a, b) => a.mtime - b.mtime);
+      const toDelete = fileStats.slice(0, fileStats.length - this.maxFiles * 2);
+      for (const file of toDelete) {
+        unlinkSync(`${this.logDir}/${file.name}`);
+      }
+    } catch (error) {
+      console.error('Failed to cleanup old logs:', error.message);
+    }
+  }
+
+  async clearTodayLog() {
+    if (isBrowser) {
+      return false;
+    }
+    
+    try {
+      const logFile = this.getLogFilePath();
+      const structuredLogFile = this.getStructuredLogFilePath();
+      
+      if (!logFile) {
+        return false;
+      }
+      
+      // 关闭当前写入流
+      if (this._writeStream) {
+        this._writeStream.end();
+        this._writeStream = null;
+      }
+      
+      // 清空日志文件内容
+      if (existsSync(logFile)) {
+        writeFileSync(logFile, '');
+      }
+      if (structuredLogFile && existsSync(structuredLogFile)) {
+        writeFileSync(structuredLogFile, '');
+      }
+      
+      // 重置日志大小
+      this.currentLogSize = 0;
+      
+      // 重新创建写入流，确保后续日志能正常写入
+      this._writeStream = createWriteStream(logFile, { flags: 'a' });
+      this._writeStream.on('error', (err) => {
+        console.error('Log stream error:', err.message);
+        this._writeStream = null;
+      });
+      this.currentLogFile = logFile;
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to clear today log:', error.message);
+      return false;
+    }
+  }
+
+  async clearAllLogs() {
+    if (isBrowser) {
+      return { success: false, error: 'Not available in browser' };
+    }
+    
+    try {
+      this.ensureLogDirSync();
+      
+      if (!existsSync(this.logDir)) {
+        return { success: true, message: 'Log directory does not exist', clearedCount: 0 };
+      }
+      
+      const currentLogFile = this.getLogFilePath();
+      const currentStructuredLogFile = this.getStructuredLogFilePath();
+      
+      // 关闭当前写入流
+      if (this._writeStream) {
+        this._writeStream.end();
+        this._writeStream = null;
+      }
+      
+      const files = readdirSync(this.logDir).filter(f => f.endsWith('.log'));
+      let clearedCount = 0;
+      const errors = [];
+      
+      for (const file of files) {
+        const filePath = `${this.logDir}/${file}`;
+        try {
+          // 如果是当前日志文件，清空内容而不是删除
+          if (filePath === currentLogFile || filePath === currentStructuredLogFile) {
+            writeFileSync(filePath, '');
+          } else {
+            unlinkSync(filePath);
+          }
+          clearedCount++;
+        } catch (err) {
+          errors.push({ file, error: err.message });
+        }
+      }
+      
+      // 重置日志大小
+      this.currentLogSize = 0;
+      
+      // 重新创建写入流，确保后续日志能正常写入
+      if (currentLogFile) {
+        this._writeStream = createWriteStream(currentLogFile, { flags: 'a' });
+        this._writeStream.on('error', (err) => {
+          console.error('Log stream error:', err.message);
+          this._writeStream = null;
+        });
+        this.currentLogFile = currentLogFile;
+      }
+      
+      return {
+        success: true,
+        message: `Cleared ${clearedCount} log files`,
+        clearedCount,
+        errors: errors.length > 0 ? errors : undefined
+      };
+    } catch (error) {
+      console.error('Failed to clear all logs:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async cleanupOldLogs() {
+    if (isBrowser) {
+      return;
+    }
+    this._cleanupOldLogsSync();
+  }
+
+  getPerformanceStats() {
+    const timings = [...this.requestTimings];
+    
+    if (timings.length === 0) {
+      return {
+        count: 0,
+        avgDuration: 0,
+        p50: 0,
+        p90: 0,
+        p99: 0,
+        min: 0,
+        max: 0
+      };
+    }
+
+    const durations = timings.map(t => t.duration).sort((a, b) => a - b);
+    const count = durations.length;
+    const sum = durations.reduce((a, b) => a + b, 0);
+    
+    return {
+      count,
+      avgDuration: Math.round(sum / count),
+      p50: durations[Math.floor(count * 0.5)] || 0,
+      p90: durations[Math.floor(count * 0.9)] || 0,
+      p99: durations[Math.floor(count * 0.99)] || 0,
+      min: durations[0] || 0,
+      max: durations[count - 1] || 0
+    };
+  }
+
+  getStatus() {
+    return {
+      enabled: this.enabled,
+      logLevel: Object.keys(LOG_LEVELS).find(key => LOG_LEVELS[key] === this.level),
+      outputMode: this.outputMode,
+      bufferSize: this.logBuffer.length,
+      maxBufferSize: this.maxBufferSize,
+      samplingRate: this.samplingRate,
+      sampledRequests: this.sampledRequestIds.size,
+      performanceStats: this.getPerformanceStats()
+    };
+  }
+}
+
 const logger = new Logger();
 
-// 导出实例和类
+function setLogLevel(level) {
+  logger.setLevel(level);
+}
+
+function getLogLevel() {
+  return logger.level;
+}
+
+export { logger, setLogLevel, getLogLevel, LOG_LEVELS };
 export default logger;
-export { Logger };

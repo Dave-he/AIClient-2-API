@@ -1,21 +1,46 @@
 export default {
-  testEnvironment: 'node',
-  transform: {
-    '^.+\\.(js|mjs)$': 'babel-jest',
-  },
-  transformIgnorePatterns: [
-    '/node_modules/(?!(uuid)/)', // uuid is an ESM module that needs to be transformed
-  ],
-  globals: {
-    'jest': {
-      useESM: true
+  projects: [
+    {
+      testEnvironment: 'jsdom',
+      transform: {
+        '^.+\\.(js|mjs)$': 'babel-jest',
+        '^.+\\.vue$': '@vue/vue3-jest',
+      },
+      transformIgnorePatterns: [
+        '/node_modules/',
+      ],
+      testMatch: [
+        '**/tests/e2e/**/*.test.js',
+        '**/tests/components/**/*.test.js',
+      ],
+      moduleNameMapper: {
+        '^(\\.{1,2}/.*)\\.js$': '$1',
+        '@/(.*)': '<rootDir>/src/$1',
+        '\\.(css|less|scss)$': 'jest-transform-stub'
+      },
+      testTimeout: 30000
+    },
+    {
+      testEnvironment: 'node',
+      transform: {
+        '^.+\\.(js|mjs)$': 'babel-jest',
+      },
+      transformIgnorePatterns: [],
+      testMatch: [
+        '**/tests/**/*.unit.test.js',
+        '**/tests/**/*.test.js',
+        '!**/tests/e2e/**/*.test.js',
+        '!**/tests/components/**/*.test.js',
+        '!**/tests/*-stress.test.js',
+        '!**/tests/auto-rate-limit-binary.test.js',
+      ],
+      moduleNameMapper: {
+        '^(\\.{1,2}/.*)\\.js$': '$1',
+        '@/(.*)': '<rootDir>/src/$1',
+        'uuid': '<rootDir>/tests/mocks/uuid.js'
+      },
+      testTimeout: 30000
     }
-  },
-  moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1'
-  },
-  testMatch: [
-    '**/tests/**/*.test.js'
   ],
   collectCoverageFrom: [
     'src/**/*.js',
@@ -23,6 +48,5 @@ export default {
     '!**/node_modules/**'
   ],
   coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
-  testTimeout: 30000 // Add a global test timeout
+  coverageReporters: ['text', 'lcov', 'html']
 };

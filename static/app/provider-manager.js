@@ -1,7 +1,7 @@
 // 提供商管理功能模块
 
 import { providerStats, updateProviderStats } from './constants.js';
-import { showToast, formatUptime, getProviderConfigs, getBaseProviderConfigs } from './utils.js';
+import { showToast, formatUptime, getProviderConfigs, getBaseProviderConfigs, getCurrentRunningModel } from './utils.js';
 import { fileUploadHandler } from './file-upload.js';
 import { t, getCurrentLanguage } from './i18n.js';
 import { renderRoutingExamples } from './routing-examples.js';
@@ -11,6 +11,7 @@ import { updateUsageProviderConfigs } from './usage-manager.js';
 import { updateConfigProviderConfigs } from './config-manager.js';
 import { loadConfigList, updateProviderFilterOptions } from './upload-config-manager.js';
 import { setServiceMode } from './event-handlers.js';
+import { eventBus, EVENTS } from './event-bus.js';
 
 // 保存初始服务器时间和运行时间
 let initialServerTime = null;
@@ -24,25 +25,34 @@ let cachedSupportedProviders = null;
  */
 async function loadSystemInfo() {
     try {
-        const data = await window.apiClient.get('/system');
+        const data = await window.apiClient.get('/api/system');
 
         const appVersionEl = document.getElementById('appVersion');
         const nodeVersionEl = document.getElementById('nodeVersion');
         const serverTimeEl = document.getElementById('serverTime');
+        const uptimeEl = document.getElementById('uptime');
         const memoryUsageEl = document.getElementById('memoryUsage');
         const cpuUsageEl = document.getElementById('cpuUsage');
-        const uptimeEl = document.getElementById('uptime');
 
-        if (appVersionEl) appVersionEl.textContent = data.appVersion ? `v${data.appVersion}` : '--';
+        if (appVersionEl) {
+            appVersionEl.textContent = data.appVersion ? `v${data.appVersion}` : '--';
+            appVersionEl.classList.remove('skeleton-text');
+            appVersionEl.style.width = '';
+        }
         
         // 自动检查更新
         if (data.appVersion) {
             checkUpdate(true);
         }
 
-        if (nodeVersionEl) nodeVersionEl.textContent = data.nodeVersion || '--';
-        if (memoryUsageEl) memoryUsageEl.textContent = data.memoryUsage || '--';
-        if (cpuUsageEl) cpuUsageEl.textContent = data.cpuUsage || '--';
+        if (nodeVersionEl) {
+            nodeVersionEl.textContent = data.nodeVersion || '--';
+            nodeVersionEl.classList.remove('skeleton-text');
+            nodeVersionEl.style.width = '';
+        }
+        
+        // 保存Node.js版本到全局变量，供GPU不可用时显示
+        window.__nodeVersion = data.nodeVersion || '--';
         
         // 保存初始时间用于本地计算
         if (data.serverTime && data.uptime !== undefined) {
@@ -54,8 +64,26 @@ async function loadSystemInfo() {
         // 初始显示
         if (serverTimeEl) {
             serverTimeEl.textContent = data.serverTime ? new Date(data.serverTime).toLocaleString(getCurrentLanguage()) : '--';
+            serverTimeEl.classList.remove('skeleton-text');
+            serverTimeEl.style.width = '';
         }
-        if (uptimeEl) uptimeEl.textContent = data.uptime ? formatUptime(data.uptime) : '--';
+        if (uptimeEl) {
+            uptimeEl.textContent = data.uptime ? formatUptime(data.uptime) : '--';
+            uptimeEl.classList.remove('skeleton-text');
+            uptimeEl.style.width = '';
+        }
+
+        // 更新内存使用和CPU使用
+        if (memoryUsageEl) {
+            memoryUsageEl.textContent = data.memoryUsage || '--';
+            memoryUsageEl.classList.remove('skeleton-text');
+            memoryUsageEl.style.width = '';
+        }
+        if (cpuUsageEl) {
+            cpuUsageEl.textContent = data.cpuUsage || '--';
+            cpuUsageEl.classList.remove('skeleton-text');
+            cpuUsageEl.style.width = '';
+        }
 
         // 加载服务模式信息
         await loadServiceModeInfo();
@@ -70,7 +98,7 @@ async function loadSystemInfo() {
  */
 async function loadServiceModeInfo() {
     try {
-        const data = await window.apiClient.get('/service-mode');
+        const data = await window.apiClient.get('/api/service-mode');
         
         const serviceModeEl = document.getElementById('serviceMode');
         const processPidEl = document.getElementById('processPid');
@@ -90,10 +118,14 @@ async function loadServiceModeInfo() {
                 ? '<i class="fas fa-check-circle" style="color: #10b981; margin-left: 4px;" title="' + t('dashboard.serviceMode.canRestart') + '"></i>'
                 : '';
             serviceModeEl.innerHTML = modeText;
+            serviceModeEl.classList.remove('skeleton-text');
+            serviceModeEl.style.width = '';
         }
         
         if (processPidEl) {
             processPidEl.textContent = data.pid || '--';
+            processPidEl.classList.remove('skeleton-text');
+            processPidEl.style.width = '';
         }
         
         if (platformInfoEl) {
@@ -105,7 +137,14 @@ async function loadServiceModeInfo() {
                 'freebsd': 'FreeBSD'
             };
             platformInfoEl.textContent = platformMap[data.platform] || data.platform || '--';
+            platformInfoEl.classList.remove('skeleton-text');
+            platformInfoEl.style.width = '';
         }
+        
+        // 保存到全局变量，供GPU不可用时显示
+        window.__serviceMode = data.mode === 'worker' ? 'Worker 进程' : '独立运行';
+        window.__processPid = data.pid || '--';
+        window.__platform = data.platform ? (['win32', 'darwin', 'linux', 'freebsd'].includes(data.platform) ? {'win32': 'Windows', 'darwin': 'macOS', 'linux': 'Linux', 'freebsd': 'FreeBSD'}[data.platform] : data.platform) : '--';
         
     } catch (error) {
         console.error('Failed to load service mode info:', error);
@@ -154,12 +193,18 @@ function updateRestartButton(mode) {
  * 更新服务器时间和运行时间显示（本地计算）
  */
 function updateTimeDisplay() {
-    if (!initialServerTime || initialUptime === null || !initialLoadTime) {
+    const serverTimeEl = document.getElementById('serverTime');
+    const uptimeEl = document.getElementById('uptime');
+
+    if (!serverTimeEl && !uptimeEl) {
         return;
     }
 
-    const serverTimeEl = document.getElementById('serverTime');
-    const uptimeEl = document.getElementById('uptime');
+    // 如果没有初始数据，尝试重新加载系统信息
+    if (!initialServerTime || initialUptime === null || !initialLoadTime) {
+        loadSystemInfo();
+        return;
+    }
 
     // 计算经过的秒数
     const elapsedSeconds = Math.floor((Date.now() - initialLoadTime) / 1000);
@@ -170,7 +215,7 @@ function updateTimeDisplay() {
         serverTimeEl.textContent = currentServerTime.toLocaleString(getCurrentLanguage());
     }
 
-    // 更新运行时间
+    // 更新运行时间 - 使用服务端返回的初始运行时间加上页面加载后的经过时间
     if (uptimeEl) {
         const currentUptime = initialUptime + elapsedSeconds;
         uptimeEl.textContent = formatUptime(currentUptime);
@@ -178,26 +223,22 @@ function updateTimeDisplay() {
 }
 
 /**
- * 加载提供商数据
- * @param {boolean} forceRefreshSupported - 是否强制刷新支持的提供商列表
+ * 加载提供商静态数据（支持的提供商类型列表）
+ * 静态数据：不随时间变化，适合缓存
  */
-async function loadProviders(forceRefreshSupported = false) {
+async function loadProvidersStatic() {
     try {
-        // 获取合并后的数据（包括 providers 和 supportedProviders）
-        const data = await window.apiClient.get('/providers');
-        if (!data || !data.providers) return;
+        const data = await window.monitorCache.getProvidersStatic();
+        if (!data || !data.supportedProviders) return;
 
-        const { providers, supportedProviders } = data;
+        const { supportedProviders } = data;
         
         // 检查支持列表是否发生了变化（或者是否尚未初始化）
         const isChanged = !cachedSupportedProviders || 
                          supportedProviders.length !== cachedSupportedProviders.length ||
                          supportedProviders.some((p, i) => p !== cachedSupportedProviders[i]);
 
-        // 如果强制刷新或是对象类型（可能是由事件触发），则也视为需要刷新
-        const shouldForce = forceRefreshSupported === true || (typeof forceRefreshSupported === 'object');
-
-        if (isChanged || shouldForce) {
+        if (isChanged) {
             cachedSupportedProviders = supportedProviders;
             const providerConfigs = getProviderConfigs(cachedSupportedProviders);
             
@@ -211,8 +252,42 @@ async function loadProviders(forceRefreshSupported = false) {
             
             isStaticProviderConfigsUpdated = true;
         }
+    } catch (error) {
+        console.error('Failed to load providers static data:', error);
+    }
+}
 
-        renderProviders(providers, cachedSupportedProviders);
+/**
+ * 加载提供商动态数据（状态、活跃请求数等）
+ * 动态数据：实时变化，需要频繁刷新
+ */
+async function loadProvidersDynamic() {
+    try {
+        const data = await window.monitorCache.getProvidersDynamic();
+        if (!data || !data.providers) return;
+
+        renderProviders(data.providers, cachedSupportedProviders || []);
+    } catch (error) {
+        console.error('Failed to load providers dynamic data:', error);
+    }
+}
+
+/**
+ * 加载提供商数据
+ * @param {boolean} forceRefreshSupported - 是否强制刷新支持的提供商列表
+ */
+async function loadProviders(forceRefreshSupported = false) {
+    try {
+        if (forceRefreshSupported === true || !isStaticProviderConfigsUpdated || !cachedSupportedProviders) {
+            await Promise.all([
+                loadProvidersStatic(),
+                loadProvidersDynamic()
+            ]);
+        } else {
+            await loadProvidersDynamic();
+        }
+        
+        eventBus.emit(EVENTS.PROVIDERS_UPDATED);
     } catch (error) {
         console.error('Failed to load providers:', error);
     }
@@ -514,9 +589,18 @@ function renderProviderStatusOverview(providers, configMap, sortedProviderTypes)
     panel.style.display = 'block';
     grid.innerHTML = '';
 
-    validProviderTypes.forEach(type => {
+    validProviderTypes.forEach(async (type) => {
         const accounts = providers[type];
         const displayName = configMap[type]?.name || type;
+        
+        let currentModelInfo = '';
+        if (type === 'local-model') {
+            const currentModel = await getCurrentRunningModel();
+            if (currentModel) {
+                currentModelInfo = `<span class="current-model-badge" style="font-size: 0.7rem; background: var(--success-color); color: white; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">${currentModel}</span>`;
+            }
+        }
+        
         const card = document.createElement('div');
         card.className = 'provider-status-card';
         card.style.cursor = 'pointer';
@@ -540,6 +624,7 @@ function renderProviderStatusOverview(providers, configMap, sortedProviderTypes)
         card.innerHTML = `
             <div class="provider-info">
                 <span class="provider-name" title="${displayName}">${displayName}</span>
+                ${currentModelInfo}
                 <span class="provider-count" style="font-size: 0.75rem; color: var(--text-secondary);">${healthyCount}/${totalCount}</span>
             </div>
             
@@ -3271,7 +3356,7 @@ async function checkUpdate(silent = false) {
             if (checkBtnText) checkBtnText.textContent = t('dashboard.update.checking');
         }
 
-        const data = await window.apiClient.get('/check-update');
+        const data = await window.apiClient.get('/api/check-update');
 
         // 处理版本列表
         if (versionSelect && data.availableVersions && data.availableVersions.length > 0) {
@@ -3388,14 +3473,19 @@ async function performUpdate() {
 async function restartServiceAfterUpdate() {
     try {
         showToast(t('common.info'), t('header.restart.requesting'), 'info');
-        
-        const token = localStorage.getItem('authToken');
+
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        const csrfToken = window.getCsrfToken ? window.getCsrfToken() : null;
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+
         const response = await fetch('/api/restart-service', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': token ? `Bearer ${token}` : ''
-            }
+            headers,
+            credentials: 'include'
         });
         
         const result = await response.json();

@@ -6,66 +6,106 @@ import { t } from './i18n.js';
 class AuthManager {
     constructor() {
         this.tokenKey = 'authToken';
+        this.csrfKey = 'csrfToken';
         this.expiryKey = 'authTokenExpiry';
         this.baseURL = window.location.origin;
     }
 
-    /**
-     * 获取存储的token
-     */
-    getToken() {
-        return localStorage.getItem(this.tokenKey);
+    getTokenFromCookie() {
+        const cookies = document.cookie.split(';');
+        for (const cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'auth_token') {
+                return value;
+            }
+        }
+        return null;
     }
 
-    /**
-     * 获取token过期时间
-     */
+    getCsrfToken() {
+        return sessionStorage.getItem(this.csrfKey) || null;
+    }
+
+    setCsrfToken(token) {
+        sessionStorage.setItem(this.csrfKey, token);
+    }
+
+    clearCsrfToken() {
+        sessionStorage.removeItem(this.csrfKey);
+    }
+
+    getExpiryFromCookie() {
+        return localStorage.getItem(this.expiryKey);
+    }
+
+    setExpiry(expiry) {
+        localStorage.setItem(this.expiryKey, expiry.toString());
+    }
+
+    getToken() {
+        return this.getTokenFromCookie();
+    }
+
     getTokenExpiry() {
-        const expiry = localStorage.getItem(this.expiryKey);
+        const expiry = this.getExpiryFromCookie();
         return expiry ? parseInt(expiry) : null;
     }
 
-    /**
-     * 检查token是否有效
-     */
+    checkTokenExpiry() {
+        const expiry = this.getTokenExpiry();
+        if (!expiry) return;
+
+        const timeUntilExpiry = expiry - Date.now();
+        const fiveMinutes = 5 * 60 * 1000;
+
+        if (timeUntilExpiry < fiveMinutes && timeUntilExpiry > 0) {
+            this.refreshCsrfToken();
+        }
+    }
+
+    async refreshCsrfToken() {
+        try {
+            const response = await fetch('/api/csrf-token', {
+                method: 'GET',
+                credentials: 'include'
+            });
+            if (response.ok) {
+                const data = await response.json();
+                this.setCsrfToken(data.csrfToken);
+            }
+        } catch (e) {
+            console.warn('Failed to refresh CSRF token:', e);
+        }
+    }
+
     isTokenValid() {
         const token = this.getToken();
         const expiry = this.getTokenExpiry();
-        
+
         if (!token) return false;
-        
-        // 如果设置了过期时间，检查是否过期
+
         if (expiry && Date.now() > expiry) {
             this.clearToken();
             return false;
         }
-        
+
         return true;
     }
 
-    /**
-     * 保存token到本地存储
-     */
-    saveToken(token, rememberMe = false) {
-        localStorage.setItem(this.tokenKey, token);
-        
-        if (rememberMe) {
-            const expiryTime = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7天
-            localStorage.setItem(this.expiryKey, expiryTime.toString());
+    saveToken(token, rememberMe = false, expiry) {
+        if (expiry) {
+            this.setExpiry(expiry);
         }
+        this.clearCsrfToken();
     }
 
-    /**
-     * 清除token
-     */
     clearToken() {
-        localStorage.removeItem(this.tokenKey);
+        this.clearCsrfToken();
         localStorage.removeItem(this.expiryKey);
+        document.cookie = 'auth_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+        document.cookie = 'csrf_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     }
 
-    /**
-     * 登出
-     */
     async logout() {
         this.clearToken();
         window.location.href = '/login.html';
@@ -81,32 +121,34 @@ class ApiClient {
         this.baseURL = window.location.origin;
     }
 
-    /**
-     * 获取带认证的请求头
-     */
-    getAuthHeaders() {
-        const token = this.authManager.getToken();
-        return token ? {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        } : {
-            'Content-Type': 'application/json'
-        };
+    getCsrfToken() {
+        return this.authManager.getCsrfToken();
     }
 
-    /**
-     * 处理401错误重定向到登录页
-     */
+    getAuthHeaders() {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+
+        const csrfToken = this.getCsrfToken();
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+
+        return headers;
+    }
+
     handleUnauthorized() {
         this.authManager.clearToken();
         window.location.href = '/login.html';
     }
 
-    /**
-     * 通用API请求方法
-     */
     async request(endpoint, options = {}) {
-        const url = `${this.baseURL}/api${endpoint}`;
+        let apiPath = endpoint;
+        if (!apiPath.startsWith('/api')) {
+            apiPath = '/api' + apiPath;
+        }
+        const url = `${this.baseURL}${apiPath}`;
         const headers = {
             ...this.getAuthHeaders(),
             ...options.headers
@@ -114,13 +156,13 @@ class ApiClient {
 
         const config = {
             ...options,
-            headers
+            headers,
+            credentials: 'include'
         };
 
         try {
             const response = await fetch(url, config);
-            
-            // 如果是401错误，重定向到登录页
+
             if (response.status === 401) {
                 this.handleUnauthorized();
                 throw new Error(t('common.unauthorized'));
@@ -134,11 +176,9 @@ class ApiClient {
                 data = await response.text();
             }
 
-            // 如果响应状态码不是 2xx，抛出错误
             if (!response.ok) {
                 let errorMessage;
                 if (data && typeof data === 'object') {
-                    // 优先使用错误代码进行翻译
                     const code = (data.error && data.error.messageCode) || data.messageCode;
                     if (code) {
                         const translated = t(code);
@@ -146,8 +186,7 @@ class ApiClient {
                             errorMessage = translated;
                         }
                     }
-                    
-                    // 如果没有翻译，使用原始错误消息
+
                     if (!errorMessage) {
                         errorMessage = (data.error && data.error.message) || data.message;
                     }
@@ -162,7 +201,6 @@ class ApiClient {
             return data;
         } catch (error) {
             if (error.message === t('common.unauthorized')) {
-                // 已经在handleUnauthorized中处理了重定向
                 throw error;
             }
             console.error('API请求错误:', error);
@@ -170,18 +208,12 @@ class ApiClient {
         }
     }
 
-    /**
-     * GET请求
-     */
     async get(endpoint, params = {}) {
         const queryString = new URLSearchParams(params).toString();
         const url = queryString ? `${endpoint}?${queryString}` : endpoint;
         return this.request(url, { method: 'GET' });
     }
 
-    /**
-     * POST请求
-     */
     async post(endpoint, data = {}) {
         return this.request(endpoint, {
             method: 'POST',
@@ -189,9 +221,6 @@ class ApiClient {
         });
     }
 
-    /**
-     * PUT请求
-     */
     async put(endpoint, data = {}) {
         return this.request(endpoint, {
             method: 'PUT',
@@ -199,39 +228,29 @@ class ApiClient {
         });
     }
 
-    /**
-     * DELETE请求
-     */
     async delete(endpoint) {
         return this.request(endpoint, { method: 'DELETE' });
     }
 
-    /**
-     * POST请求（支持FormData上传）
-     */
     async upload(endpoint, formData) {
         const url = `${this.baseURL}/api${endpoint}`;
-        
-        // 获取认证token
-        const token = this.authManager.getToken();
+
         const headers = {};
-        
-        // 如果有token，添加Authorization头部
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
+        const csrfToken = this.getCsrfToken();
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
         }
 
-        // 对于FormData请求，不添加Content-Type头部，让浏览器自动设置
         const config = {
             method: 'POST',
             headers,
-            body: formData
+            body: formData,
+            credentials: 'include'
         };
 
         try {
             const response = await fetch(url, config);
-            
-            // 如果是401错误，重定向到登录页
+
             if (response.status === 401) {
                 this.handleUnauthorized();
                 throw new Error(t('common.unauthorized'));
@@ -245,9 +264,8 @@ class ApiClient {
                 data = await response.text();
             }
 
-            // 如果响应状态码不是 2xx，抛出错误
             if (!response.ok) {
-                const errorMessage = (data && typeof data === 'object' && data.error && data.error.message) 
+                const errorMessage = (data && typeof data === 'object' && data.error && data.error.message)
                     || (data && typeof data === 'object' && data.message)
                     || `${t('common.uploadFailed')} (${t('common.status')}: ${response.status})`;
                 throw new Error(errorMessage);
@@ -256,7 +274,6 @@ class ApiClient {
             return data;
         } catch (error) {
             if (error.message === t('common.unauthorized')) {
-                // 已经在handleUnauthorized中处理了重定向
                 throw error;
             }
             console.error('API请求错误:', error);
@@ -273,10 +290,10 @@ async function initAuth() {
     
     // 检查是否已经有有效的token
     if (authManager.isTokenValid()) {
-        // 验证token是否仍然有效（发送一个测试请求）
+        // 验证token是否仍然有效（使用validate-token接口）
         try {
             const apiClient = new ApiClient();
-            await apiClient.get('/health');
+            await apiClient.get('/validate-token');
             return true;
         } catch (error) {
             // Token无效，清除并重定向到登录页
@@ -309,6 +326,7 @@ async function login(password, rememberMe = false) {
             headers: {
                 'Content-Type': 'application/json'
             },
+            credentials: 'include',
             body: JSON.stringify({
             password,
             rememberMe
@@ -318,9 +336,14 @@ async function login(password, rememberMe = false) {
         const data = await response.json();
 
         if (data.success) {
-            // 保存token
             const authManager = new AuthManager();
-            authManager.saveToken(data.token, rememberMe);
+            const expiryTime = rememberMe ? Date.now() + (7 * 24 * 60 * 60 * 1000) : Date.now() + (24 * 60 * 60 * 1000);
+            authManager.saveToken('cookie', rememberMe, expiryTime);
+
+            if (data.csrfToken) {
+                authManager.setCsrfToken(data.csrfToken);
+            }
+
             return { success: true };
         } else {
             return { success: false, message: data.message };
@@ -343,12 +366,24 @@ function getAuthHeaders() {
     return apiClient.getAuthHeaders();
 }
 
+function getCsrfToken() {
+    const authManager = new AuthManager();
+    return authManager.getCsrfToken();
+}
+
+function setCsrfToken(token) {
+    const authManager = new AuthManager();
+    authManager.setCsrfToken(token);
+}
+
 // 导出实例到 window（兼容旧代码）
 window.authManager = authManager;
 window.apiClient = apiClient;
 window.initAuth = initAuth;
 window.logout = logout;
 window.login = login;
+window.getCsrfToken = getCsrfToken;
+window.setCsrfToken = setCsrfToken;
 
 // 导出认证管理器类和API客户端类供其他模块使用
 window.AuthManager = AuthManager;

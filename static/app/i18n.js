@@ -34,6 +34,7 @@ const translations = {
         'nav.usage': '用量查询',
         'nav.logs': '实时日志',
         'nav.plugins': '插件管理',
+        'nav.gpuMonitor': 'GPU监控',
         'nav.models': '可用模型',
         'nav.customModels': '自定义模型',
         
@@ -63,6 +64,18 @@ const translations = {
         'dashboard.serverTime': '服务器时间',
         'dashboard.memoryUsage': '内存使用',
         'dashboard.cpuUsage': 'CPU 使用',
+        'dashboard.gpuUsage': 'GPU 使用',
+        'dashboard.systemMonitor': '系统资源监控',
+        'dashboard.gpuStatus': 'GPU状态',
+        'dashboard.pythonGpuMonitor': 'Python服务端GPU监控',
+        'dashboard.gpuUtilization': 'GPU使用率',
+        'dashboard.gpuMemory': '显存使用',
+        'dashboard.gpuTemperature': '温度',
+        'dashboard.gpuPower': '功耗',
+        'dashboard.gpuName': 'GPU型号',
+        'dashboard.totalMemory': '总显存',
+        'dashboard.usedMemory': '已用显存',
+        'dashboard.availableMemory': '可用显存',
         'dashboard.providerStatus': '提供商节点状态',
         'dashboard.advancedInfo': '高级信息 (路径路由与模型列表)',
         'dashboard.expandMore': '展开更多',
@@ -97,16 +110,7 @@ const translations = {
         'dashboard.routing.nodeName.iflow': 'iFlow OAuth',
         'dashboard.routing.nodeName.codex': 'OpenAI Codex OAuth',
         'dashboard.routing.nodeName.grok': 'Grok Reverse',
-        'dashboard.contact.title': '联系与赞助',
-        'dashboard.contact.wechat': '扫码进群，注明来意',
-        'dashboard.contact.wechatDesc': '添加微信获取更多技术支持和交流',
-        'dashboard.contact.x': '关注 X.com',
-        'dashboard.contact.xDesc': '在 X 上关注我们获取最新动态',
-        'dashboard.contact.sponsor': '扫码赞助',
-        'dashboard.contact.sponsorDesc': '您的赞助是项目持续发展的动力',
-        'dashboard.contact.coffee': 'Buy me a coffee',
-        'dashboard.contact.coffeeDesc': 'If you like this project, buy me a coffee!',
-        
+        'dashboard.tokenTrend': 'Token使用趋势',
         // OAuth
         'oauth.modal.title': 'OAuth 授权',
         'oauth.modal.provider': '提供商:',
@@ -618,6 +622,29 @@ const translations = {
         'modal.provider.healthCheckSingleSuccess': '健康检查通过',
         'modal.provider.healthCheckSingleSuccessWithModel': '健康检查通过，使用模型: {model}',
         'modal.provider.healthCheckSingleFailed': '健康检查失败: {message}',
+        'modal.provider.switchModel': '切换模型',
+        'modal.provider.switchModelTitle': '一键切换模型',
+        'modal.provider.currentModel': '当前运行模型',
+        'modal.provider.noModel': '- 无 -',
+        'modal.provider.modelName': '模型名称',
+        'modal.provider.modelPort': '端口',
+        'modal.provider.modelMemory': '显存需求',
+        'modal.provider.status.running': '当前运行',
+        'modal.provider.status.otherRunning': '运行中',
+        'modal.provider.status.stopped': '已停止',
+        'modal.provider.action.stop': '停止',
+        'modal.provider.action.switch': '切换到此',
+        'modal.provider.action.start': '启动',
+        'modal.provider.action.switching': '切换中...',
+        'modal.provider.action.starting': '启动中...',
+        'modal.provider.action.stopping': '停止中...',
+        'modal.provider.switchSuccess': '已切换到模型: {model}',
+        'modal.provider.startSuccess': '模型 {model} 已启动',
+        'modal.provider.stopSuccess': '模型 {model} 已停止',
+        'modal.provider.loadModelsFailed': '无法加载模型列表',
+        'modal.provider.loadModelsHint': '请确保 Python Controller 服务已启动',
+        'modal.provider.noAvailableModels': '暂无可用模型',
+        'modal.provider.noAvailableModelsHint': '请在 Python Controller 中配置模型',
 
         // Pagination
         'pagination.showing': '显示 {start}-{end} / 共 {total} 条',
@@ -674,6 +701,12 @@ const translations = {
         'logs.clear.success.title': '清空成功',
         'logs.clear.success.msg': '前端实时日志和服务器当日日志文件已全部清空',
         'logs.clear.failed': '清空日志失败',
+        'logs.clearToday': '清空当日日志',
+        'logs.clearAll': '清空所有日志',
+        'logs.clearAll.confirm.msg': '此操作将清空所有日志文件！\n\n• 所有历史日志文件将被删除\n• 当日日志文件内容将被清空\n• 此操作不可恢复\n\n确定要继续吗？',
+        'logs.clearAll.success.title': '清空成功',
+        'logs.clearAll.success.msg': '所有日志文件已清空',
+        'logs.clearAll.failed': '清空所有日志失败',
         
         // Plugins
         'plugins.title': '插件管理',
@@ -887,6 +920,158 @@ const translations = {
         'tutorial.log.mode': '日志模式：none(关闭)、console(控制台)、file(文件)',
         'tutorial.log.basename': '日志文件基础名称',
         'tutorial.log.example.title': '配置示例',
+        'tutorial.local.title': 'Local Provider 本地模型配置',
+        'tutorial.local.desc': 'Local Provider 用于连接本地部署的大语言模型（如 vLLM、Ollama 等），实现私有化部署和离线推理。',
+        'tutorial.local.config.title': '配置参数',
+        'tutorial.local.config.apiKey': '本地模型服务的 API Key（可选，用于认证）',
+        'tutorial.local.config.baseUrl': '本地模型服务的基础 URL（如 http://localhost:8000）',
+        'tutorial.local.config.proxy': '是否为 Local Provider 使用系统代理（默认 false）',
+        'tutorial.local.example.title': '配置示例',
+        'tutorial.local.providerPool.title': '提供商池配置',
+        'tutorial.local.providerPool.desc': '在 provider_pools.json 中添加 local-model 节点：',
+        'tutorial.local.note': '建议配合 AI Controller Python 服务使用，实现智能模型调度和 GPU 资源管理。',
+        'tutorial.python.title': 'Python Controller 服务',
+        'tutorial.python.desc': 'Python Controller 是一个基于 FastAPI 的控制层服务，用于管理本地大语言模型，提供 GPU 资源监控、智能调度和队列管理功能。',
+        'tutorial.python.install.title': '安装部署',
+        'tutorial.python.config.title': '配置模型',
+        'tutorial.python.config.desc': '编辑 <code>config.yaml</code> 配置模型：',
+        'tutorial.python.start.title': '启动服务',
+        'tutorial.python.start.note': '服务将在 <code>http://localhost:5000</code> 启动',
+        'tutorial.python.api.title': 'API 接口',
+        'tutorial.python.api.chat': '聊天补全（支持流式和图像）',
+        'tutorial.python.api.models': '获取可用模型列表',
+        'tutorial.python.api.gpu': 'GPU 详细状态',
+        'tutorial.python.api.start': '启动模型',
+        'tutorial.python.api.stop': '停止模型',
+        'tutorial.python.api.switch': '切换模型（自动管理显存）',
+        'tutorial.python.api.queue': '队列状态',
+        'tutorial.python.api.health': '健康检查',
+        'tutorial.python.make.title': 'Makefile 命令',
+
+        // GPU Monitor
+        'gpuMonitor.heroEyebrow': 'Local AI Runtime',
+        'gpuMonitor.heroSubtitle': '集中查看 GPU 负载、模型调度、队列和 Python 控制器状态。',
+        'gpuMonitor.title': 'GPU监控',
+        'gpuMonitor.modelSwitch': '模型切换',
+        'gpuMonitor.gpuStatus': 'GPU状态',
+        'gpuMonitor.gpuHistory': '历史监控',
+        'gpuMonitor.modelStatus': '模型状态',
+        'gpuMonitor.queueStatus': '队列状态',
+        'gpuMonitor.controls': '模型控制',
+        'gpuMonitor.pythonService': 'Python服务',
+        'gpuMonitor.configManagement': '配置管理',
+        'gpuMonitor.modelWorkbench': '模型调度',
+        'gpuMonitor.controller': 'AI控制器',
+        'gpuMonitor.disconnected': '未连接',
+        'gpuMonitor.connected': '已连接',
+        'gpuMonitor.iframePlaceholder': 'AI控制器未启动或配置',
+        'gpuMonitor.iframeHint': '请启动 Python 控制器服务以查看详细监控面板',
+        'gpuMonitor.quickSwitch': '一键切换模型',
+        'gpuMonitor.switching': '正在切换模型...',
+        'gpuMonitor.switchSuccess': '模型切换成功',
+        'gpuMonitor.switchFailed': '模型切换失败',
+        'gpuMonitor.currentModel': '当前模型',
+        'gpuMonitor.noModel': '无',
+        'gpuMonitor.startModel': '启动',
+        'gpuMonitor.stopModel': '停止',
+        'gpuMonitor.switchModel': '切换',
+        'gpuMonitor.modelName': '模型名称',
+        'gpuMonitor.modelStatus': '状态',
+        'gpuMonitor.modelPort': '端口',
+        'gpuMonitor.modelMemory': '显存需求',
+        'gpuMonitor.modelActions': '操作',
+        'gpuMonitor.detecting': '检测中...',
+        'gpuMonitor.initializing': '初始化',
+        'gpuMonitor.memory': '显存',
+        'gpuMonitor.gpuUtilization': 'GPU使用率',
+        'gpuMonitor.temperature': '温度',
+        'gpuMonitor.power': '功耗',
+        'gpuMonitor.fanSpeed': '风扇转速',
+        'gpuMonitor.coreClock': '核心频率',
+        'gpuMonitor.running': '运行中',
+        'gpuMonitor.idle': '空闲',
+        'gpuMonitor.stopped': '已停止',
+        'gpuMonitor.noData': '暂无数据',
+        'gpuMonitor.memoryUtilization': '显存使用率',
+        'gpuMonitor.now': '现在',
+        'gpuMonitor.value': '数值',
+        'gpuMonitor.cannotGetModelStatus': '无法获取模型状态',
+        'gpuMonitor.noConfiguredModels': '暂无配置的模型',
+        'gpuMonitor.requesting': '请求中',
+        'gpuMonitor.cannotGetQueueStatus': '无法获取队列状态',
+        'gpuMonitor.noQueueInfo': '暂无队列信息',
+        'gpuMonitor.activeRequests': '活跃请求',
+        'gpuMonitor.concurrencyLimit': '并发限制',
+        'gpuMonitor.canAcceptNew': '可接受新请求',
+        'gpuMonitor.remainingSlots': '剩余槽位',
+        'gpuMonitor.yes': '是',
+        'gpuMonitor.no': '否',
+        'gpuMonitor.cannotGetModelControl': '无法获取模型控制信息',
+        'gpuMonitor.noControllableModels': '暂无可控制的模型',
+        'gpuMonitor.start': '启动',
+        'gpuMonitor.stop': '停止',
+        'gpuMonitor.switchAndTest': '切换并测试',
+        'gpuMonitor.test': '测试',
+        'gpuMonitor.allPassed': '全部通过',
+        'gpuMonitor.partialFailed': '部分失败',
+        'gpuMonitor.testFailed': '测试失败',
+        'gpuMonitor.imageProcessing': '图片处理',
+        'gpuMonitor.toolCalls': '工具调用',
+        'gpuMonitor.chatInteraction': '聊天交互',
+        'gpuMonitor.basicChatTest': '基础聊天测试',
+        'gpuMonitor.streamingTest': '流式响应测试',
+        'gpuMonitor.toolIntegrationTest': '工具集成测试',
+        'gpuMonitor.imageProcessingTest': '图片处理测试',
+        'gpuMonitor.passed': '通过',
+        'gpuMonitor.failed': '失败',
+        'gpuMonitor.skipped': '跳过',
+        'gpuMonitor.duration': '耗时',
+        'gpuMonitor.modelTestReport': '模型测试报告',
+        'gpuMonitor.featureSupport': '功能支持',
+        'gpuMonitor.performanceMetrics': '性能指标',
+        'gpuMonitor.avgTps': '平均 TPS',
+        'gpuMonitor.avgLatency': '平均延迟',
+        'gpuMonitor.passRate': '通过率',
+        'gpuMonitor.resourceUsage': '资源使用',
+        'gpuMonitor.avg': '平均',
+        'gpuMonitor.change': '变化',
+        'gpuMonitor.overview': '总览',
+        'gpuMonitor.utilization': '使用率',
+        'gpuMonitor.testResultsDetail': '测试结果详情',
+        'gpuMonitor.warningsAndErrors': '警告与错误',
+        'gpuMonitor.cannotGetServiceStatus': '无法获取服务状态',
+        'gpuMonitor.serviceName': '服务名称',
+        'gpuMonitor.runStatus': '运行状态',
+        'gpuMonitor.status': '状态',
+        'gpuMonitor.configFile': '配置文件',
+        'gpuMonitor.cannotGetConfig': '无法获取配置',
+        'gpuMonitor.noConfig': '暂无配置',
+        'gpuMonitor.modelConfig': '模型配置',
+        'gpuMonitor.port': '端口',
+        'gpuMonitor.multimodal': '多模态',
+        'gpuMonitor.globalSettings': '全局设置',
+        'gpuMonitor.maxQueueLength': '最大队列长度',
+        'gpuMonitor.requestTimeout': '请求超时',
+        'gpuMonitor.warmupModel': '预热模型',
+        'gpuMonitor.preloaded': '预加载',
+        'gpuMonitor.noConfigInfo': '暂无配置信息',
+        'gpuMonitor.startModelFailed': '启动模型失败',
+        'gpuMonitor.stopModelFailed': '停止模型失败',
+        'gpuMonitor.switchModelFailed': '切换模型失败',
+        'gpuMonitor.testModelFailed': '测试模型失败',
+        'gpuMonitor.startFailed': '启动失败',
+        'gpuMonitor.stopFailed': '停止失败',
+        'gpuMonitor.restart': '重启',
+        'gpuMonitor.restartFailed': '重启失败',
+        'gpuMonitor.editConfig': '编辑配置',
+        'gpuMonitor.configPlaceholder': '在此输入配置内容...',
+        'gpuMonitor.configSaved': '配置已保存',
+        'gpuMonitor.configSaveFailed': '保存配置失败',
+        'gpuMonitor.cannotGetModels': '无法获取模型列表',
+        'gpuMonitor.noModelsAvailable': '暂无可用模型',
+        'gpuMonitor.noModelsHint': '请在配置文件中添加模型配置',
+        'gpuMonitor.switch': '切换',
+        'gpuMonitor.noModelRunning': '当前没有运行中的模型',
 
         // Common
         'common.confirm': '确定',
@@ -951,8 +1136,70 @@ const translations = {
         'login.error.postOnly': '仅支持 POST 请求',
         'login.error.invalidJson': '请求格式错误 (JSON)',
         'login.error.failed': '登录失败，请检查网络连接',
+        'login.rememberMe': '记住我',
         'login.button': '登录',
         'login.loggingIn': '登录中...',
+
+        // Model Usage Stats
+        'modelStats.title': '模型用量统计',
+        'modelStats.subtitle': '统一查看 Provider / Model 的请求次数与 Token 累计',
+        'modelStats.backToConsole': '返回控制台',
+        'modelStats.panelTitle': '统计面板',
+        'modelStats.panelHeading': '模型用量统计面板',
+        'modelStats.panelDesc': '通过 <code>/api/model-usage-stats</code> 查看系统已累计的请求数、输入 Token、输出 Token 和 Provider / Model 维度分布。',
+        'modelStats.tagToken': '支持后台 Token 与 API Key',
+        'modelStats.tagPersist': '基于插件持久化统计',
+        'modelStats.tagFilter': '支持搜索、排序、刷新与重置',
+        'modelStats.authTitle': '访问凭证',
+        'modelStats.authBadge': '未连接',
+        'modelStats.authDesc': '与其他管理页面一致，这里不会自动读取服务端敏感配置。输入凭证后可加载统计接口，刷新后会从本地缓存恢复。',
+        'modelStats.credentialLabel': '访问凭证',
+        'modelStats.credentialPlaceholder': '输入 Token 或 API Key',
+        'modelStats.credentialHelp': '这里直接填后台登录 Token 或服务 API Key。页面会自动同时尝试 <code>Authorization: Bearer</code> 和 <code>x-api-key</code> 两种方式。',
+        'modelStats.connectBtn': '连接并加载',
+        'modelStats.clearBtn': '清空凭证',
+        'modelStats.statusIdle': '尚未加载统计数据。',
+        'modelStats.totalRequests': '总请求数',
+        'modelStats.promptTokens': '输入 Token',
+        'modelStats.promptNote': '输入 token 的累计值',
+        'modelStats.cachedTokens': '缓存 Token',
+        'modelStats.cachedNote': '缓存命中的累计值',
+        'modelStats.completionTokens': '输出 Token',
+        'modelStats.completionNote': '输出 token 的累计值',
+        'modelStats.totalTokens': '总 Token',
+        'modelStats.waitingData': '等待数据',
+        'modelStats.chartTitle': 'Token 使用趋势',
+        'modelStats.lastHour': '最近一小时',
+        'modelStats.lastDay': '最近一天',
+        'modelStats.lastWeek': '最近一周',
+        'modelStats.legendPrompt': '输入 Token',
+        'modelStats.legendCompletion': '输出 Token',
+        'modelStats.legendTotal': '总 Token',
+        'modelStats.calendarTitle': 'Token 使用趋势 (3个月)',
+        'modelStats.providerDist': 'Provider 分布',
+        'modelStats.topModels': 'Top Models',
+        'modelStats.providerView': 'Provider 视图',
+        'modelStats.refresh': '刷新',
+        'modelStats.resetTokens': '重置 Token',
+        'modelStats.resetStats': '重置统计',
+        'modelStats.modelDetails': '模型明细',
+        'modelStats.searchPlaceholder': '搜索 provider 或 model',
+        'modelStats.sortTotalTokens': '按总 Token 降序',
+        'modelStats.sortRequestCount': '按请求数降序',
+        'modelStats.sortPromptTokens': '按输入 Token 降序',
+        'modelStats.sortCompletionTokens': '按输出 Token 降序',
+        'modelStats.sortProvider': '按 Provider 升序',
+        'modelStats.sortModel': '按 Model 升序',
+        'modelStats.colProvider': 'Provider',
+        'modelStats.colModel': 'Model',
+        'modelStats.colRequests': '请求数',
+        'modelStats.colPrompt': 'Prompt',
+        'modelStats.colCached': 'Cached',
+        'modelStats.colCompletion': 'Completion',
+        'modelStats.colTotal': 'Total',
+        'modelStats.colLastUsed': '最近使用',
+        'modelStats.footer': '如果上游响应没有提供 usage，调用次数仍会统计，但 token 数可能保持为 0。',
+        'modelStats.notRecorded': '未记录',
     },
     'en-US': {
         // Header
@@ -988,6 +1235,7 @@ const translations = {
         'nav.usage': 'Usage Query',
         'nav.logs': 'Real-time Logs',
         'nav.plugins': 'Plugin Management',
+        'nav.gpuMonitor': 'GPU Monitor',
         'nav.models': 'Available Models',
         'nav.customModels': 'Custom Models',
         
@@ -1017,6 +1265,18 @@ const translations = {
         'dashboard.serverTime': 'Server Time',
         'dashboard.memoryUsage': 'Memory Usage',
         'dashboard.cpuUsage': 'CPU Usage',
+        'dashboard.gpuUsage': 'GPU Usage',
+        'dashboard.gpuStatus': 'GPU Status',
+        'dashboard.pythonGpuMonitor': 'Python Server GPU Monitor',
+        'dashboard.gpuUtilization': 'GPU Utilization',
+        'dashboard.gpuMemory': 'GPU Memory',
+        'dashboard.gpuTemperature': 'Temperature',
+        'dashboard.gpuPower': 'Power',
+        'dashboard.gpuName': 'GPU Model',
+        'dashboard.totalMemory': 'Total Memory',
+        'dashboard.usedMemory': 'Used Memory',
+        'dashboard.availableMemory': 'Available Memory',
+        'dashboard.systemMonitor': 'System Resource Monitor',
         'dashboard.providerStatus': 'Provider Nodes Status',
         'dashboard.advancedInfo': 'Advanced Info (Routing & Models)',
         'dashboard.expandMore': 'Expand More',
@@ -1051,6 +1311,7 @@ const translations = {
         'dashboard.routing.nodeName.iflow': 'iFlow OAuth',
         'dashboard.routing.nodeName.codex': 'OpenAI Codex OAuth',
         'dashboard.routing.nodeName.grok': 'Grok Reverse',
+        'dashboard.tokenTrend': 'Token Usage Trend',
         'dashboard.contact.title': 'Contact & Support',
         'dashboard.contact.wechat': 'Scan to Join Group',
         'dashboard.contact.wechatDesc': 'Add WeChat for more technical support and communication',
@@ -1842,6 +2103,131 @@ const translations = {
         'tutorial.log.basename': 'Log file base name',
         'tutorial.log.example.title': 'Configuration Example',
 
+        // GPU Monitor
+        'gpuMonitor.heroEyebrow': 'Local AI Runtime',
+        'gpuMonitor.heroSubtitle': 'View GPU load, model orchestration, queue pressure, and Python controller health in one place.',
+        'gpuMonitor.title': 'GPU Monitor',
+        'gpuMonitor.modelSwitch': 'Model Switch',
+        'gpuMonitor.gpuStatus': 'GPU Status',
+        'gpuMonitor.gpuHistory': 'History Monitor',
+        'gpuMonitor.modelStatus': 'Model Status',
+        'gpuMonitor.queueStatus': 'Queue Status',
+        'gpuMonitor.controls': 'Model Controls',
+        'gpuMonitor.pythonService': 'Python Service',
+        'gpuMonitor.configManagement': 'Configuration',
+        'gpuMonitor.modelWorkbench': 'Model Workbench',
+        'gpuMonitor.controller': 'AI Controller',
+        'gpuMonitor.disconnected': 'Disconnected',
+        'gpuMonitor.connected': 'Connected',
+        'gpuMonitor.iframePlaceholder': 'AI Controller not started or configured',
+        'gpuMonitor.iframeHint': 'Please start Python controller service to view detailed monitoring panel',
+        'gpuMonitor.quickSwitch': 'Quick Switch Model',
+        'gpuMonitor.switching': 'Switching model...',
+        'gpuMonitor.switchSuccess': 'Model switched successfully',
+        'gpuMonitor.switchFailed': 'Failed to switch model',
+        'gpuMonitor.currentModel': 'Current Model',
+        'gpuMonitor.noModel': 'None',
+        'gpuMonitor.startModel': 'Start',
+        'gpuMonitor.stopModel': 'Stop',
+        'gpuMonitor.switchModel': 'Switch',
+        'gpuMonitor.modelName': 'Model Name',
+        'gpuMonitor.modelStatus': 'Status',
+        'gpuMonitor.modelPort': 'Port',
+        'gpuMonitor.modelMemory': 'Memory Requirement',
+        'gpuMonitor.modelActions': 'Actions',
+        'gpuMonitor.detecting': 'Detecting...',
+        'gpuMonitor.initializing': 'Initializing',
+        'gpuMonitor.memory': 'Memory',
+        'gpuMonitor.gpuUtilization': 'GPU Utilization',
+        'gpuMonitor.temperature': 'Temperature',
+        'gpuMonitor.power': 'Power',
+        'gpuMonitor.fanSpeed': 'Fan Speed',
+        'gpuMonitor.coreClock': 'Core Clock',
+        'gpuMonitor.running': 'Running',
+        'gpuMonitor.idle': 'Idle',
+        'gpuMonitor.stopped': 'Stopped',
+        'gpuMonitor.noData': 'No Data',
+        'gpuMonitor.memoryUtilization': 'Memory Utilization',
+        'gpuMonitor.now': 'Now',
+        'gpuMonitor.value': 'Value',
+        'gpuMonitor.cannotGetModelStatus': 'Cannot get model status',
+        'gpuMonitor.noConfiguredModels': 'No configured models',
+        'gpuMonitor.requesting': 'Requesting',
+        'gpuMonitor.cannotGetQueueStatus': 'Cannot get queue status',
+        'gpuMonitor.noQueueInfo': 'No queue info',
+        'gpuMonitor.activeRequests': 'Active Requests',
+        'gpuMonitor.concurrencyLimit': 'Concurrency Limit',
+        'gpuMonitor.canAcceptNew': 'Can Accept New',
+        'gpuMonitor.remainingSlots': 'Remaining Slots',
+        'gpuMonitor.yes': 'Yes',
+        'gpuMonitor.no': 'No',
+        'gpuMonitor.cannotGetModelControl': 'Cannot get model control',
+        'gpuMonitor.noControllableModels': 'No controllable models',
+        'gpuMonitor.start': 'Start',
+        'gpuMonitor.stop': 'Stop',
+        'gpuMonitor.switchAndTest': 'Switch & Test',
+        'gpuMonitor.test': 'Test',
+        'gpuMonitor.allPassed': 'All Passed',
+        'gpuMonitor.partialFailed': 'Partial Failed',
+        'gpuMonitor.testFailed': 'Test Failed',
+        'gpuMonitor.imageProcessing': 'Image Processing',
+        'gpuMonitor.toolCalls': 'Tool Calls',
+        'gpuMonitor.chatInteraction': 'Chat Interaction',
+        'gpuMonitor.basicChatTest': 'Basic Chat Test',
+        'gpuMonitor.streamingTest': 'Streaming Response Test',
+        'gpuMonitor.toolIntegrationTest': 'Tool Integration Test',
+        'gpuMonitor.imageProcessingTest': 'Image Processing Test',
+        'gpuMonitor.passed': 'Passed',
+        'gpuMonitor.failed': 'Failed',
+        'gpuMonitor.skipped': 'Skipped',
+        'gpuMonitor.duration': 'Duration',
+        'gpuMonitor.modelTestReport': 'Model Test Report',
+        'gpuMonitor.featureSupport': 'Feature Support',
+        'gpuMonitor.performanceMetrics': 'Performance Metrics',
+        'gpuMonitor.avgTps': 'Avg TPS',
+        'gpuMonitor.avgLatency': 'Avg Latency',
+        'gpuMonitor.passRate': 'Pass Rate',
+        'gpuMonitor.resourceUsage': 'Resource Usage',
+        'gpuMonitor.avg': 'Avg',
+        'gpuMonitor.change': 'Change',
+        'gpuMonitor.overview': 'Overview',
+        'gpuMonitor.utilization': 'Utilization',
+        'gpuMonitor.testResultsDetail': 'Test Results Detail',
+        'gpuMonitor.warningsAndErrors': 'Warnings & Errors',
+        'gpuMonitor.cannotGetServiceStatus': 'Cannot get service status',
+        'gpuMonitor.serviceName': 'Service Name',
+        'gpuMonitor.runStatus': 'Run Status',
+        'gpuMonitor.status': 'Status',
+        'gpuMonitor.configFile': 'Config File',
+        'gpuMonitor.cannotGetConfig': 'Cannot get config',
+        'gpuMonitor.noConfig': 'No Config',
+        'gpuMonitor.modelConfig': 'Model Config',
+        'gpuMonitor.port': 'Port',
+        'gpuMonitor.multimodal': 'Multimodal',
+        'gpuMonitor.globalSettings': 'Global Settings',
+        'gpuMonitor.maxQueueLength': 'Max Queue Length',
+        'gpuMonitor.requestTimeout': 'Request Timeout',
+        'gpuMonitor.warmupModel': 'Warmup Model',
+        'gpuMonitor.preloaded': 'Preloaded',
+        'gpuMonitor.noConfigInfo': 'No config info',
+        'gpuMonitor.startModelFailed': 'Failed to start model',
+        'gpuMonitor.stopModelFailed': 'Failed to stop model',
+        'gpuMonitor.switchModelFailed': 'Failed to switch model',
+        'gpuMonitor.testModelFailed': 'Failed to test model',
+        'gpuMonitor.startFailed': 'Start failed',
+        'gpuMonitor.stopFailed': 'Stop failed',
+        'gpuMonitor.restart': 'Restart',
+        'gpuMonitor.restartFailed': 'Restart failed',
+        'gpuMonitor.editConfig': 'Edit Config',
+        'gpuMonitor.configPlaceholder': 'Enter config content here...',
+        'gpuMonitor.configSaved': 'Config saved',
+        'gpuMonitor.configSaveFailed': 'Failed to save config',
+        'gpuMonitor.cannotGetModels': 'Cannot get model list',
+        'gpuMonitor.noModelsAvailable': 'No models available',
+        'gpuMonitor.noModelsHint': 'Add model definitions in the config file first',
+        'gpuMonitor.switch': 'Switch',
+        'gpuMonitor.noModelRunning': 'No model is currently running',
+
         // Common
         'common.togglePassword': 'Show/Hide Password',
         'common.confirm': 'Confirm',
@@ -1908,8 +2294,70 @@ const translations = {
         'login.error.postOnly': 'Only POST requests are supported',
         'login.error.invalidJson': 'Invalid request format (JSON)',
         'login.error.failed': 'Login failed, please check your network connection',
+        'login.rememberMe': 'Remember Me',
         'login.button': 'Login',
         'login.loggingIn': 'Logging in...',
+
+        // Model Usage Stats
+        'modelStats.title': 'Model Usage Statistics',
+        'modelStats.subtitle': 'Unified view of Provider / Model request counts and Token accumulation',
+        'modelStats.backToConsole': 'Back to Console',
+        'modelStats.panelTitle': 'Statistics Panel',
+        'modelStats.panelHeading': 'Model Usage Statistics Panel',
+        'modelStats.panelDesc': 'View accumulated request counts, prompt tokens, completion tokens via <code>/api/model-usage-stats</code> with Provider / Model distribution.',
+        'modelStats.tagToken': 'Supports Backend Token & API Key',
+        'modelStats.tagPersist': 'Plugin-based Persistent Stats',
+        'modelStats.tagFilter': 'Search, Sort, Refresh & Reset',
+        'modelStats.authTitle': 'Access Credential',
+        'modelStats.authBadge': 'Disconnected',
+        'modelStats.authDesc': 'Consistent with other management pages, sensitive server config is not auto-loaded. Enter credentials to load stats, restored from local cache after refresh.',
+        'modelStats.credentialLabel': 'Access Credential',
+        'modelStats.credentialPlaceholder': 'Enter Token or API Key',
+        'modelStats.credentialHelp': 'Enter backend login Token or service API Key. Page will automatically try both <code>Authorization: Bearer</code> and <code>x-api-key</code> methods.',
+        'modelStats.connectBtn': 'Connect & Load',
+        'modelStats.clearBtn': 'Clear Credential',
+        'modelStats.statusIdle': 'No statistics loaded yet.',
+        'modelStats.totalRequests': 'Total Requests',
+        'modelStats.promptTokens': 'Prompt Tokens',
+        'modelStats.promptNote': 'Cumulative prompt tokens',
+        'modelStats.cachedTokens': 'Cached Tokens',
+        'modelStats.cachedNote': 'Cumulative cache hits',
+        'modelStats.completionTokens': 'Completion Tokens',
+        'modelStats.completionNote': 'Cumulative completion tokens',
+        'modelStats.totalTokens': 'Total Tokens',
+        'modelStats.waitingData': 'Waiting for data',
+        'modelStats.chartTitle': 'Token Usage Trend',
+        'modelStats.lastHour': 'Last Hour',
+        'modelStats.lastDay': 'Last Day',
+        'modelStats.lastWeek': 'Last Week',
+        'modelStats.legendPrompt': 'Prompt Tokens',
+        'modelStats.legendCompletion': 'Completion Tokens',
+        'modelStats.legendTotal': 'Total Tokens',
+        'modelStats.calendarTitle': 'Token Usage Trend (3 months)',
+        'modelStats.providerDist': 'Provider Distribution',
+        'modelStats.topModels': 'Top Models',
+        'modelStats.providerView': 'Provider View',
+        'modelStats.refresh': 'Refresh',
+        'modelStats.resetTokens': 'Reset Tokens',
+        'modelStats.resetStats': 'Reset Statistics',
+        'modelStats.modelDetails': 'Model Details',
+        'modelStats.searchPlaceholder': 'Search provider or model',
+        'modelStats.sortTotalTokens': 'By Total Tokens Desc',
+        'modelStats.sortRequestCount': 'By Requests Desc',
+        'modelStats.sortPromptTokens': 'By Prompt Tokens Desc',
+        'modelStats.sortCompletionTokens': 'By Completion Tokens Desc',
+        'modelStats.sortProvider': 'By Provider Asc',
+        'modelStats.sortModel': 'By Model Asc',
+        'modelStats.colProvider': 'Provider',
+        'modelStats.colModel': 'Model',
+        'modelStats.colRequests': 'Requests',
+        'modelStats.colPrompt': 'Prompt',
+        'modelStats.colCached': 'Cached',
+        'modelStats.colCompletion': 'Completion',
+        'modelStats.colTotal': 'Total',
+        'modelStats.colLastUsed': 'Last Used',
+        'modelStats.footer': 'If upstream response does not provide usage, request count is still tracked but token counts may remain 0.',
+        'modelStats.notRecorded': 'Not recorded',
     }
 };
 
@@ -1934,86 +2382,8 @@ export function setLanguage(lang) {
         currentLanguage = lang;
         localStorage.setItem('language', lang);
         updatePageLanguage();
-        // 更新图片
-        updateDashboardImages(lang);
         // 触发语言切换事件
         window.dispatchEvent(new CustomEvent('languageChanged', { detail: { language: lang } }));
-    }
-}
-
-// 更新仪表盘图片
-function updateDashboardImages(lang) {
-    const sponsorImg = document.getElementById('sponsor-img');
-    const sponsorTitle = document.getElementById('sponsor-title');
-    const sponsorDesc = document.getElementById('sponsor-desc');
-    
-    const wechatImg = document.getElementById('wechat-img');
-    const wechatIcon = document.getElementById('wechat-icon');
-    const wechatTitle = document.getElementById('wechat-title');
-    const wechatDesc = document.getElementById('wechat-desc');
-
-    if (lang === 'en-US') {
-        // 更新赞助图片
-        if (sponsorImg) {
-            sponsorImg.src = 'static/coffee.png';
-            sponsorImg.alt = 'Buy me a coffee';
-            if (sponsorTitle) {
-                sponsorTitle.setAttribute('data-i18n', 'dashboard.contact.coffee');
-                sponsorTitle.textContent = translations['en-US']['dashboard.contact.coffee'];
-            }
-            if (sponsorDesc) {
-                sponsorDesc.setAttribute('data-i18n', 'dashboard.contact.coffeeDesc');
-                sponsorDesc.textContent = translations['en-US']['dashboard.contact.coffeeDesc'];
-            }
-        }
-        
-        // 更新联系方式图片 (WeChat -> X.com)
-        if (wechatImg) {
-            wechatImg.src = 'static/x.com.png';
-            wechatImg.alt = 'X.com';
-            if (wechatIcon) {
-                wechatIcon.className = 'fab fa-x-twitter';
-            }
-            if (wechatTitle) {
-                wechatTitle.setAttribute('data-i18n', 'dashboard.contact.x');
-                wechatTitle.textContent = translations['en-US']['dashboard.contact.x'] || 'Follow on X.com';
-            }
-            if (wechatDesc) {
-                wechatDesc.setAttribute('data-i18n', 'dashboard.contact.xDesc');
-                wechatDesc.textContent = translations['en-US']['dashboard.contact.xDesc'] || 'Follow us on X for latest updates';
-            }
-        }
-    } else {
-        // 更新赞助图片
-        if (sponsorImg) {
-            sponsorImg.src = 'static/sponsor.png';
-            sponsorImg.alt = '赞助二维码';
-            if (sponsorTitle) {
-                sponsorTitle.setAttribute('data-i18n', 'dashboard.contact.sponsor');
-                sponsorTitle.textContent = translations['zh-CN']['dashboard.contact.sponsor'];
-            }
-            if (sponsorDesc) {
-                sponsorDesc.setAttribute('data-i18n', 'dashboard.contact.sponsorDesc');
-                sponsorDesc.textContent = translations['zh-CN']['dashboard.contact.sponsorDesc'];
-            }
-        }
-
-        // 更新联系方式图片 (X.com -> WeChat)
-        if (wechatImg) {
-            wechatImg.src = 'static/wechat.png';
-            wechatImg.alt = '微信二维码';
-            if (wechatIcon) {
-                wechatIcon.className = 'fab fa-weixin';
-            }
-            if (wechatTitle) {
-                wechatTitle.setAttribute('data-i18n', 'dashboard.contact.wechat');
-                wechatTitle.textContent = translations['zh-CN']['dashboard.contact.wechat'];
-            }
-            if (wechatDesc) {
-                wechatDesc.setAttribute('data-i18n', 'dashboard.contact.wechatDesc');
-                wechatDesc.textContent = translations['zh-CN']['dashboard.contact.wechatDesc'];
-            }
-        }
     }
 }
 
@@ -2074,8 +2444,6 @@ function updatePageLanguage() {
 export function initI18n() {
     // 设置初始语言
     updatePageLanguage();
-    // 设置初始图片
-    updateDashboardImages(currentLanguage);
     
     // 监听 DOM 变化，自动翻译新添加的元素
     const observer = new MutationObserver((mutations) => {
@@ -2122,10 +2490,74 @@ export function initI18n() {
     });
 }
 
-// 导出所有函数
-export default {
-    t,
-    setLanguage,
-    getCurrentLanguage,
-    initI18n
-};
+export function translateElement(element) {
+    if (!element) return;
+    
+    const attributes = ['placeholder', 'title', 'aria-label'];
+    attributes.forEach(attr => {
+        const attrKey = element.getAttribute(`data-i18n-${attr}`);
+        if (attrKey) {
+            const params = element.getAttribute(`data-i18n-${attr}-params`);
+            const parsedParams = params ? JSON.parse(params) : {};
+            if (attr === 'aria-label') {
+                element.setAttribute('aria-label', t(attrKey, parsedParams));
+            } else {
+                element[attr] = t(attrKey, parsedParams);
+            }
+        }
+    });
+
+    const key = element.getAttribute('data-i18n');
+    if (key) {
+        const params = element.getAttribute('data-i18n-params');
+        const parsedParams = params ? JSON.parse(params) : {};
+        
+        if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+            if (!element.hasAttribute('data-i18n-placeholder')) {
+                element.placeholder = t(key, parsedParams);
+            }
+        } else {
+            element.textContent = t(key, parsedParams);
+        }
+    }
+
+    element.querySelectorAll('[data-i18n], [data-i18n-placeholder], [data-i18n-title], [data-i18n-aria-label]').forEach(child => {
+        const childKey = child.getAttribute('data-i18n');
+        const childAttrs = ['placeholder', 'title', 'aria-label'];
+        
+        childAttrs.forEach(attr => {
+            const attrKey = child.getAttribute(`data-i18n-${attr}`);
+            if (attrKey) {
+                const params = child.getAttribute(`data-i18n-${attr}-params`);
+                const parsedParams = params ? JSON.parse(params) : {};
+                if (attr === 'aria-label') {
+                    child.setAttribute('aria-label', t(attrKey, parsedParams));
+                } else {
+                    child[attr] = t(attrKey, parsedParams);
+                }
+            }
+        });
+
+        if (childKey) {
+            const params = child.getAttribute('data-i18n-params');
+            const parsedParams = params ? JSON.parse(params) : {};
+            
+            if (child.tagName === 'INPUT' || child.tagName === 'TEXTAREA') {
+                if (!child.hasAttribute('data-i18n-placeholder')) {
+                    child.placeholder = t(childKey, parsedParams);
+                }
+            } else {
+                child.textContent = t(childKey, parsedParams);
+            }
+        }
+    });
+
+    element.querySelectorAll('[data-i18n-html]').forEach(child => {
+        const childKey = child.getAttribute('data-i18n-html');
+        const params = child.getAttribute('data-i18n-params');
+        const parsedParams = params ? JSON.parse(params) : {};
+        child.innerHTML = t(childKey, parsedParams);
+    });
+}
+
+

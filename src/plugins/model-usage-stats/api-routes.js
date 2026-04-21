@@ -1,7 +1,7 @@
 import logger from '../../utils/logger.js';
 import { checkAuth } from '../../ui-modules/auth.js';
 import { isAuthorized } from '../../utils/common.js';
-import { getStats, resetStats, resetTokenStats } from './stats-manager.js';
+import { getStats, getProviderTimeSeries, resetStats, resetTokenStats } from './stats-manager.js';
 
 function sendJson(res, statusCode, data) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json' });
@@ -67,6 +67,15 @@ export async function handleModelUsageStatsRoutes(method, path, req, res, config
                 message: '模型 Token 统计已重置',
                 data: stats
             });
+            return true;
+        }
+
+        if (method === 'GET' && path.startsWith('/api/model-usage-stats/provider-time-series')) {
+            const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+            const range = url.searchParams.get('range') || 'hour';
+            const provider = url.searchParams.get('provider') || null;
+            const stats = await getProviderTimeSeries(range, provider);
+            sendJson(res, 200, { success: true, data: stats });
             return true;
         }
     } catch (error) {

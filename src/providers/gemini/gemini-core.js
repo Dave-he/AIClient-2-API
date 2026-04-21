@@ -83,7 +83,9 @@ function parseRetryDelay(errorBody) {
             const match = message.match(/after\s+(\d+)s\.?/);
             if (match) return parseInt(match[1]) * 1000;
         }
-    } catch (e) {}
+    } catch (e) {
+        logger.debug(`[Gemini] Failed to extract retry delay: ${e.message}`);
+    }
     return null;
 }
 
@@ -91,15 +93,42 @@ function is_anti_truncation_model(model) {
     return ANTI_TRUNCATION_MODELS.some(antiModel => model.includes(antiModel));
 }
 
-// 从防截断模型名中提取实际模型名
 function extract_model_from_anti_model(model) {
     if (model.startsWith('anti-')) {
-        const originalModel = model.substring(5); // 移除 'anti-' 前缀
+        const originalModel = model.substring(5);
         if (GEMINI_MODELS.includes(originalModel)) {
             return originalModel;
         }
     }
-    return model; // 如果不是anti-前缀或不在原模型列表中，则返回原模型名
+    return model;
+}
+
+function countImageParts(requestBody) {
+    let count = 0;
+    const contents = requestBody.contents || [];
+    for (const content of contents) {
+        const parts = content.parts || [];
+        for (const part of parts) {
+            if (part.inlineData || part.fileData) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+function estimateImageDataSize(requestBody) {
+    let totalSize = 0;
+    const contents = requestBody.contents || [];
+    for (const content of contents) {
+        const parts = content.parts || [];
+        for (const part of parts) {
+            if (part.inlineData && part.inlineData.data) {
+                totalSize += part.inlineData.data.length * 0.75;
+            }
+        }
+    }
+    return totalSize;
 }
 
 function modelSupportsThinking(modelName) {
@@ -748,9 +777,9 @@ export class GeminiApiService {
     }
 
     async generateContent(model, requestBody) {
+        const startTime = Date.now();
         logger.info(`[Auth Token] Time until expiry: ${formatExpiryTime(this.authClient.credentials.expiry_date)}`);
         
-        // 临时存储 monitorRequestId
         if (requestBody._monitorRequestId) {
             this.config._monitorRequestId = requestBody._monitorRequestId;
             delete requestBody._monitorRequestId;
@@ -759,7 +788,6 @@ export class GeminiApiService {
             delete requestBody._requestBaseUrl;
         }
         
-        // 检查 token 是否即将过期，如果是则推送到刷新队列
         if (this.isExpiryDateNear()) {
             const poolManager = getProviderPoolManager();
             if (poolManager && this.uuid) {
@@ -780,16 +808,31 @@ export class GeminiApiService {
             baseModel,
             ensureRolesInContents({ ...requestBody })
         );
+        
+        const imageCount = countImageParts(processedRequestBody);
+        const estimatedSize = estimateImageDataSize(processedRequestBody);
+        if (imageCount > 0) {
+            logger.info(`[Gemini Image] Processing request with ${imageCount} image(s), estimated size: ${(estimatedSize / 1024).toFixed(2)} KB`);
+        }
+        
         const apiRequest = { model: baseModel, project: this.projectId, request: processedRequestBody };
         
-        const response = await this.callApi(API_ACTIONS.GENERATE_CONTENT, apiRequest, false, 0, baseModel);
-        return toGeminiApiResponse(response.response);
+        try {
+            const response = await this.callApi(API_ACTIONS.GENERATE_CONTENT, apiRequest, false, 0, baseModel);
+            const duration = (Date.now() - startTime) / 1000;
+            logger.info(`[Gemini Image] Request completed in ${duration.toFixed(2)}s`);
+            return toGeminiApiResponse(response.response);
+        } catch (error) {
+            const duration = (Date.now() - startTime) / 1000;
+            logger.error(`[Gemini Image] Request failed after ${duration.toFixed(2)}s: ${error.message}`);
+            throw error;
+        }
     }
 
     async * generateContentStream(model, requestBody) {
+        const startTime = Date.now();
         logger.info(`[Auth Token] Time until expiry: ${formatExpiryTime(this.authClient.credentials.expiry_date)}`);
 
-        // 临时存储 monitorRequestId
         if (requestBody._monitorRequestId) {
             this.config._monitorRequestId = requestBody._monitorRequestId;
             delete requestBody._monitorRequestId;
@@ -798,7 +841,6 @@ export class GeminiApiService {
             delete requestBody._requestBaseUrl;
         }
 
-        // 检查 token 是否即将过期，如果是则推送到刷新队列
         if (this.isExpiryDateNear()) {
             const poolManager = getProviderPoolManager();
             if (poolManager && this.uuid) {
@@ -809,34 +851,63 @@ export class GeminiApiService {
             }
         }
 
-        // 检查是否为防截断模型
+        let baseModel = model;
+        let processedRequestBody;
+        
         if (is_anti_truncation_model(model)) {
-            // 从防截断模型名中提取实际模型名
-            const actualModel = extract_model_from_anti_model(model);
-            // 使用防截断流处理
-            const processedRequestBody = normalizeGeminiThinkingRequest(
-                actualModel,
+            baseModel = extract_model_from_anti_model(model);
+            processedRequestBody = normalizeGeminiThinkingRequest(
+                baseModel,
                 ensureRolesInContents({ ...requestBody })
             );
-            yield* apply_anti_truncation_to_stream(this, actualModel, processedRequestBody);
+            
+            const imageCount = countImageParts(processedRequestBody);
+            const estimatedSize = estimateImageDataSize(processedRequestBody);
+            if (imageCount > 0) {
+                logger.info(`[Gemini Image Stream] Processing anti-truncation request with ${imageCount} image(s), estimated size: ${(estimatedSize / 1024).toFixed(2)} KB`);
+            }
+            
+            try {
+                yield* apply_anti_truncation_to_stream(this, baseModel, processedRequestBody);
+                const duration = (Date.now() - startTime) / 1000;
+                logger.info(`[Gemini Image Stream] Anti-truncation request completed in ${duration.toFixed(2)}s`);
+            } catch (error) {
+                const duration = (Date.now() - startTime) / 1000;
+                logger.error(`[Gemini Image Stream] Anti-truncation request failed after ${duration.toFixed(2)}s: ${error.message}`);
+                throw error;
+            }
             return;
         }
 
-        let baseModel = model;
         if (!GEMINI_MODELS.includes(model)) {
             logger.warn(`[Gemini] Model '${model}' not found. Using default model: '${GEMINI_MODELS[0]}'`);
             baseModel = GEMINI_MODELS[0];
         }
 
-        const processedRequestBody = normalizeGeminiThinkingRequest(
+        processedRequestBody = normalizeGeminiThinkingRequest(
             baseModel,
             ensureRolesInContents({ ...requestBody })
         );
+        
+        const imageCount = countImageParts(processedRequestBody);
+        const estimatedSize = estimateImageDataSize(processedRequestBody);
+        if (imageCount > 0) {
+            logger.info(`[Gemini Image Stream] Processing request with ${imageCount} image(s), estimated size: ${(estimatedSize / 1024).toFixed(2)} KB`);
+        }
+        
         const apiRequest = { model: baseModel, project: this.projectId, request: processedRequestBody };
         
-        const stream = this.streamApi(API_ACTIONS.STREAM_GENERATE_CONTENT, apiRequest, false, 0, baseModel);
-        for await (const chunk of stream) {
-            yield toGeminiApiResponse(chunk.response);
+        try {
+            const stream = this.streamApi(API_ACTIONS.STREAM_GENERATE_CONTENT, apiRequest, false, 0, baseModel);
+            for await (const chunk of stream) {
+                yield toGeminiApiResponse(chunk.response);
+            }
+            const duration = (Date.now() - startTime) / 1000;
+            logger.info(`[Gemini Image Stream] Request completed in ${duration.toFixed(2)}s`);
+        } catch (error) {
+            const duration = (Date.now() - startTime) / 1000;
+            logger.error(`[Gemini Image Stream] Request failed after ${duration.toFixed(2)}s: ${error.message}`);
+            throw error;
         }
     }
 

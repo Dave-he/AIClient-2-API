@@ -89,6 +89,17 @@ export const PROVIDER_MAPPINGS = [
         displayName: 'Grok Reverse',
         needsProjectId: false,
         urlKeys: ['GROK_BASE_URL', 'GROK_CF_CLEARANCE', 'GROK_USER_AGENT']
+    },
+    {
+        // Local Model 配置（Python控制层）
+        dirName: 'local',
+        patterns: ['configs/local/', '/local/'],
+        providerType: 'local-model',
+        credPathKey: 'LOCAL_API_KEY',
+        defaultCheckModel: 'gemma-2-9b-it',
+        displayName: 'Local Model',
+        needsProjectId: false,
+        urlKeys: ['LOCAL_BASE_URL']
     }
 ];
 

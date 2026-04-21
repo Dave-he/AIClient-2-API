@@ -1,5 +1,6 @@
 import { t } from './i18n.js';
 import { showToast, apiRequest } from './utils.js';
+import { eventBus, EVENTS } from './event-bus.js';
 
 // 插件列表状态
 let pluginsList = [];
@@ -43,6 +44,8 @@ export async function loadPlugins() {
             if (totalEl) totalEl.textContent = pluginsList.length;
             if (enabledEl) enabledEl.textContent = pluginsList.filter(p => p.enabled).length;
             if (disabledEl) disabledEl.textContent = pluginsList.filter(p => !p.enabled).length;
+            
+            eventBus.emit(EVENTS.PLUGINS_UPDATED, { plugins: pluginsList });
         } else {
             if (emptyEl) emptyEl.style.display = 'flex';
         }

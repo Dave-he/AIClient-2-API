@@ -3,6 +3,7 @@
 import { showToast } from './utils.js';
 import { getAuthHeaders } from './auth.js';
 import { t, getCurrentLanguage } from './i18n.js';
+import { eventBus, EVENTS } from './event-bus.js';
 
 /**
  * 不支持显示用量数据的提供商列表
@@ -226,6 +227,8 @@ export async function refreshUsage() {
         }
 
         showToast(t('common.success'), t('common.refresh.success'), 'success');
+        
+        eventBus.emit(EVENTS.USAGE_UPDATED, { data });
     } catch (error) {
         console.error('获取用量数据失败:', error);
         
@@ -255,7 +258,9 @@ function renderUsageData(data, container) {
     // 清空容器
     container.innerHTML = '';
 
-    if (!data || !data.providers || Object.keys(data.providers).length === 0) {
+    // 确保 providers 是纯对象类型（防止 null、数组、字符串等导致 "is not iterable" 错误）
+    const providers = data.providers;
+    if (!providers || typeof providers !== 'object' || Array.isArray(providers) || Object.keys(providers).length === 0) {
         container.innerHTML = `
             <div class="usage-empty">
                 <i class="fas fa-chart-bar"></i>
@@ -268,7 +273,7 @@ function renderUsageData(data, container) {
     // 按提供商分组收集已初始化且未禁用的实例
     const groupedInstances = {};
     
-    for (const [providerType, providerData] of Object.entries(data.providers)) {
+    for (const [providerType, providerData] of Object.entries(providers)) {
         // 如果配置了不可见，则跳过
         if (currentProviderConfigs) {
             const config = currentProviderConfigs.find(c => c.id === providerType);

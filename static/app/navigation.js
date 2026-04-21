@@ -38,6 +38,11 @@ function initNavigation() {
                 }
             });
 
+            // 触发章节切换事件
+            document.dispatchEvent(new CustomEvent('section-change', { 
+                detail: { section: sectionId } 
+            }));
+
             // 滚动到顶部
             scrollToTop();
         });

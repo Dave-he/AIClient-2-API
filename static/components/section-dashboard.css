@@ -1,3 +1,39 @@
+/* 骨架屏基础样式 */
+.skeleton {
+    background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: var(--radius-md);
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+.skeleton-text {
+    height: 1rem;
+    background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: 4px;
+}
+
+.skeleton-circle {
+    border-radius: 50%;
+    background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+.skeleton-hidden {
+    display: none !important;
+}
+
 /* 统计卡片 */
 .stats-grid {
     display: grid;
@@ -40,9 +76,13 @@
 }
 
 .stat-info h3 {
-    font-size: 2rem;
+    font-size: 1.25rem;
     font-weight: 700;
     margin-bottom: 0.25rem;
+}
+
+.stat-info h3.uptime-value {
+    font-size: 1.125rem;
 }
 
 .stat-info p {
@@ -276,7 +316,7 @@
 
 .info-item .info-value {
     color: var(--text-primary);
-    font-size: 1rem;
+    font-size: 0.875rem;
     font-weight: 600;
 }
 
@@ -1005,4 +1045,379 @@
 
 [data-theme="dark"] .image-zoom-overlay {
     background: var(--neutral-shadow-95);
+}
+
+/* Python GPU 监控面板 */
+.python-gpu-monitor {
+    background: var(--bg-primary);
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow-md);
+    margin-top: 1.5rem;
+}
+
+.python-gpu-monitor .system-info-header {
+    margin-bottom: 1.5rem;
+}
+
+.panel-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.connection-status .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.connection-status .status-badge.online {
+    background: var(--success-10);
+    color: var(--success-color);
+    border: 1px solid var(--success-border);
+}
+
+.connection-status .status-badge.offline {
+    background: var(--danger-10);
+    color: var(--danger-color);
+    border: 1px solid var(--danger-border);
+}
+
+.connection-status .status-badge i {
+    font-size: 0.5rem;
+}
+
+/* Python GPU 统计卡片 */
+.python-gpu-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.python-stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.python-stat-item:hover {
+    border-color: var(--primary-color);
+    background: var(--primary-10);
+}
+
+.python-stat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.python-stat-icon.gpu {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    color: white;
+}
+
+.python-stat-icon.memory {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+}
+
+.python-stat-icon.temp {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+.python-stat-icon.power {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+}
+
+.python-stat-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.python-stat-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.python-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Python GPU 折线图区域 */
+.python-gpu-chart-area {
+    margin-bottom: 1.5rem;
+}
+
+.chart-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.chart-type-tabs {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.gpu-time-range {
+    display: flex;
+    gap: 0.25rem;
+    background: var(--bg-tertiary);
+    padding: 0.2rem;
+    border-radius: var(--radius-sm);
+}
+
+.gpu-time-range .time-range-tab {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+}
+
+.chart-type-tab {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.chart-type-tab:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--primary-color);
+}
+
+.chart-type-tab.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+#pythonGpuChart {
+    width: 100% !important;
+    height: 200px !important;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+}
+
+.python-chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 0.75rem 0 0;
+}
+
+.python-chart-legend .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.legend-color.gpu-util { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.legend-color.gpu-mem { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.legend-color.gpu-temp { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+/* Python GPU 详细信息 */
+.python-gpu-details {
+    background: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.python-gpu-info .info-row {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 0.75rem;
+}
+
+.python-gpu-info .info-row:last-child {
+    margin-bottom: 0;
+}
+
+.python-gpu-info .info-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+/* Token 使用趋势面板 */
+.token-trend-panel {
+    background: var(--bg-primary);
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow-md);
+    margin-top: 1.5rem;
+}
+
+.token-trend-panel .system-info-header {
+    margin-bottom: 1rem;
+}
+
+.time-range-tabs {
+    display: flex;
+    gap: 0.5rem;
+    background: var(--bg-secondary);
+    padding: 0.25rem;
+    border-radius: var(--radius-md);
+}
+
+.time-range-tab {
+    padding: 0.5rem 1rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.time-range-tab:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.time-range-tab.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.token-chart-area {
+    position: relative;
+    height: 200px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    padding: 0.5rem;
+}
+
+.token-chart-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.75rem;
+}
+
+.token-chart-hint {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+#tokenTrendChart {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.token-chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 0.75rem 0 0;
+}
+
+.token-chart-legend .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.375rem 0.625rem;
+    border-radius: 999px;
+    transition: var(--transition);
+}
+
+.token-chart-legend .legend-item:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.token-chart-legend .legend-item.active {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: inset 0 0 0 1px var(--border-color);
+}
+
+.legend-color.prompt { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.legend-color.completion { background: linear-gradient(90deg, #10b981, #34d399); }
+.legend-color.total { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.legend-color.multi { background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 50%, #10b981 100%); }
+
+/* 响应式调整 */
+@media (max-width: 1024px) {
+    .python-gpu-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .python-gpu-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .python-gpu-info .info-row {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .chart-type-tabs {
+        flex-wrap: wrap;
+    }
+
+    .time-range-tabs {
+        flex-wrap: wrap;
+    }
+}
+
+/* 暗黑主题适配 */
+[data-theme="dark"] .python-stat-item {
+    background: var(--bg-secondary);
+}
+
+[data-theme="dark"] .python-stat-item:hover {
+    background: var(--primary-10);
+}
+
+[data-theme="dark"] #pythonGpuChart {
+    background: var(--bg-secondary);
+}
+
+[data-theme="dark"] .python-gpu-details {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="dark"] .token-chart-area {
+    background: var(--bg-secondary);
 }

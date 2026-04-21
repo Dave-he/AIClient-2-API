@@ -1,6 +1,6 @@
-<div align="center">
+# Vue 3 + Vite
 
-<img src="src/img/logo-mid.webp" alt="logo"  style="width: 128px; height: 128px;margin-bottom: 3px;">
+This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
 
 # AIClient-2-API（A2）🚀
 
@@ -94,6 +94,7 @@
 > <details>
 > <summary>Click to expand detailed version history</summary>
 > 
+> - **2026.04.19** - Optimized GPU monitoring module: Frontend accesses Python GPU controller via Node.js proxy endpoint `/api/python-gpu/status`, avoiding direct access to server private IP, and added authentication header support
 > - **2026.03.02** - Added Grok protocol support, supporting access to xAI Grok series models (Grok 3/4) via Cookie/SSO, supporting multimodal input, image/video generation, automatic token refresh and streaming output
 > - **2026.01.26** - Added Codex protocol support: supports OpenAI Codex OAuth authorization access
 > - **2026.01.25** - Enhanced AI Monitor plugin: supports monitoring request parameters and responses before and after AI protocol conversion. Optimized log management: unified log format, visual configuration

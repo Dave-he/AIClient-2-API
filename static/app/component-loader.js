@@ -33,6 +33,43 @@ async function loadComponent(componentPath) {
 }
 
 /**
+ * 从HTML内容中提取并加载CSS链接
+ * @param {string} html - HTML内容
+ */
+function extractAndLoadCSS(html) {
+    const linkRegex = /<link\s+[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
+    let match;
+    const loadedStylesheets = new Set();
+    
+    // 获取已加载的样式表
+    document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+        loadedStylesheets.add(link.href);
+    });
+    
+    while ((match = linkRegex.exec(html)) !== null) {
+        const href = match[1];
+        const fullUrl = new URL(href, window.location.origin).href;
+        
+        if (!loadedStylesheets.has(fullUrl)) {
+            const linkElement = document.createElement('link');
+            linkElement.rel = 'stylesheet';
+            linkElement.href = href;
+            document.head.appendChild(linkElement);
+            loadedStylesheets.add(fullUrl);
+        }
+    }
+}
+
+/**
+ * 移除HTML内容中的<link>标签
+ * @param {string} html - HTML内容
+ * @returns {string} - 清理后的HTML内容
+ */
+function removeLinkTags(html) {
+    return html.replace(/<link\s+[^>]*rel=["']stylesheet["'][^>]*>/gi, '');
+}
+
+/**
  * 将组件插入到指定容器
  * @param {string} componentPath - 组件文件路径
  * @param {string|HTMLElement} container - 容器选择器或元素
@@ -41,6 +78,12 @@ async function loadComponent(componentPath) {
  */
 async function insertComponent(componentPath, container, position = 'beforeend') {
     const html = await loadComponent(componentPath);
+    
+    // 提取并加载CSS链接
+    extractAndLoadCSS(html);
+    
+    // 移除<link>标签，只保留HTML内容
+    const cleanHtml = removeLinkTags(html);
     
     const containerElement = typeof container === 'string' 
         ? document.querySelector(container) 
@@ -51,9 +94,9 @@ async function insertComponent(componentPath, container, position = 'beforeend')
     }
 
     if (position === 'replace') {
-        containerElement.innerHTML = html;
+        containerElement.innerHTML = cleanHtml;
     } else {
-        containerElement.insertAdjacentHTML(position, html);
+        containerElement.insertAdjacentHTML(position, cleanHtml);
     }
 }
 
@@ -81,7 +124,6 @@ async function initializeComponents() {
     const componentConfigs = [
         { path: `${basePath}header.html`, container: '.container', position: 'afterbegin' },
         { path: `${basePath}sidebar.html`, container: '#sidebar-container', position: 'replace' },
-        { path: `${basePath}section-dashboard.html`, container: '#content-container', position: 'beforeend' },
         { path: `${basePath}section-config.html`, container: '#content-container', position: 'beforeend' },
         { path: `${basePath}section-upload-config.html`, container: '#content-container', position: 'beforeend' },
         { path: `${basePath}section-providers.html`, container: '#content-container', position: 'beforeend' },
@@ -109,9 +151,31 @@ async function initializeComponents() {
             { path: `${basePath}section-usage.html`, container: '#content-container', position: 'beforeend' },
             { path: `${basePath}section-logs.html`, container: '#content-container', position: 'beforeend' },
             { path: `${basePath}section-plugins.html`, container: '#content-container', position: 'beforeend' },
+            { path: `${basePath}section-gpu-monitor.html`, container: '#content-container', position: 'beforeend' },
         ];
         
         await loadComponents(sectionComponents);
+        
+        // 默认显示 dashboard 部分
+        setTimeout(() => {
+            const dashboardSection = document.getElementById('dashboard');
+            const dashboardNav = document.querySelector('.nav-item[data-section="dashboard"]');
+            if (dashboardSection) {
+                dashboardSection.classList.add('active');
+            }
+            if (dashboardNav) {
+                dashboardNav.classList.add('active');
+            }
+            
+            // 确保 GPU 监控菜单始终可见
+            const gpuNav = document.querySelector('.nav-item[data-section="gpu-monitor"]');
+            if (gpuNav) {
+                gpuNav.style.display = '';
+                console.log('[ComponentLoader] GPU monitor nav item made visible');
+            } else {
+                console.log('[ComponentLoader] GPU monitor nav item not found');
+            }
+        }, 50);
         
         console.log('All components loaded successfully');
         // 触发组件加载完成事件

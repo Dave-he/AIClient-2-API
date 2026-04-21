@@ -1,0 +1,120 @@
+<link rel="stylesheet" href="components/section-gpu-monitor.css">
+
+<section id="gpu-monitor" class="section" aria-labelledby="gpu-monitor-title">
+    <div class="gpu-page-shell">
+        <div class="gpu-hero">
+            <div>
+                <p class="gpu-eyebrow" data-i18n="gpuMonitor.heroEyebrow">Local AI Runtime</p>
+                <h2 id="gpu-monitor-title" data-i18n="gpuMonitor.title">GPU监控</h2>
+            </div>
+            <div class="gpu-hero-actions">
+                <span id="controllerConnectionStatus" class="status-badge offline">
+                    <i class="fas fa-circle"></i> <span data-i18n="gpuMonitor.disconnected">未连接</span>
+                </span>
+                <button id="refreshGpuStatusBtn" class="btn btn-primary btn-sm" title="刷新">
+                    <i class="fas fa-sync-alt"></i> <span data-i18n="common.refresh">刷新</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="gpu-monitor-container">
+            <div class="gpu-status-panel monitor-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-microchip"></i> <span data-i18n="gpuMonitor.gpuStatus">GPU状态</span></h3>
+                </div>
+                <div id="gpuStatusContent" class="gpu-status-content"></div>
+            </div>
+
+            <div class="current-model-panel monitor-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-cube"></i> <span data-i18n="gpuMonitor.currentModel">当前模型</span></h3>
+                    <button id="refreshModelsListBtn" class="btn btn-outline btn-sm" title="刷新">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div id="currentModelInfo" class="current-model-container"></div>
+            </div>
+
+            <div class="gpu-charts-panel monitor-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-chart-line"></i> <span data-i18n="gpuMonitor.gpuHistory">历史监控</span></h3>
+                    <div class="chart-header-actions">
+                        <div class="time-range-selector">
+                            <label for="timeRangeSelect" class="time-range-label"><i class="fas fa-clock"></i></label>
+                            <select id="timeRangeSelect" class="time-range-select">
+                                <option value="hour">1小时</option>
+                                <option value="day" selected>24小时</option>
+                                <option value="week">7天</option>
+                            </select>
+                        </div>
+                        <div class="chart-tabs" role="tablist">
+                        <button class="chart-tab active" data-chart-type="all" data-i18n="gpuMonitor.overview">总览</button>
+                        <button class="chart-tab" data-chart-type="utilization" data-i18n="gpuMonitor.utilization">使用率</button>
+                        <button class="chart-tab" data-chart-type="temperature" data-i18n="gpuMonitor.temperature">温度</button>
+                        <button class="chart-tab" data-chart-type="memory" data-i18n="gpuMonitor.memory">显存</button>
+                        <button class="chart-tab" data-chart-type="power" data-i18n="gpuMonitor.power">功耗</button>
+                    </div>
+                </div>
+                <div id="gpuChartContent" class="gpu-chart-content">
+                    <canvas id="gpuChart"></canvas>
+                </div>
+            </div>
+
+            <div class="queue-status-panel monitor-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-list-ol"></i> <span data-i18n="gpuMonitor.queueStatus">队列状态</span></h3>
+                </div>
+                <div id="queueStatusContent" class="queue-status-content"></div>
+            </div>
+
+            <div class="model-switch-panel monitor-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-exchange-alt"></i> <span data-i18n="gpuMonitor.modelSwitch">模型切换</span></h3>
+                </div>
+                <div id="quickSwitchContent" class="quick-switch-content"></div>
+            </div>
+
+            <div class="python-service-panel monitor-panel">
+                <div class="panel-header">
+                    <h3><i class="fab fa-python"></i> <span data-i18n="gpuMonitor.pythonService">Python服务</span></h3>
+                    <button id="refreshServiceStatusBtn" class="btn btn-outline btn-sm" title="刷新">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div id="pythonServiceStatus" class="python-service-status"></div>
+            </div>
+
+            <div class="config-management-panel monitor-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-cog"></i> <span data-i18n="gpuMonitor.configManagement">配置管理</span></h3>
+                    <div class="config-actions">
+                        <button id="refreshConfigBtn" class="btn btn-outline btn-sm" title="刷新">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button id="editConfigBtn" class="btn btn-outline btn-sm" title="编辑">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="configContent" class="config-content"></div>
+            </div>
+
+            <div class="controller-integration monitor-panel collapsed">
+                <div class="panel-header" onclick="document.querySelector('.controller-integration').classList.toggle('collapsed')">
+                    <h3><i class="fas fa-desktop"></i> <span data-i18n="gpuMonitor.controller">AI控制器</span></h3>
+                    <button class="btn btn-outline btn-sm collapse-btn">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                </div>
+                <div class="iframe-container">
+                    <iframe id="controllerIframe" src="" frameborder="0" allowfullscreen></iframe>
+                    <div id="iframePlaceholder" class="iframe-placeholder">
+                        <i class="fas fa-server"></i>
+                        <p data-i18n="gpuMonitor.iframePlaceholder">AI控制器未启动</p>
+                        <p class="hint" data-i18n="gpuMonitor.iframeHint">请启动 Python 控制器服务</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

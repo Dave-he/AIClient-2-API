@@ -549,7 +549,9 @@ export class GrokConverter extends BaseConverter {
                                     const url = card.image?.original || card.image_chunk?.imageUrl;
                                     if (this._isPart0(url)) return;
                                     if (url) add(url);
-                                } catch (e) {}
+                                } catch (e) {
+                                    logger.debug(`[GrokConverter] Failed to parse card json from cardAttachmentsJson: ${e.message}`);
+                                }
                             });
                             continue;
                         }
@@ -558,7 +560,9 @@ export class GrokConverter extends BaseConverter {
                                 const card = JSON.parse(item);
                                 const url = card.image?.original || card.image_chunk?.imageUrl;
                                 if (url) add(url);
-                            } catch (e) {}
+                            } catch (e) {
+                                logger.debug(`[GrokConverter] Failed to parse card json from jsonData: ${e.message}`);
+                            }
                             continue;
                         }
                         walk(item);

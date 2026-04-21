@@ -159,3 +159,131 @@
 [data-theme="dark"] .header {
     background: var(--bg-glass);
 }
+
+/* Provider 切换器 */
+.provider-switcher {
+    position: relative;
+}
+
+.provider-switch-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.provider-switch-btn:hover {
+    background: var(--bg-secondary);
+    border-color: var(--primary-color);
+}
+
+.provider-switch-btn i {
+    font-size: 14px;
+}
+
+.provider-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    min-width: 250px;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: var(--transition);
+}
+
+.provider-dropdown.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.dropdown-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.provider-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.provider-list .loading {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.provider-item {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.provider-item:hover {
+    background: var(--bg-secondary);
+}
+
+.provider-item.active {
+    background: var(--primary-color);
+    color: var(--white);
+}
+
+.provider-item .provider-name {
+    font-weight: 500;
+}
+
+.provider-item .provider-status {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-full);
+}
+
+.provider-item .status-healthy {
+    background: var(--success-color);
+    color: var(--white);
+}
+
+.provider-item .status-unhealthy {
+    background: var(--danger-color);
+    color: var(--white);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .provider-switch-btn {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.75rem;
+    }
+    
+    .provider-switch-btn span {
+        display: none;
+    }
+    
+    .provider-dropdown {
+        min-width: 200px;
+    }
+}

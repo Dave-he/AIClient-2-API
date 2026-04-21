@@ -94,8 +94,7 @@ export function estimateInputTokens(requestBody) {
             if (budget < 1024) budget = 1024;
             budget = Math.min(budget, 24576);
             allText += `<thinking_mode>enabled</thinking_mode><max_thinking_length>${budget}</max_thinking_length>`;
-        }
-else if (t === 'adaptive') {
+        } else if (t === 'adaptive') {
             const effortRaw = typeof requestBody.thinking.effort === 'string' ? requestBody.thinking.effort : '';
             const effort = effortRaw.toLowerCase().trim();
             const normalizedEffort = (effort === 'low' || effort === 'medium' || effort === 'high') ? effort : 'high';

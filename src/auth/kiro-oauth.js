@@ -230,144 +230,143 @@ export async function handleKiroOAuth(currentConfig, options = {}) {
  * Kiro Social Auth (Google/GitHub) - 使用 HTTP localhost 回调
  */
 async function handleKiroSocialAuth(provider, currentConfig, options = {}) {
-    // 生成 PKCE 参数
-    const codeVerifier = generateCodeVerifier();
-    const codeChallenge = generateCodeChallenge(codeVerifier);
-    const state = crypto.randomBytes(16).toString('base64url');
-    
-    // 启动本地回调服务器并获取端口
-    let handlerPort;
-    const providerKey = 'claude-kiro-oauth';
-    if (options.port) {
-        const port = parseInt(options.port);
-        await closeKiroServer(providerKey, port);
-        const server = await createKiroHttpCallbackServer(port, codeVerifier, state, options);
-        activeKiroServers.set(providerKey, { server, port });
-        handlerPort = port;
-    } else {
-        handlerPort = await startKiroCallbackServer(codeVerifier, state, options);
-    }
-    
-    // 使用 HTTP localhost 作为 redirect_uri
-    const redirectUri = `http://127.0.0.1:${handlerPort}/oauth/callback`;
-    
-    // 构建授权 URL
-    const authUrl = `${KIRO_OAUTH_CONFIG.authServiceEndpoint}/login?` +
-        `idp=${provider}&` +
-        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-        `code_challenge=${codeChallenge}&` +
-        `code_challenge_method=S256&` +
-        `state=${state}&` +
-        `prompt=select_account`;
-    
-    return {
-        authUrl,
-        authInfo: {
-            provider: 'claude-kiro-oauth',
-            authMethod: 'social',
-            socialProvider: provider,
-            port: handlerPort,
-            redirectUri: redirectUri,
-            state: state,
-            ...options
+    try {
+        const codeVerifier = generateCodeVerifier();
+        const codeChallenge = generateCodeChallenge(codeVerifier);
+        const state = crypto.randomBytes(16).toString('base64url');
+        
+        let handlerPort;
+        const providerKey = 'claude-kiro-oauth';
+        if (options.port) {
+            const port = parseInt(options.port);
+            await closeKiroServer(providerKey, port);
+            const server = await createKiroHttpCallbackServer(port, codeVerifier, state, options);
+            activeKiroServers.set(providerKey, { server, port });
+            handlerPort = port;
+        } else {
+            handlerPort = await startKiroCallbackServer(codeVerifier, state, options);
         }
-    };
+        
+        const redirectUri = `http://127.0.0.1:${handlerPort}/oauth/callback`;
+        
+        const authUrl = `${KIRO_OAUTH_CONFIG.authServiceEndpoint}/login?` +
+            `idp=${provider}&` +
+            `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+            `code_challenge=${codeChallenge}&` +
+            `code_challenge_method=S256&` +
+            `state=${state}&` +
+            `prompt=select_account`;
+        
+        return {
+            authUrl,
+            authInfo: {
+                provider: 'claude-kiro-oauth',
+                authMethod: 'social',
+                socialProvider: provider,
+                port: handlerPort,
+                redirectUri: redirectUri,
+                state: state,
+                ...options
+            }
+        };
+    } catch (error) {
+        logger.error(`${KIRO_OAUTH_CONFIG.logPrefix} Social Auth failed: ${error.message}`);
+        throw new Error(`Kiro Social Auth failed: ${error.message}`);
+    }
 }
 
 /**
  * Kiro Builder ID - Device Code Flow（类似 Qwen OAuth 模式）
  */
 async function handleKiroBuilderIDDeviceCode(currentConfig, options = {}) {
-    // 停止之前的轮询任务
-    for (const [existingTaskId] of activeKiroPollingTasks.entries()) {
-        if (existingTaskId.startsWith('kiro-')) {
-            stopKiroPollingTask(existingTaskId);
+    try {
+        for (const [existingTaskId] of activeKiroPollingTasks.entries()) {
+            if (existingTaskId.startsWith('kiro-')) {
+                stopKiroPollingTask(existingTaskId);
+            }
         }
-    }
 
-    // 获取 Builder ID Start URL（优先使用前端传入的值，否则使用默认值）
-    const builderIDStartURL = options.builderIDStartURL || KIRO_OAUTH_CONFIG.builderIDStartURL;
-    logger.info(`${KIRO_OAUTH_CONFIG.logPrefix} Using Builder ID Start URL: ${builderIDStartURL}`);
+        const builderIDStartURL = options.builderIDStartURL || KIRO_OAUTH_CONFIG.builderIDStartURL;
+        logger.info(`${KIRO_OAUTH_CONFIG.logPrefix} Using Builder ID Start URL: ${builderIDStartURL}`);
 
-    // 1. 注册 OIDC 客户端
-    const region = options.region || 'us-east-1';
-    const ssoOIDCEndpoint = KIRO_OAUTH_CONFIG.ssoOIDCEndpoint.replace('{{region}}', region);
-    
-    const regResponse = await fetchWithProxy(`${ssoOIDCEndpoint}/client/register`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'KiroIDE'
-        },
-        body: JSON.stringify({
-            clientName: 'Kiro IDE',
-            clientType: 'public',
-            scopes: KIRO_OAUTH_CONFIG.scopes,
-            // grantTypes: ['urn:ietf:params:oauth:grant-type:device_code', 'refresh_token']
-        })
-    }, 'claude-kiro-oauth');
-    
-    if (!regResponse.ok) {
-        throw new Error(`Kiro OAuth 客户端注册失败: ${regResponse.status}`);
-    }
-    
-    const regData = await regResponse.json();
-    
-    // 2. 启动设备授权
-    const authResponse = await fetchWithProxy(`${ssoOIDCEndpoint}/device_authorization`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            clientId: regData.clientId,
-            clientSecret: regData.clientSecret,
-            startUrl: builderIDStartURL
-        })
-    }, 'claude-kiro-oauth');
-    
-    if (!authResponse.ok) {
-        throw new Error(`Kiro OAuth 设备授权失败: ${authResponse.status}`);
-    }
-    
-    const deviceAuth = await authResponse.json();
-    
-    // 3. 启动后台轮询（类似 Qwen OAuth 的模式）
-    const taskId = `kiro-${deviceAuth.deviceCode.substring(0, 8)}-${Date.now()}`;
+        const region = options.region || 'us-east-1';
+        const ssoOIDCEndpoint = KIRO_OAUTH_CONFIG.ssoOIDCEndpoint.replace('{{region}}', region);
+        
+        const regResponse = await fetchWithProxy(`${ssoOIDCEndpoint}/client/register`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'KiroIDE'
+            },
+            body: JSON.stringify({
+                clientName: 'Kiro IDE',
+                clientType: 'public',
+                scopes: KIRO_OAUTH_CONFIG.scopes,
+            })
+        }, 'claude-kiro-oauth');
+        
+        if (!regResponse.ok) {
+            throw new Error(`Kiro OAuth 客户端注册失败: ${regResponse.status}`);
+        }
+        
+        const regData = await regResponse.json();
+        
+        const authResponse = await fetchWithProxy(`${ssoOIDCEndpoint}/device_authorization`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                clientId: regData.clientId,
+                clientSecret: regData.clientSecret,
+                startUrl: builderIDStartURL
+            })
+        }, 'claude-kiro-oauth');
+        
+        if (!authResponse.ok) {
+            throw new Error(`Kiro OAuth 设备授权失败: ${authResponse.status}`);
+        }
+        
+        const deviceAuth = await authResponse.json();
+        
+        const taskId = `kiro-${deviceAuth.deviceCode.substring(0, 8)}-${Date.now()}`;
 
-    
-    // 异步轮询
-    pollKiroBuilderIDToken(
-        regData.clientId,
-        regData.clientSecret,
-        deviceAuth.deviceCode,
-        5, 
-        300, 
-        taskId,
-        { ...options, region }
-    ).catch(error => {
-        logger.error(`${KIRO_OAUTH_CONFIG.logPrefix} 轮询失败 [${taskId}]:`, error);
-        broadcastEvent('oauth_error', {
-            provider: 'claude-kiro-oauth',
-            error: error.message,
-            timestamp: new Date().toISOString()
+        
+        pollKiroBuilderIDToken(
+            regData.clientId,
+            regData.clientSecret,
+            deviceAuth.deviceCode,
+            5, 
+            300, 
+            taskId,
+            { ...options, region }
+        ).catch(error => {
+            logger.error(`${KIRO_OAUTH_CONFIG.logPrefix} 轮询失败 [${taskId}]:`, error);
+            broadcastEvent('oauth_error', {
+                provider: 'claude-kiro-oauth',
+                error: error.message,
+                timestamp: new Date().toISOString()
+            });
         });
-    });
-    
-    return {
-        authUrl: deviceAuth.verificationUriComplete,
-        authInfo: {
-            provider: 'claude-kiro-oauth',
-            authMethod: 'builder-id',
-            deviceCode: deviceAuth.deviceCode,
-            userCode: deviceAuth.userCode,
-            verificationUri: deviceAuth.verificationUri,
-            verificationUriComplete: deviceAuth.verificationUriComplete,
-            expiresIn: deviceAuth.expiresIn,
-            interval: deviceAuth.interval,
-            ...options
-        }
-    };
+        
+        return {
+            authUrl: deviceAuth.verificationUriComplete,
+            authInfo: {
+                provider: 'claude-kiro-oauth',
+                authMethod: 'builder-id',
+                deviceCode: deviceAuth.deviceCode,
+                userCode: deviceAuth.userCode,
+                verificationUri: deviceAuth.verificationUri,
+                verificationUriComplete: deviceAuth.verificationUriComplete,
+                expiresIn: deviceAuth.expiresIn,
+                interval: deviceAuth.interval,
+                ...options
+            }
+        };
+    } catch (error) {
+        logger.error(`${KIRO_OAUTH_CONFIG.logPrefix} Builder ID Auth failed: ${error.message}`);
+        throw new Error(`Kiro Builder ID Auth failed: ${error.message}`);
+    }
 }
 
 /**

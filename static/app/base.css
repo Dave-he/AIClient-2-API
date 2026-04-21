@@ -49,6 +49,17 @@
     --indigo-500: #6366f1;
     --indigo-600: #4f46e5;
     
+    /* RGB 值用于渐变 */
+    --primary-rgb: 5, 150, 105;
+    --indigo-rgb: 99, 102, 241;
+    
+    /* 额外样式变量 */
+    --card-bg: var(--bg-primary);
+    --card-shadow: var(--shadow-sm);
+    --surface-bg: var(--bg-secondary);
+    --text-muted: var(--text-tertiary);
+    --border-radius: var(--radius-lg);
+    
     /* 辅助色透明度版本 */
     --primary-10: rgba(5, 150, 105, 0.1);
     --primary-20: rgba(5, 150, 105, 0.2);
@@ -311,7 +322,7 @@
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     background: var(--bg-secondary);
     color: var(--text-primary);
     line-height: 1.6;

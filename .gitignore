@@ -1,3 +1,11 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 node_modules
 logs/
 .serena/
@@ -18,3 +26,26 @@ api-potluck-data.json
 model-usage-stats.json
 AGENTS.md
 
+node_modules
+dist
+dist-ssr
+vue-dist
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+configs/token-store.json
+configs/usage-cache.json
+configs/model-usage-stats.json
+configs/provider_pools_runtime.json
+configs/fetch_system_prompt.txt
+.codeflicker/
+screenshot*png

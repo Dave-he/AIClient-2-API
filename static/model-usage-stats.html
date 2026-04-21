@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#059669">
-  <title>模型用量统计</title>
+  <title data-i18n="modelStats.title">模型用量统计</title>
   <link rel="stylesheet" href="app/base.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
@@ -276,6 +276,107 @@
       white-space: pre-line;
       line-height: 1.4;
     }
+
+  .chart-container {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .chart-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .time-range-tabs {
+    display: flex;
+    gap: 8px;
+    background: var(--bg-secondary);
+    padding: 4px;
+    border-radius: var(--radius-lg);
+  }
+
+  .time-range-tab {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+  }
+
+  .time-range-tab:hover {
+    color: var(--text-primary);
+    background: rgba(0,0,0,0.05);
+  }
+
+  .time-range-tab.active {
+    background: var(--primary-color);
+    color: #fff;
+  }
+
+  .chart-area {
+    position: relative;
+    height: 280px;
+  }
+
+  #usageLineChart {
+    width: 100%;
+    height: 100%;
+  }
+
+  .chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .legend-color {
+    width: 12px;
+    height: 3px;
+    border-radius: 2px;
+  }
+
+  .legend-color.prompt {
+    background: #3b82f6;
+  }
+
+  .legend-color.completion {
+    background: #10b981;
+  }
+
+  .legend-color.total {
+    background: #8b5cf6;
+  }
 
     .stats {
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -742,12 +843,12 @@
       <div class="brand">
         <span class="brand-icon"><i class="fas fa-chart-line"></i></span>
         <div>
-          <div class="brand-title">模型用量统计</div>
-          <div class="brand-sub">统一查看 Provider / Model 的请求次数与 Token 累计</div>
+          <div class="brand-title" data-i18n="modelStats.title">模型用量统计</div>
+          <div class="brand-sub" data-i18n="modelStats.subtitle">统一查看 Provider / Model 的请求次数与 Token 累计</div>
         </div>
       </div>
       <div class="nav-actions">
-        <a class="nav-btn" href="/"><i class="fas fa-arrow-left"></i><span>返回控制台</span></a>
+        <a class="nav-btn" href="/"><i class="fas fa-arrow-left"></i><span data-i18n="modelStats.backToConsole">返回控制台</span></a>
         <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换主题"><i class="fas fa-moon"></i><i class="fas fa-sun"></i></button>
       </div>
     </div>
@@ -755,50 +856,69 @@
   <main class="main">
     <section class="hero">
       <div class="panel hero-main">
-        <span class="eyebrow"><i class="fas fa-chart-pie"></i> 统计面板</span>
-        <h1>模型用量统计面板</h1>
-        <div class="copy">通过 <code>/api/model-usage-stats</code> 查看系统已累计的请求数、输入 Token、输出 Token 和 Provider / Model 维度分布。</div>
+        <span class="eyebrow"><i class="fas fa-chart-pie"></i> <span data-i18n="modelStats.panelTitle">统计面板</span></span>
+        <h1 data-i18n="modelStats.panelHeading">模型用量统计面板</h1>
+        <div class="copy" data-i18n-html="modelStats.panelDesc">通过 <code>/api/model-usage-stats</code> 查看系统已累计的请求数、输入 Token、输出 Token 和 Provider / Model 维度分布。</div>
         <div class="meta">
-          <span class="tag"><i class="fas fa-key"></i> 支持后台 Token 与 API Key</span>
-          <span class="tag"><i class="fas fa-database"></i> 基于插件持久化统计</span>
-          <span class="tag"><i class="fas fa-filter"></i> 支持搜索、排序、刷新与重置</span>
+          <span class="tag"><i class="fas fa-key"></i> <span data-i18n="modelStats.tagToken">支持后台 Token 与 API Key</span></span>
+          <span class="tag"><i class="fas fa-database"></i> <span data-i18n="modelStats.tagPersist">基于插件持久化统计</span></span>
+          <span class="tag"><i class="fas fa-filter"></i> <span data-i18n="modelStats.tagFilter">支持搜索、排序、刷新与重置</span></span>
         </div>
       </div>
       <aside class="panel auth">
-        <div class="title"><h2 class="section-title" style="margin:0"><i class="fas fa-shield-halved"></i>访问凭证</h2><span class="pill idle" id="authBadge">未连接</span></div>
-        <div class="sub">与其他管理页面一致，这里不会自动读取服务端敏感配置。输入凭证后可加载统计接口，刷新后会从本地缓存恢复。</div>
+        <div class="title"><h2 class="section-title" style="margin:0"><i class="fas fa-shield-halved"></i><span data-i18n="modelStats.authTitle">访问凭证</span></h2><span class="pill idle" id="authBadge" data-i18n="modelStats.authBadge">未连接</span></div>
+        <div class="sub" data-i18n="modelStats.authDesc">与其他管理页面一致，这里不会自动读取服务端敏感配置。输入凭证后可加载统计接口，刷新后会从本地缓存恢复。</div>
         <div class="group">
-          <label class="label" for="credentialValue">访问凭证</label>
-          <input class="input" id="credentialValue" type="password" placeholder="输入 Token 或 API Key">
-          <div class="help" id="credentialHelp">这里直接填后台登录 Token 或服务 API Key。页面会自动同时尝试 <code>Authorization: Bearer</code> 和 <code>x-api-key</code> 两种方式。</div>
+          <label class="label" for="credentialValue" data-i18n="modelStats.credentialLabel">访问凭证</label>
+          <input class="input" id="credentialValue" type="password" data-i18n-placeholder="modelStats.credentialPlaceholder" placeholder="输入 Token 或 API Key">
+          <div class="help" id="credentialHelp" data-i18n-html="modelStats.credentialHelp">这里直接填后台登录 Token 或服务 API Key。页面会自动同时尝试 <code>Authorization: Bearer</code> 和 <code>x-api-key</code> 两种方式。</div>
         </div>
         <div class="row">
-          <button class="btn btn-primary" id="connectBtn" type="button"><i class="fas fa-plug"></i><span>连接并加载</span></button>
-          <button class="btn btn-secondary" id="clearBtn" type="button"><i class="fas fa-eraser"></i><span>清空凭证</span></button>
+          <button class="btn btn-primary" id="connectBtn" type="button"><i class="fas fa-plug"></i><span data-i18n="modelStats.connectBtn">连接并加载</span></button>
+          <button class="btn btn-secondary" id="clearBtn" type="button"><i class="fas fa-eraser"></i><span data-i18n="modelStats.clearBtn">清空凭证</span></button>
         </div>
-        <div class="status info show" id="status"><i class="fas fa-circle-info"></i><span>尚未加载统计数据。</span></div>
+        <div class="status info show" id="status"><i class="fas fa-circle-info"></i><span data-i18n="modelStats.statusIdle">尚未加载统计数据。</span></div>
       </aside>
     </section>
     <section class="stats">
       <article class="card green">
-        <div class="card-label">总请求数</div>
+        <div class="card-label" data-i18n="modelStats.totalRequests">总请求数</div>
         <div class="card-value" id="totalRequests">0</div>
         <div class="note">QPS: <span id="currentQps" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxQps">0.00</span>) | RPM: <span id="currentRpm" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxRpm">0.00</span>)</div>
       </article>
-      <article class="card blue"><div class="card-label">输入 Token</div><div class="card-value" id="promptTokens">0</div><div class="note">输入 token 的累计值</div></article>
-      <article class="card cyan"><div class="card-label">缓存 Token</div><div class="card-value" id="cachedTokens">0</div><div class="note">缓存命中的累计值</div></article>
-      <article class="card indigo"><div class="card-label">输出 Token</div><div class="card-value" id="completionTokens">0</div><div class="note">输出 token 的累计值</div></article>
+      <article class="card blue"><div class="card-label" data-i18n="modelStats.promptTokens">输入 Token</div><div class="card-value" id="promptTokens">0</div><div class="note" data-i18n="modelStats.promptNote">输入 token 的累计值</div></article>
+      <article class="card cyan"><div class="card-label" data-i18n="modelStats.cachedTokens">缓存 Token</div><div class="card-value" id="cachedTokens">0</div><div class="note" data-i18n="modelStats.cachedNote">缓存命中的累计值</div></article>
+      <article class="card indigo"><div class="card-label" data-i18n="modelStats.completionTokens">输出 Token</div><div class="card-value" id="completionTokens">0</div><div class="note" data-i18n="modelStats.completionNote">输出 token 的累计值</div></article>
       <article class="card orange">
-        <div class="card-label">总 Token</div>
+        <div class="card-label" data-i18n="modelStats.totalTokens">总 Token</div>
         <div class="card-value" id="totalTokens">0</div>
-        <div class="note">TPS: <span id="currentTps" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxTps">0.00</span>) | <span id="updatedAt">等待数据</span></div>
+        <div class="note">TPS: <span id="currentTps" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="maxTps">0.00</span>) | <span id="updatedAt" data-i18n="modelStats.waitingData">等待数据</span></div>
       </article>
+</section>
+
+    <section class="chart-container">
+      <div class="chart-header">
+        <h2 class="chart-title"><i class="fas fa-line-chart"></i> <span data-i18n="modelStats.chartTitle">Token 使用趋势</span></h2>
+        <div class="time-range-tabs">
+          <button class="time-range-tab active" data-time-range="hour" data-i18n="modelStats.lastHour">最近一小时</button>
+          <button class="time-range-tab" data-time-range="day" data-i18n="modelStats.lastDay">最近一天</button>
+          <button class="time-range-tab" data-time-range="week" data-i18n="modelStats.lastWeek">最近一周</button>
+        </div>
+      </div>
+      <div class="chart-area">
+        <canvas id="usageLineChart"></canvas>
+      </div>
+      <div class="chart-legend">
+        <div class="legend-item"><span class="legend-color prompt"></span><span data-i18n="modelStats.legendPrompt">输入 Token</span></div>
+        <div class="legend-item"><span class="legend-color completion"></span><span data-i18n="modelStats.legendCompletion">输出 Token</span></div>
+        <div class="legend-item"><span class="legend-color total"></span><span data-i18n="modelStats.legendTotal">总 Token</span></div>
+      </div>
     </section>
     
     <section class="split" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
       <div class="panel calendar-panel" style="margin-bottom: 0;">
         <div class="calendar-header">
-          <h2 class="section-title" style="margin:0; font-size: 16px;"><i class="fas fa-calendar-days"></i> Token 使用趋势 (3个月)</h2>
+          <h2 class="section-title" style="margin:0; font-size: 16px;"><i class="fas fa-calendar-days"></i> <span data-i18n="modelStats.calendarTitle">Token 使用趋势 (3个月)</span></h2>
           <div class="calendar-legend" style="font-size: 10px;">
             <div class="level level-1"></div>
             <div class="level level-4"></div>
@@ -809,45 +929,45 @@
         </div>
         <div class="calendar-footer" id="calendarFooter" style="font-size: 11px; text-align: left; margin-top: 5px;"></div>
       </div>
-      <div class="panel"><h2 class="section-title" style="font-size: 16px;"><i class="fas fa-sitemap"></i>Provider 分布</h2><div class="bars" id="providerBars"></div></div>
-      <div class="panel"><h2 class="section-title" style="font-size: 16px;"><i class="fas fa-fire"></i>Top Models</h2><div class="bars" id="topModelBars"></div></div>
+      <div class="panel"><h2 class="section-title" style="font-size: 16px;"><i class="fas fa-sitemap"></i><span data-i18n="modelStats.providerDist">Provider 分布</span></h2><div class="bars" id="providerBars"></div></div>
+      <div class="panel"><h2 class="section-title" style="font-size: 16px;"><i class="fas fa-fire"></i><span data-i18n="modelStats.topModels">Top Models</span></h2><div class="bars" id="topModelBars"></div></div>
     </section>
     <div id="usageTooltip" class="calendar-tooltip"></div>
     <section>
       <div class="tools">
-        <h2 class="section-title" style="margin:0"><i class="fas fa-layer-group"></i>Provider 视图</h2>
+        <h2 class="section-title" style="margin:0"><i class="fas fa-layer-group"></i><span data-i18n="modelStats.providerView">Provider 视图</span></h2>
         <div class="row">
-          <button class="btn btn-secondary" id="refreshBtn" type="button"><i class="fas fa-rotate-right"></i><span>刷新</span></button>
-          <button class="btn btn-secondary" id="resetTokensBtn" type="button"><i class="fas fa-eraser"></i><span>重置 Token</span></button>
-          <button class="btn btn-danger" id="resetBtn" type="button"><i class="fas fa-trash-can"></i><span>重置统计</span></button>
+          <button class="btn btn-secondary" id="refreshBtn" type="button"><i class="fas fa-rotate-right"></i><span data-i18n="modelStats.refresh">刷新</span></button>
+          <button class="btn btn-secondary" id="resetTokensBtn" type="button"><i class="fas fa-eraser"></i><span data-i18n="modelStats.resetTokens">重置 Token</span></button>
+          <button class="btn btn-danger" id="resetBtn" type="button"><i class="fas fa-trash-can"></i><span data-i18n="modelStats.resetStats">重置统计</span></button>
         </div>
       </div>
       <div class="providers" id="providerCards"></div>
     </section>
     <section class="table-card">
       <div class="tools">
-        <h2 class="section-title" style="margin:0"><i class="fas fa-table"></i>模型明细</h2>
+        <h2 class="section-title" style="margin:0"><i class="fas fa-table"></i><span data-i18n="modelStats.modelDetails">模型明细</span></h2>
         <div class="tool-row">
-          <input class="search" id="searchInput" type="search" placeholder="搜索 provider 或 model">
+          <input class="search" id="searchInput" type="search" data-i18n-placeholder="modelStats.searchPlaceholder" placeholder="搜索 provider 或 model">
           <select class="select" id="sortSelect">
-            <option value="totalTokens-desc">按总 Token 降序</option>
-            <option value="requestCount-desc">按请求数降序</option>
-            <option value="promptTokens-desc">按输入 Token 降序</option>
-            <option value="completionTokens-desc">按输出 Token 降序</option>
-            <option value="provider-asc">按 Provider 升序</option>
-            <option value="model-asc">按 Model 升序</option>
+            <option value="totalTokens-desc" data-i18n="modelStats.sortTotalTokens">按总 Token 降序</option>
+            <option value="requestCount-desc" data-i18n="modelStats.sortRequestCount">按请求数降序</option>
+            <option value="promptTokens-desc" data-i18n="modelStats.sortPromptTokens">按输入 Token 降序</option>
+            <option value="completionTokens-desc" data-i18n="modelStats.sortCompletionTokens">按输出 Token 降序</option>
+            <option value="provider-asc" data-i18n="modelStats.sortProvider">按 Provider 升序</option>
+            <option value="model-asc" data-i18n="modelStats.sortModel">按 Model 升序</option>
           </select>
         </div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Provider</th><th>Model</th><th>请求数</th><th>Prompt</th><th>Cached</th><th>Completion</th><th>Total</th><th>最近使用</th></tr></thead>
+          <thead><tr><th data-i18n="modelStats.colProvider">Provider</th><th data-i18n="modelStats.colModel">Model</th><th data-i18n="modelStats.colRequests">请求数</th><th data-i18n="modelStats.colPrompt">Prompt</th><th data-i18n="modelStats.colCached">Cached</th><th data-i18n="modelStats.colCompletion">Completion</th><th data-i18n="modelStats.colTotal">Total</th><th data-i18n="modelStats.colLastUsed">最近使用</th></tr></thead>
           <tbody id="tableBody"></tbody>
         </table>
       </div>
     </section>
     <section class="empty" id="emptyState"></section>
-    <p class="footer">如果上游响应没有提供 usage，调用次数仍会统计，但 token 数可能保持为 0。</p>
+    <p class="footer" data-i18n="modelStats.footer">如果上游响应没有提供 usage，调用次数仍会统计，但 token 数可能保持为 0。</p>
   </main>
   <script type="module">
     import { initThemeSwitcher, setTheme, getCurrentTheme } from './app/theme-switcher.js';
@@ -1030,7 +1150,7 @@
         const s = p.data.summary || {};
         const node = document.createElement('article');
         node.className = 'provider';
-        node.innerHTML = `<div class="provider-head"><div><div class="provider-name">${p.name}</div><div class="provider-sub">包含 ${fmt(p.count)} 个模型</div></div><span class="provider-badge"><i class="fas fa-bolt"></i>${fmt(s.requestCount)} 次调用</span></div><div class="mini"><div class="mini-box"><div class="mini-label">总 Token</div><div class="mini-value">${fmtToken(s.totalTokens)}</div></div><div class="mini-box"><div class="mini-label">输入</div><div class="mini-value">${fmtToken(s.promptTokens)}</div></div><div class="mini-box"><div class="mini-label">输出</div><div class="mini-value">${fmtToken(s.completionTokens)}</div></div><div class="mini-box"><div class="mini-label">QPS / RPM</div><div class="mini-value">${(s.qps || 0).toFixed(2)} / ${(s.rpm || 0).toFixed(2)}</div></div><div class="mini-box"><div class="mini-label">TPS</div><div class="mini-value">${(s.tps || 0).toFixed(2)}</div></div><div class="mini-box"><div class="mini-label">最近使用</div><div class="mini-value" style="font-size:14px">${rel(s.lastUsedAt)}</div></div></div>`;
+node.innerHTML = `<div class="provider-head"><div><div class="provider-name">${p.name}</div><div class="provider-sub">包含 ${fmt(p.count)} 个模型</div></div><span class="provider-badge"><i class="fas fa-bolt"></i>${fmt(s.requestCount)} 次调用</span></div><div class="mini"><div class="mini-box"><div class="mini-label">总 Token</div><div class="mini-value">${fmtToken(s.totalTokens)}</div></div><div class="mini-box"><div class="mini-label">输入</div><div class="mini-value">${fmtToken(s.promptTokens)}</div></div><div class="mini-box"><div class="mini-label">输出</div><div class="mini-value">${fmtToken(s.completionTokens)}</div></div><div class="mini-box"><div class="mini-label">QPS / RPM</div><div class="mini-value">${(s.qps || 0).toFixed(2)} / ${(s.rpm || 0).toFixed(2)}</div></div><div class="mini-box"><div class="mini-label">TPS</div><div class="mini-value">${(s.tps || 0).toFixed(2)}</div></div><div class="mini-box"><div class="mini-label">最近使用</div><div class="mini-value" style="font-size:14px">${rel(s.lastUsedAt)}</div></div></div>`;
         box.appendChild(node)
       })
     }
@@ -1159,6 +1279,296 @@
       renderProviders(data);
       renderTable();
       renderCalendar(data.daily || {});
+      initTimeRangeTabs();
+      renderLineChart(currentTimeRange, data);
+    }
+
+    let currentTimeRange = 'hour';
+    let lineChartData = {};
+
+    function initTimeRangeTabs() {
+      const tabs = document.querySelectorAll('.time-range-tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+          tabs.forEach(t => t.classList.remove('active'));
+          e.target.classList.add('active');
+          currentTimeRange = e.target.dataset.timeRange;
+          renderLineChart(currentTimeRange, lineChartData);
+        });
+      });
+    }
+
+    function generateTimeRangeData(data, range) {
+      const now = new Date();
+      const result = { labels: [], promptTokens: [], completionTokens: [], totalTokens: [], requestCount: [] };
+      
+      let interval, count;
+      switch(range) {
+        case 'hour':
+          interval = 60 * 1000;
+          count = 60;
+          break;
+        case 'day':
+          interval = 60 * 60 * 1000;
+          count = 24;
+          break;
+        case 'week':
+          interval = 24 * 60 * 60 * 1000;
+          count = 7;
+          break;
+        default:
+          interval = 60 * 1000;
+          count = 60;
+      }
+
+      for (let i = count - 1; i >= 0; i--) {
+        const time = new Date(now.getTime() - i * interval);
+        let label;
+        
+        if (range === 'hour') {
+          label = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+        } else if (range === 'day') {
+          label = `${time.getHours().toString().padStart(2, '0')}:00`;
+        } else {
+          const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+          label = weekdays[time.getDay()];
+        }
+        
+        result.labels.push(label);
+        
+        let prompt = 0, completion = 0, total = 0, requests = 0;
+        
+        if (range === 'hour') {
+          const minuteKey = time.toISOString().slice(0, 16);
+          if (data.hourly && data.hourly[minuteKey]) {
+            const d = data.hourly[minuteKey];
+            prompt = d.promptTokens || 0;
+            completion = d.completionTokens || 0;
+            total = d.totalTokens || 0;
+            requests = d.requestCount || 0;
+          }
+        } else if (range === 'day') {
+          const hourKey = time.toISOString().slice(0, 13);
+          if (data.hourly && data.hourly[hourKey]) {
+            const d = data.hourly[hourKey];
+            prompt = d.promptTokens || 0;
+            completion = d.completionTokens || 0;
+            total = d.totalTokens || 0;
+            requests = d.requestCount || 0;
+          } else if (data.daily) {
+            const dateKey = time.toISOString().slice(0, 10);
+            if (data.daily[dateKey]) {
+              const d = data.daily[dateKey];
+              prompt += (d.promptTokens || 0) / 24;
+              completion += (d.completionTokens || 0) / 24;
+              total += (d.totalTokens || 0) / 24;
+              requests += (d.requestCount || 0) / 24;
+            }
+          }
+        } else {
+          const dateKey = time.toISOString().slice(0, 10);
+          if (data.daily && data.daily[dateKey]) {
+            const d = data.daily[dateKey];
+            prompt = d.promptTokens || 0;
+            completion = d.completionTokens || 0;
+            total = d.totalTokens || 0;
+            requests = d.requestCount || 0;
+          }
+        }
+        
+        result.promptTokens.push(Math.round(prompt));
+        result.completionTokens.push(Math.round(completion));
+        result.totalTokens.push(Math.round(total));
+        result.requestCount.push(Math.round(requests));
+      }
+      
+      return result;
+    }
+
+    function renderLineChart(range, data) {
+      lineChartData = data;
+      const chartCanvas = document.getElementById('usageLineChart');
+      if (!chartCanvas) return;
+
+      const ctx = chartCanvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = chartCanvas.getBoundingClientRect();
+      
+      chartCanvas.width = rect.width * dpr;
+      chartCanvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      
+      const width = rect.width;
+      const height = rect.height;
+      const padding = { top: 20, right: 20, bottom: 35, left: 50 };
+      const chartWidth = width - padding.left - padding.right;
+      const chartHeight = height - padding.top - padding.bottom;
+
+      ctx.clearRect(0, 0, width, height);
+
+      const chartData = generateTimeRangeData(data || {}, range);
+      
+      if (chartData.labels.length === 0) {
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('暂无数据', width / 2, height / 2);
+        return;
+      }
+
+      const allValues = [...chartData.promptTokens, ...chartData.completionTokens, ...chartData.totalTokens];
+      const maxValue = Math.max(...allValues.filter(v => v > 0), 1);
+      const minValue = 0;
+
+      drawGrid(ctx, chartWidth, chartHeight, padding);
+      drawAxes(ctx, chartWidth, chartHeight, padding, chartData.labels, minValue, maxValue);
+
+      const datasets = [
+        { data: chartData.promptTokens, color: '#3b82f6', gradient: ['#3b82f6', '#60a5fa'], label: '输入 Token' },
+        { data: chartData.completionTokens, color: '#10b981', gradient: ['#10b981', '#34d399'], label: '输出 Token' },
+        { data: chartData.totalTokens, color: '#8b5cf6', gradient: ['#8b5cf6', '#a78bfa'], label: '总 Token' }
+      ];
+
+      datasets.forEach(ds => {
+        drawArea(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+        drawLine(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+      });
+
+      datasets.forEach(ds => {
+        drawPoint(ctx, chartWidth, chartHeight, padding, ds, minValue, maxValue);
+      });
+    }
+
+    function drawGrid(ctx, chartWidth, chartHeight, padding) {
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+
+      const gridLines = 5;
+      for (let i = 0; i <= gridLines; i++) {
+        const y = padding.top + (chartHeight / gridLines) * i;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(padding.left + chartWidth, y);
+        ctx.stroke();
+      }
+
+      ctx.setLineDash([]);
+    }
+
+    function drawAxes(ctx, chartWidth, chartHeight, padding, labels, minValue, maxValue) {
+      ctx.strokeStyle = '#9ca3af';
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.moveTo(padding.left, padding.top);
+      ctx.lineTo(padding.left, padding.top + chartHeight);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(padding.left, padding.top + chartHeight);
+      ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+      ctx.stroke();
+
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'right';
+
+      const gridLines = 5;
+      for (let i = 0; i <= gridLines; i++) {
+        const y = padding.top + (chartHeight / gridLines) * i;
+        const value = Math.round(maxValue - ((maxValue - minValue) / gridLines) * i);
+        ctx.fillText(fmtToken(value), padding.left - 8, y + 4);
+      }
+
+      ctx.textAlign = 'center';
+      const step = Math.ceil(labels.length / 5);
+      for (let i = 0; i < labels.length; i += step) {
+        const x = padding.left + (chartWidth / (labels.length - 1)) * i;
+        ctx.fillText(labels[i], x, padding.top + chartHeight + 22);
+      }
+    }
+
+    function drawArea(ctx, chartWidth, chartHeight, padding, dataset, minValue, maxValue) {
+      const dataLength = dataset.data.length;
+      if (dataLength < 2) return;
+
+      const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight);
+      gradient.addColorStop(0, dataset.gradient[0] + '30');
+      gradient.addColorStop(1, dataset.gradient[1] + '05');
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+
+      dataset.data.forEach((value, index) => {
+        const x = padding.left + (chartWidth / (dataLength - 1)) * index;
+        const y = padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight;
+
+        if (index === 0) {
+          ctx.moveTo(x, padding.top + chartHeight);
+          ctx.lineTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+
+      const lastX = padding.left + (chartWidth / (dataLength - 1)) * (dataLength - 1);
+      ctx.lineTo(lastX, padding.top + chartHeight);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawLine(ctx, chartWidth, chartHeight, padding, dataset, minValue, maxValue) {
+      const dataLength = dataset.data.length;
+      if (dataLength < 2) return;
+
+      ctx.strokeStyle = dataset.color;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+
+      dataset.data.forEach((value, index) => {
+        const x = padding.left + (chartWidth / (dataLength - 1)) * index;
+        const y = padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight;
+
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          const prevX = padding.left + (chartWidth / (dataLength - 1)) * (index - 1);
+          const prevY = padding.top + chartHeight - ((dataset.data[index - 1] - minValue) / (maxValue - minValue)) * chartHeight;
+          
+          const cpX = (prevX + x) / 2;
+          ctx.quadraticCurveTo(prevX, prevY, cpX, (prevY + y) / 2);
+        }
+      });
+
+      ctx.stroke();
+    }
+
+    function drawPoint(ctx, chartWidth, chartHeight, padding, dataset, minValue, maxValue) {
+      const dataLength = dataset.data.length;
+      if (dataLength === 0) return;
+
+      const lastIndex = dataLength - 1;
+      const value = dataset.data[lastIndex];
+      if (value <= 0) return;
+
+      const x = padding.left + (chartWidth / (dataLength - 1)) * lastIndex;
+      const y = padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight;
+
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = dataset.color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = dataset.color;
+      ctx.fill();
     }
 
     async function loadData() {
@@ -1215,6 +1625,7 @@
     el('credentialValue').addEventListener('keydown', e => {
       if (e.key === 'Enter') loadData()
     });
+    initTimeRangeTabs();
     restoreCredential();
     if (el('credentialValue').value.trim()) loadData();
   </script>
