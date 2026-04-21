@@ -166,6 +166,12 @@ function setupWorkerCommunication() {
                     }
                 });
                 break;
+            case 'heartbeat':
+                sendToMaster({
+                    type: 'heartbeat_response',
+                    pid: process.pid
+                });
+                break;
             default:
                 logger.info('[Worker] Unknown message type:', message.type);
         }
