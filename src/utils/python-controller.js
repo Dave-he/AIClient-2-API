@@ -1,8 +1,11 @@
 import logger from './logger.js';
+import { CONFIG } from '../core/config-manager.js';
 
-const DEFAULT_PYTHON_CONTROLLER_URL = 'http://localhost:5000';
+function getDefaultControllerUrl() {
+    return CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
+}
 
-let controllerUrl = DEFAULT_PYTHON_CONTROLLER_URL;
+let controllerUrl = getDefaultControllerUrl();
 
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_RETRY_DELAY = 1000;
