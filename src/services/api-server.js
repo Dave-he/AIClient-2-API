@@ -126,6 +126,7 @@ import { isRetryableNetworkError } from '../utils/common.js';
 
 // 检测是否作为子进程运行
 const IS_WORKER_PROCESS = process.env.IS_WORKER_PROCESS === 'true';
+const WORKER_RESTART_COUNT = parseInt(process.env.WORKER_RESTART_COUNT || '0', 10);
 
 // 存储服务器实例，用于优雅关闭
 let serverInstance = null;
@@ -413,8 +414,8 @@ async function startServer() {
         logger.info('[Initialization] Default metrics initialized');
         logger.info(`  • UI Management Console: http://${CONFIG.HOST}:${CONFIG.SERVER_PORT}/`);
 
-        // Auto-open browser to UI (only if host is 0.0.0.0 or 127.0.0.1)
-        if (CONFIG.HOST === '0.0.0.0' || CONFIG.HOST === '127.0.0.1') {
+        // Auto-open browser to UI (only on first start, not on restart)
+        if ((CONFIG.HOST === '0.0.0.0' || CONFIG.HOST === '127.0.0.1') && WORKER_RESTART_COUNT === 0) {
             try {
                 const open = (await import('open')).default;
                 // 作为子进程启动时，需要更长的延迟确保服务完全就绪

@@ -68,7 +68,7 @@ async function loadSystemInfo() {
             serverTimeEl.style.width = '';
         }
         if (uptimeEl) {
-            uptimeEl.textContent = data.uptime ? formatUptime(data.uptime) : '--';
+            uptimeEl.textContent = (data.uptime !== undefined && data.uptime !== null) ? formatUptime(data.uptime) : '--';
             uptimeEl.classList.remove('skeleton-text');
             uptimeEl.style.width = '';
         }

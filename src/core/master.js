@@ -66,7 +66,8 @@ function startWorker() {
         stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
         env: {
             ...process.env,
-            IS_WORKER_PROCESS: 'true'
+            IS_WORKER_PROCESS: 'true',
+            WORKER_RESTART_COUNT: String(workerStatus.restartCount)
         }
     });
 
