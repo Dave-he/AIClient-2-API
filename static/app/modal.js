@@ -6,7 +6,7 @@ import { t } from './i18n.js';
 import { refreshModels } from './models-manager.js';
 import { API_PATHS, formatPath } from './api-paths.js';
 
-const MANAGED_MODEL_LIST_PROVIDERS = new Set(['openai-custom', 'openaiResponses-custom', 'claude-custom']);
+const MANAGED_MODEL_LIST_PROVIDERS = new Set(['openai-custom', 'openaiResponses-custom', 'claude-custom', 'local-model']);
 
 // 分页配置
 const PROVIDERS_PER_PAGE = 5;

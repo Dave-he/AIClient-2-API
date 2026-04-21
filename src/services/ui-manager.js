@@ -182,7 +182,7 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
     }
 
     // Handle UI management API requests (需要token验证，除了登录接口、健康检查、Events接口和GPU状态接口)
-    if (pathParam.startsWith('/api/') && pathParam !== '/api/login' && pathParam !== '/api/health' && pathParam !== '/api/events' && pathParam !== '/api/grok/assets' && pathParam !== '/api/python-gpu/status' && pathParam !== '/api/python-gpu/service/status' && pathParam !== '/api/python-gpu/service/start' && pathParam !== '/api/python-gpu/service/stop' && pathParam !== '/api/python-gpu/service/restart' && pathParam !== '/api/python-gpu/config' && pathParam !== '/api/python-gpu/models' && pathParam !== '/api/python-gpu/queue' && pathParam !== '/api/python/models/status' && pathParam !== '/api/python/models/summary' && pathParam !== '/api/python/gpu/status' && pathParam !== '/api/python/health' && pathParam !== '/api/python/queue/status' && pathParam !== '/api/python/vllm/models' && pathParam !== '/api/python/monitor/summary' && pathParam !== '/api/dashboard/summary' && !pathParam.startsWith('/api/usage/stats') && !pathParam.startsWith('/api/token-stats') && !pathParam.startsWith('/api/python/models/') && !pathParam.startsWith('/api/python/test/') && !pathParam.startsWith('/api/python/gpu/') && !pathParam.startsWith('/api/python-gpu/')) {
+    if (pathParam.startsWith('/api/') && pathParam !== '/api/login' && pathParam !== '/api/health' && pathParam !== '/api/events' && pathParam !== '/api/grok/assets' && pathParam !== '/api/python-gpu/status' && pathParam !== '/api/python-gpu/service/status' && pathParam !== '/api/python-gpu/service/start' && pathParam !== '/api/python-gpu/service/stop' && pathParam !== '/api/python-gpu/service/restart' && pathParam !== '/api/python-gpu/config' && pathParam !== '/api/python-gpu/models' && pathParam !== '/api/python-gpu/queue' && pathParam !== '/api/python/models/status' && pathParam !== '/api/python/models/summary' && pathParam !== '/api/python/gpu/status' && pathParam !== '/api/python/health' && pathParam !== '/api/python/queue/status' && pathParam !== '/api/python/vllm/models' && pathParam !== '/api/python/monitor/summary' && pathParam !== '/api/dashboard/summary' && pathParam !== '/api/provider-models' && !pathParam.startsWith('/api/usage/stats') && !pathParam.startsWith('/api/token-stats') && !pathParam.startsWith('/api/python/models/') && !pathParam.startsWith('/api/python/test/') && !pathParam.startsWith('/api/python/gpu/') && !pathParam.startsWith('/api/python-gpu/')) {
         // 检查token验证
         const isAuth = await auth.checkAuth(req);
         if (!isAuth) {
@@ -458,17 +458,19 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
         return await usageApi.handleGetSupportedProviders(req, res);
     }
 
-    // Get usage limits for a specific provider type
-    const usageProviderMatch = pathParam.match(/^\/api\/usage\/([^\/]+)$/);
-    if (method === 'GET' && usageProviderMatch) {
-        const providerType = decodeURIComponent(usageProviderMatch[1]);
-        return await usageApi.handleGetProviderUsage(req, res, currentConfig, providerPoolManager, providerType);
-    }
-
     // Get aggregate usage stats (totalRequests, totalTokens, trend points, etc.) from model-usage-stats.
     // /api/token-stats is kept as a lightweight compatibility alias for dashboard widgets.
+    // IMPORTANT: Must be checked BEFORE the generic /api/usage/:providerType route to avoid route conflict
     if (method === 'GET' && (pathParam === '/api/usage/stats' || pathParam === '/api/token-stats')) {
         return await handleGetUsageStats(req, res);
+    }
+
+    // Get usage limits for a specific provider type
+    // Exclude reserved paths: stats, supported-providers
+    const usageProviderMatch = pathParam.match(/^\/api\/usage\/([^\/]+)$/);
+    if (method === 'GET' && usageProviderMatch && usageProviderMatch[1] !== 'stats' && usageProviderMatch[1] !== 'supported-providers') {
+        const providerType = decodeURIComponent(usageProviderMatch[1]);
+        return await usageApi.handleGetProviderUsage(req, res, currentConfig, providerPoolManager, providerType);
     }
 
     // Check for updates - compare local VERSION with latest git tag

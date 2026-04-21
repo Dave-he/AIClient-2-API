@@ -4,7 +4,7 @@
       "customName": "本地vLLM控制器",
       "LOCAL_API_KEY": "123456",
       "LOCAL_BASE_URL": "http://ssh.hamr.top:27145",
-      "checkModelName": "gemma-4-31b",
+      "checkModelName": "Gemma-4-31B-Abliterated",
       "checkHealth": false,
       "uuid": "f9f1f0a4-4d22-4c20-9164-06d902f8576d",
       "isDisabled": false,

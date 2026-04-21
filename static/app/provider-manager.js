@@ -697,11 +697,11 @@ function updateProviderStatsDisplay(activeProviders, healthyProviders, totalAcco
     
     updateProviderStats(finalStats);
     
-    // 修改：根据使用次数统计"活跃提供商"和"活动连接"
-    // "活跃提供商"：统计有使用次数(usageCount > 0)的提供商类型数量
+    // 修改：根据账户数统计"活跃提供商"和"活动连接"
+    // "活跃提供商"：统计有账户数据的提供商类型数量
     let activeProvidersByUsage = 0;
     Object.entries(providerStats.providerTypeStats).forEach(([providerType, typeStats]) => {
-        if (typeStats.totalUsage > 0) {
+        if (typeStats.totalAccounts > 0) {
             activeProvidersByUsage++;
         }
     });

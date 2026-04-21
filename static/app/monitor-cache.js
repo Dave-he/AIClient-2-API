@@ -156,6 +156,10 @@ export class MonitorCache {
                     this._cache['providersStatic'] = dashboardSummary.providers;
                     this._timestamps['providersStatic'] = Date.now();
                 }
+                if (dashboardSummary.providersDynamic) {
+                    this._cache['providersDynamic'] = dashboardSummary.providersDynamic;
+                    this._timestamps['providersDynamic'] = Date.now();
+                }
             }
 
             this._preloadedData = dashboardSummary;

@@ -29,11 +29,12 @@ export async function handleGetDashboardSummary(req, res, currentConfig, provide
     }
 
     try {
-        const [systemData, pythonSummary, tokenStats, providersStatic] = await Promise.all([
+        const [systemData, pythonSummary, tokenStats, providersStatic, providersDynamic] = await Promise.all([
             fetchSystemData(req),
             fetchPythonSummary(req),
             fetchTokenStats(req),
-            fetchProvidersStatic(req, currentConfig, providerPoolManager)
+            fetchProvidersStatic(req, currentConfig, providerPoolManager),
+            fetchProvidersDynamic(req, currentConfig, providerPoolManager)
         ]);
 
         const result = {
@@ -43,6 +44,7 @@ export async function handleGetDashboardSummary(req, res, currentConfig, provide
             python: pythonSummary,
             tokenStats,
             providers: providersStatic,
+            providersDynamic: providersDynamic,
             controllerUrl: pythonControllerApi.getControllerBaseUrl()
         };
 
@@ -61,6 +63,7 @@ export async function handleGetDashboardSummary(req, res, currentConfig, provide
             python: { success: false },
             tokenStats: null,
             providers: null,
+            providersDynamic: null,
             controllerUrl: pythonControllerApi.getControllerBaseUrl()
         };
 
@@ -152,6 +155,34 @@ async function fetchProvidersStatic(req, currentConfig, providerPoolManager) {
         return promise;
     } catch (error) {
         logger.warn('[Dashboard API] Failed to get providers static data:', error.message);
+        return null;
+    }
+}
+
+async function fetchProvidersDynamic(req, currentConfig, providerPoolManager) {
+    try {
+        const mockRes = {
+            writeHead: () => {},
+            end: (data) => {
+                try {
+                    const parsed = JSON.parse(data);
+                    resolve(parsed);
+                } catch {
+                    resolve(null);
+                }
+            }
+        };
+        
+        let resolve;
+        const promise = new Promise(r => resolve = r);
+        
+        const providerApi = await import('./provider-api.js');
+        providerApi.handleGetProvidersDynamic(req, mockRes, currentConfig, providerPoolManager)
+            .then(() => {}).catch(() => resolve(null));
+        
+        return promise;
+    } catch (error) {
+        logger.warn('[Dashboard API] Failed to get providers dynamic data:', error.message);
         return null;
     }
 }
