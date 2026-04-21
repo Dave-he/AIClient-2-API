@@ -295,7 +295,6 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    credentials: 'include',
                     body: JSON.stringify({
                         password,
                         rememberMe: rememberMeInput?.checked || false
@@ -305,10 +304,11 @@
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    if (data.csrfToken) {
-                        sessionStorage.setItem('csrfToken', data.csrfToken);
+                    localStorage.setItem('authToken', data.token);
+                    if (rememberMeInput?.checked) {
+                        const expiryTime = Date.now() + (7 * 24 * 60 * 60 * 1000);
+                        localStorage.setItem('authTokenExpiry', expiryTime.toString());
                     }
-
                     window.location.href = '/';
                 } else {
                     const errorMsg = data.messageCode ? t(data.messageCode, data.messageParams) : (data.message || t('login.error.incorrect'));
@@ -338,9 +338,14 @@
 
         async function checkLoginStatus() {
             try {
+                const token = localStorage.getItem('authToken');
+                if (!token) return;
+
                 const response = await fetch('/api/validate-token', {
                     method: 'GET',
-                    credentials: 'include'
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
                 });
 
                 const data = await response.json();

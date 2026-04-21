@@ -6,94 +6,45 @@ import { t } from './i18n.js';
 class AuthManager {
     constructor() {
         this.tokenKey = 'authToken';
-        this.csrfKey = 'csrfToken';
         this.expiryKey = 'authTokenExpiry';
         this.baseURL = window.location.origin;
     }
 
-    getTokenFromCookie() {
-        const cookies = document.cookie.split(';');
-        for (const cookie of cookies) {
-            const [name, value] = cookie.trim().split('=');
-            if (name === 'auth_token') {
-                return value;
-            }
-        }
-        return null;
-    }
-
-    getCsrfToken() {
-        return sessionStorage.getItem(this.csrfKey) || null;
-    }
-
-    setCsrfToken(token) {
-        sessionStorage.setItem(this.csrfKey, token);
-    }
-
-    clearCsrfToken() {
-        sessionStorage.removeItem(this.csrfKey);
-    }
-
-    getExpiryFromCookie() {
-        return localStorage.getItem(this.expiryKey);
-    }
-
-    setExpiry(expiry) {
-        localStorage.setItem(this.expiryKey, expiry.toString());
-    }
-
     getToken() {
-        return this.getTokenFromCookie();
+        return localStorage.getItem(this.tokenKey);
     }
 
     getTokenExpiry() {
-        const expiry = this.getExpiryFromCookie();
+        const expiry = localStorage.getItem(this.expiryKey);
         return expiry ? parseInt(expiry) : null;
     }
 
-    checkTokenExpiry() {
-        const expiry = this.getTokenExpiry();
-        if (!expiry) return;
-
-        const timeUntilExpiry = expiry - Date.now();
-        const fiveMinutes = 5 * 60 * 1000;
-
-        if (timeUntilExpiry < fiveMinutes && timeUntilExpiry > 0) {
-            this.refreshCsrfToken();
-        }
-    }
-
-    async refreshCsrfToken() {
-        try {
-            const response = await fetch('/api/csrf-token', {
-                method: 'GET',
-                credentials: 'include'
-            });
-            if (response.ok) {
-                const data = await response.json();
-                this.setCsrfToken(data.csrfToken);
-            }
-        } catch (e) {
-            console.warn('Failed to refresh CSRF token:', e);
-        }
-    }
-
     isTokenValid() {
+        const token = this.getToken();
+        const expiry = this.getTokenExpiry();
+
+        if (!token) return false;
+
+        if (expiry && Date.now() > expiry) {
+            this.clearToken();
+            return false;
+        }
+
         return true;
     }
 
-    saveToken(token, rememberMe = false, expiry) {
-        if (expiry) {
-            this.setExpiry(expiry);
+    saveToken(token, rememberMe = false) {
+        localStorage.setItem(this.tokenKey, token);
+
+        if (rememberMe) {
+            const expiryTime = Date.now() + (7 * 24 * 60 * 60 * 1000);
+            localStorage.setItem(this.expiryKey, expiryTime.toString());
         }
-        this.clearCsrfToken();
     }
 
     clearToken() {
-        this.clearCsrfToken();
+        localStorage.removeItem(this.tokenKey);
         localStorage.removeItem(this.expiryKey);
-        document.cookie = 'auth_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-        document.cookie = 'csrf_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     }
 
     async logout() {
@@ -111,21 +62,14 @@ class ApiClient {
         this.baseURL = window.location.origin;
     }
 
-    getCsrfToken() {
-        return this.authManager.getCsrfToken();
-    }
-
     getAuthHeaders() {
-        const headers = {
+        const token = this.authManager.getToken();
+        return token ? {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        } : {
             'Content-Type': 'application/json'
         };
-
-        const csrfToken = this.getCsrfToken();
-        if (csrfToken) {
-            headers['X-CSRF-Token'] = csrfToken;
-        }
-
-        return headers;
     }
 
     handleUnauthorized() {
@@ -134,11 +78,7 @@ class ApiClient {
     }
 
     async request(endpoint, options = {}) {
-        let apiPath = endpoint;
-        if (!apiPath.startsWith('/api')) {
-            apiPath = '/api' + apiPath;
-        }
-        const url = `${this.baseURL}${apiPath}`;
+        const url = `${this.baseURL}/api${endpoint}`;
         const headers = {
             ...this.getAuthHeaders(),
             ...options.headers
@@ -146,8 +86,7 @@ class ApiClient {
 
         const config = {
             ...options,
-            headers,
-            credentials: 'include'
+            headers
         };
 
         try {
@@ -226,16 +165,15 @@ class ApiClient {
         const url = `${this.baseURL}/api${endpoint}`;
 
         const headers = {};
-        const csrfToken = this.getCsrfToken();
-        if (csrfToken) {
-            headers['X-CSRF-Token'] = csrfToken;
+        const token = this.authManager.getToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
         }
 
         const config = {
             method: 'POST',
             headers,
-            body: formData,
-            credentials: 'include'
+            body: formData
         };
 
         try {
@@ -277,9 +215,17 @@ class ApiClient {
  */
 async function initAuth() {
     try {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            window.location.href = '/login.html';
+            return false;
+        }
+
         const response = await fetch('/api/validate-token', {
             method: 'GET',
-            credentials: 'include'
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
         });
 
         const data = await response.json();
@@ -312,7 +258,6 @@ async function login(password, rememberMe = false) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            credentials: 'include',
             body: JSON.stringify({
             password,
             rememberMe
@@ -323,13 +268,7 @@ async function login(password, rememberMe = false) {
 
         if (data.success) {
             const authManager = new AuthManager();
-            const expiryTime = rememberMe ? Date.now() + (7 * 24 * 60 * 60 * 1000) : Date.now() + (24 * 60 * 60 * 1000);
-            authManager.saveToken('cookie', rememberMe, expiryTime);
-
-            if (data.csrfToken) {
-                authManager.setCsrfToken(data.csrfToken);
-            }
-
+            authManager.saveToken(data.token, rememberMe);
             return { success: true };
         } else {
             return { success: false, message: data.message };
@@ -352,24 +291,11 @@ function getAuthHeaders() {
     return apiClient.getAuthHeaders();
 }
 
-function getCsrfToken() {
-    const authManager = new AuthManager();
-    return authManager.getCsrfToken();
-}
-
-function setCsrfToken(token) {
-    const authManager = new AuthManager();
-    authManager.setCsrfToken(token);
-}
-
-// 导出实例到 window（兼容旧代码）
 window.authManager = authManager;
 window.apiClient = apiClient;
 window.initAuth = initAuth;
 window.logout = logout;
 window.login = login;
-window.getCsrfToken = getCsrfToken;
-window.setCsrfToken = setCsrfToken;
 
 // 导出认证管理器类和API客户端类供其他模块使用
 window.AuthManager = AuthManager;
