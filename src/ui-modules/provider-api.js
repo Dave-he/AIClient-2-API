@@ -541,16 +541,14 @@ export async function handleGetProviderTypeModels(req, res, currentConfig, provi
 
     // 本地模型始终只返回当前运行的模型
     if (providerType === MODEL_PROVIDER.LOCAL_MODEL) {
-        if (providerPoolManager) {
-            try {
-                const serviceAdapter = getServiceAdapter({ ...currentConfig, MODEL_PROVIDER: providerType });
-                if (typeof serviceAdapter.listModels === 'function') {
-                    const nativeModels = await serviceAdapter.listModels();
-                    models = extractModelIdsFromNativeList(nativeModels, providerType);
-                }
-            } catch (error) {
-                logger.warn(`[UI API] Failed to get deployed models for ${providerType}:`, error.message);
+        try {
+            const { callPythonControllerRaw } = await import('../utils/python-controller.js');
+            const pythonModels = await callPythonControllerRaw('/manage/models', 'GET');
+            if (pythonModels && Object.keys(pythonModels).length > 0) {
+                models = Object.keys(pythonModels);
             }
+        } catch (error) {
+            logger.warn(`[UI API] Failed to get deployed models for ${providerType}:`, error.message);
         }
     } else if (!isAuthenticated) {
         // 未认证用户只返回健康的已部署模型

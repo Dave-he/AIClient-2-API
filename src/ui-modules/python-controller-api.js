@@ -43,14 +43,20 @@ export async function preloadControllerData() {
     logger.info('[Controller Cache] Starting preload of controller data...');
     const startTime = Date.now();
     
+    // Build headers with controller API key if configured
+    const headers = {};
+    if (CONFIG.CONTROLLER_API_KEY) {
+        headers['X-Controller-Api-Key'] = CONFIG.CONTROLLER_API_KEY;
+    }
+    
     try {
         const [gpuData, modelsData, queueData, summaryData, healthData, serviceData] = await Promise.all([
-            callPythonController('/manage/gpu', 'GET', null, {}).catch(() => null),
-            callPythonController('/manage/models', 'GET', null, {}).catch(() => null),
-            callPythonController('/manage/queue', 'GET', null, {}).catch(() => null),
-            callPythonController('/manage/models/summary', 'GET', null, {}).catch(() => null),
-            callPythonController('/health', 'GET', null, {}).catch(() => null),
-            callPythonController('/manage/service/status', 'GET', null, {}).catch(() => null)
+            callPythonController('/manage/gpu', 'GET', null, headers).catch(() => null),
+            callPythonController('/manage/models', 'GET', null, headers).catch(() => null),
+            callPythonController('/manage/queue', 'GET', null, headers).catch(() => null),
+            callPythonController('/manage/models/summary', 'GET', null, headers).catch(() => null),
+            callPythonController('/health', 'GET', null, headers).catch(() => null),
+            callPythonController('/manage/service/status', 'GET', null, headers).catch(() => null)
         ]);
 
         const now = Date.now();
