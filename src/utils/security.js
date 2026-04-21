@@ -100,7 +100,7 @@ export function generateCookieConfig(rememberMe = false, isProduction = process.
         `Max-Age=${maxAge}`,
         'Path=/',
         'HttpOnly',
-        'SameSite=Strict'
+        'SameSite=Lax'
     ];
 
     if (isProduction) {
