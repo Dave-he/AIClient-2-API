@@ -74,6 +74,11 @@ function getBaseProviderConfigs() {
             name: 'OpenAI Responses', 
             icon: 'fa-reply-all'
         },
+        {
+            id: 'local-model',
+            name: '本地模型',
+            icon: 'fa-server'
+        },
     ];
 }
 
@@ -532,6 +537,45 @@ async function copyToClipboard(text) {
     }
 }
 
+/**
+ * 获取当前运行的本地模型名称
+ * @returns {string|null} 当前运行的模型名称，如果没有则返回 null
+ */
+async function getCurrentRunningModel() {
+    try {
+        const { monitorCache } = await import('./monitor-cache.js');
+        const cachedData = monitorCache.getCachedData();
+
+        if (cachedData && cachedData.summary) {
+            if (cachedData.summary.running_model) {
+                return typeof cachedData.summary.running_model === 'string'
+                    ? cachedData.summary.running_model
+                    : cachedData.summary.running_model.name || null;
+            }
+
+            if (cachedData.summary.models) {
+                const runningModels = cachedData.summary.models.filter(m => m.running);
+                if (runningModels.length > 0) {
+                    return runningModels[0].name;
+                }
+            }
+        }
+
+        const response = await fetch(`/api/python/models/summary`, {
+            method: 'GET',
+            timeout: 5000
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            return data?.running_model || null;
+        }
+    } catch (error) {
+        console.log('[Utils] Failed to get current running model:', error.message);
+    }
+    return null;
+}
+
 // 导出所有工具函数
 export {
     formatUptime,
@@ -543,5 +587,6 @@ export {
     getBaseProviderConfigs,
     getProviderStats,
     apiRequest,
-    copyToClipboard
+    copyToClipboard,
+    getCurrentRunningModel
 };

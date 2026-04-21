@@ -5,6 +5,7 @@ import path from 'path';
 import AdmZip from 'adm-zip';
 import { broadcastEvent } from './event-broadcast.js';
 import { scanConfigFiles } from './config-scanner.js';
+import { validatePath, sanitizeFilename } from '../utils/security.js';
 
 /**
  * 获取上传配置文件列表
@@ -32,23 +33,22 @@ export async function handleGetUploadConfigs(req, res, currentConfig, providerPo
  */
 export async function handleViewConfigFile(req, res, filePath) {
     try {
-        const fullPath = path.join(process.cwd(), filePath);
-        
-        // 安全检查：确保文件路径在允许的目录内
-        const allowedDirs = ['configs'];
-        const relativePath = path.relative(process.cwd(), fullPath);
-        const isAllowed = allowedDirs.some(dir => relativePath.startsWith(dir + path.sep) || relativePath === dir);
-        
-        if (!isAllowed) {
+        const validation = validatePath(filePath, ['configs'], process.cwd());
+
+        if (!validation.safe) {
+            logger.warn(`[Security] Path validation failed: ${filePath}, reason: ${validation.error}`);
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 error: {
-                    message: 'Access denied: can only view files in configs directory'
+                    message: validation.error
                 }
             }));
             return true;
         }
-        
+
+        const fullPath = validation.resolvedPath;
+        const relativePath = path.relative(process.cwd(), fullPath);
+
         if (!existsSync(fullPath)) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -88,23 +88,21 @@ export async function handleViewConfigFile(req, res, filePath) {
  */
 export async function handleDownloadConfigFile(req, res, filePath) {
     try {
-        const fullPath = path.join(process.cwd(), filePath);
-        
-        // 安全检查：确保文件路径在允许的目录内
-        const allowedDirs = ['configs'];
-        const relativePath = path.relative(process.cwd(), fullPath);
-        const isAllowed = allowedDirs.some(dir => relativePath.startsWith(dir + path.sep) || relativePath === dir);
-        
-        if (!isAllowed) {
+        const validation = validatePath(filePath, ['configs'], process.cwd());
+
+        if (!validation.safe) {
+            logger.warn(`[Security] Download path validation failed: ${filePath}, reason: ${validation.error}`);
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 error: {
-                    message: 'Access denied: can only download files in configs directory'
+                    message: validation.error
                 }
             }));
             return true;
         }
-        
+
+        const fullPath = validation.resolvedPath;
+
         if (!existsSync(fullPath)) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -142,23 +140,22 @@ export async function handleDownloadConfigFile(req, res, filePath) {
  */
 export async function handleDeleteConfigFile(req, res, filePath) {
     try {
-        const fullPath = path.join(process.cwd(), filePath);
-        
-        // 安全检查：确保文件路径在允许的目录内
-        const allowedDirs = ['configs'];
-        const relativePath = path.relative(process.cwd(), fullPath);
-        const isAllowed = allowedDirs.some(dir => relativePath.startsWith(dir + path.sep) || relativePath === dir);
-        
-        if (!isAllowed) {
+        const validation = validatePath(filePath, ['configs'], process.cwd());
+
+        if (!validation.safe) {
+            logger.warn(`[Security] Delete path validation failed: ${filePath}, reason: ${validation.error}`);
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 error: {
-                    message: 'Access denied: can only delete files in configs directory'
+                    message: validation.error
                 }
             }));
             return true;
         }
-        
+
+        const fullPath = validation.resolvedPath;
+        const relativePath = path.relative(process.cwd(), fullPath);
+
         if (!existsSync(fullPath)) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -299,21 +296,17 @@ export async function handleDeleteUnboundConfigs(req, res, currentConfig, provid
         
         for (const config of unboundConfigs) {
             try {
-                const fullPath = path.join(process.cwd(), config.path);
-                
-                // 安全检查：确保文件路径在允许的目录内
-                const allowedDirs = ['configs'];
-                const relativePath = path.relative(process.cwd(), fullPath);
-                const isAllowed = allowedDirs.some(dir => relativePath.startsWith(dir + path.sep) || relativePath === dir);
-                
-                if (!isAllowed) {
+                const validation = validatePath(config.path, ['configs'], process.cwd());
+
+                if (!validation.safe) {
                     failedFiles.push({
                         path: config.path,
-                        error: 'Access denied: can only delete files in configs directory'
+                        error: validation.error
                     });
                     continue;
                 }
-                
+
+                const fullPath = validation.resolvedPath;
                 if (!existsSync(fullPath)) {
                     failedFiles.push({
                         path: config.path,
@@ -369,23 +362,22 @@ export async function handleDeleteUnboundConfigs(req, res, currentConfig, provid
  */
 export async function handleForceExpireConfig(req, res, filePath, currentConfig, providerPoolManager) {
     try {
-        const fullPath = path.join(process.cwd(), filePath);
-        
-        // 安全检查：确保文件路径在允许的目录内
-        const allowedDirs = ['configs'];
-        const relativePath = path.relative(process.cwd(), fullPath);
-        const isAllowed = allowedDirs.some(dir => relativePath.startsWith(dir + path.sep) || relativePath === dir);
-        
-        if (!isAllowed) {
+        const validation = validatePath(filePath, ['configs'], process.cwd());
+
+        if (!validation.safe) {
+            logger.warn(`[Security] Force expire path validation failed: ${filePath}, reason: ${validation.error}`);
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 error: {
-                    message: 'Access denied: can only access files in configs directory'
+                    message: validation.error
                 }
             }));
             return true;
         }
-        
+
+        const fullPath = validation.resolvedPath;
+        const relativePath = path.relative(process.cwd(), fullPath);
+
         if (!existsSync(fullPath)) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({

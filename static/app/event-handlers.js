@@ -73,6 +73,65 @@ function initEventListeners() {
         });
     }
 
+    // 清空所有日志
+    if (elements.clearAllLogsBtn) {
+        elements.clearAllLogsBtn.addEventListener('click', async () => {
+            // 显示确认对话框
+            const confirmed = confirm(t('logs.clearAll.confirm.msg') || '确定要清空所有日志文件吗？此操作不可恢复。');
+            
+            if (!confirmed) {
+                return;
+            }
+            
+            try {
+                const token = window.authManager.getToken();
+                if (!token) {
+                    showToast(t('common.error'), t('common.loginRequired'), 'error');
+                    return;
+                }
+                
+                // 调用后端 API 清空所有日志文件
+                const response = await fetch(`${window.location.origin}/api/system/clear-all-logs`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.status === 401) {
+                    showToast(t('common.error'), t('common.unauthorized'), 'error');
+                    window.authManager.clearToken();
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 清空前端日志显示
+                    clearLogs();
+                    if (elements.logsContainer) {
+                        elements.logsContainer.innerHTML = '';
+                    }
+                    
+                    // 显示成功提示
+                    showToast(
+                        t('logs.clearAll.success.title') || '成功', 
+                        t('logs.clearAll.success.msg') || `已清空 ${result.clearedCount || 0} 个日志文件`, 
+                        'success',
+                        5000
+                    );
+                } else {
+                    showToast(t('common.error'), t('logs.clearAll.failed') || '清空所有日志失败', 'error');
+                }
+            } catch (error) {
+                console.error('清空所有日志失败:', error);
+                showToast(t('common.error'), (t('logs.clearAll.failed') || '清空所有日志失败') + ': ' + error.message, 'error');
+            }
+        });
+    }
+
     // 下载日志
     if (elements.downloadLogsBtn) {
         elements.downloadLogsBtn.addEventListener('click', async () => {

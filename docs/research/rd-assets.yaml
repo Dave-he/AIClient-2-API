@@ -1,0 +1,177 @@
+metadata:
+  rd_asset_review_version: "4.2.0"
+  generated_at: "2026-04-21T18:17:43Z"
+  scan_mode: "full"
+  platform: "codeflicker"
+
+project:
+  name: "aiclient-2-api"
+  type: "node"
+  framework: "node"
+  package_manager: "pnpm"
+
+statistics:
+  source_files: 128
+  test_files: 15
+  config_files: 4
+  doc_files: 17
+
+modules:
+  - name: "Master Process"
+    path: "src/core/master.js"
+    responsibility: "子进程管理、资源监控、IPC 通信"
+    priority: "P0"
+  - name: "Config Manager"
+    path: "src/core/config-manager.js"
+    responsibility: "配置验证、CLI 参数解析"
+    priority: "P0"
+  - name: "Plugin Manager"
+    path: "src/core/plugin-manager.js"
+    responsibility: "插件生命周期、路由、认证"
+    priority: "P0"
+  - name: "Request Handler"
+    path: "src/handlers/request-handler.js"
+    responsibility: "HTTP 请求统一入口"
+    priority: "P0"
+  - name: "Protocol Converter"
+    path: "src/convert/convert.js"
+    responsibility: "数据格式转换核心逻辑"
+    priority: "P0"
+
+providers:
+  - name: "OpenAI"
+    path: "src/providers/openai/openai-core.js"
+    protocol: "OpenAI"
+  - name: "Claude"
+    path: "src/providers/claude/claude-core.js"
+    protocol: "Claude"
+  - name: "Gemini"
+    path: "src/providers/gemini/gemini-core.js"
+    protocol: "Gemini/OpenAI"
+  - name: "Grok"
+    path: "src/providers/grok/grok-core.js"
+    protocol: "OpenAI"
+  - name: "Kiro"
+    path: "src/providers/claude/claude-kiro.js"
+    protocol: "OpenAI/Claude"
+  - name: "Local"
+    path: "src/providers/local/local-core.js"
+    protocol: "OpenAI"
+
+plugins:
+  - name: "default-auth"
+    path: "src/plugins/default-auth/"
+    type: "AUTH"
+    description: "API Key 认证"
+  - name: "ai-monitor"
+    path: "src/plugins/ai-monitor/"
+    type: "MIDDLEWARE"
+    description: "AI 接口全链路监控"
+  - name: "api-potluck"
+    path: "src/plugins/api-potluck/"
+    type: "MIDDLEWARE"
+    description: "Key 管理和用量统计"
+  - name: "model-usage-stats"
+    path: "src/plugins/model-usage-stats/"
+    type: "MIDDLEWARE"
+    description: "模型用量统计"
+
+apis:
+  core:
+    - endpoint: "/v1/chat/completions"
+      method: "POST"
+      description: "OpenAI 兼容聊天接口"
+    - endpoint: "/v1/models"
+      method: "GET"
+      description: "模型列表查询"
+    - endpoint: "/v1/responses"
+      method: "POST"
+      description: "OpenAI Responses API"
+  ui:
+    - endpoint: "/api/config"
+      module: "config-api"
+      description: "配置管理"
+    - endpoint: "/api/providers"
+      module: "provider-api"
+      description: "提供商管理"
+    - endpoint: "/api/usage"
+      module: "usage-api"
+      description: "用量查询"
+    - endpoint: "/api/dashboard"
+      module: "dashboard-api"
+      description: "仪表板数据"
+
+design_patterns:
+  - name: "Adapter"
+    usage: "提供商接口统一"
+    file: "src/providers/adapter.js"
+  - name: "Strategy"
+    usage: "协议转换"
+    file: "src/converters/strategies/"
+  - name: "Factory"
+    usage: "适配器创建"
+    file: "src/providers/adapter.js"
+  - name: "Singleton"
+    usage: "管理器实例"
+    file: "src/core/plugin-manager.js"
+  - name: "Observer"
+    usage: "事件广播"
+    file: "src/ui-modules/event-broadcast.js"
+
+snippets:
+  enabled: true
+  directory: ".codeflicker/snippets"
+  recommended:
+    - path: ".codeflicker/snippets/utils/provider-strategies.js"
+      category: "utils"
+      title: "provider-strategies"
+    - path: ".codeflicker/snippets/utils/auth-utils.js"
+      category: "utils"
+      title: "auth-utils"
+    - path: ".codeflicker/snippets/utils/env.js"
+      category: "utils"
+      title: "env"
+    - path: ".codeflicker/snippets/utils/rate-tracker.js"
+      category: "utils"
+      title: "rate-tracker"
+    - path: ".codeflicker/snippets/utils/debounce.js"
+      category: "utils"
+      title: "debounce"
+    - path: ".codeflicker/snippets/utils/format-utils.js"
+      category: "utils"
+      title: "format-utils"
+    - path: ".codeflicker/snippets/utils/provider-strategy.js"
+      category: "utils"
+      title: "provider-strategy"
+
+testing:
+  framework: "jest"
+  coverage:
+    statements: 0
+    branches: 0
+    functions: 0
+    lines: 0
+  test_types:
+    - type: "unit"
+      files: 8
+      status: "configured"
+    - type: "integration"
+      files: 3
+      status: "configured"
+    - type: "e2e"
+      files: 2
+      status: "configured"
+
+gaps:
+  - priority: "P1"
+    issue: "无 ESLint 配置"
+    suggestion: "添加 .eslintrc.js 配置文件"
+  - priority: "P2"
+    issue: "无 API 文档"
+    suggestion: "生成 OpenAPI 规范文档"
+  - priority: "P2"
+    issue: "无类型检查"
+    suggestion: "考虑迁移到 TypeScript"
+  - priority: "P3"
+    issue: "无代码覆盖率报告"
+    suggestion: "添加 coverage script"

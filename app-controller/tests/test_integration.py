@@ -91,14 +91,14 @@ class TestIntegration:
                 assert data["status"] == "starting"
 
     def test_stop_model(self, client):
-        with patch('core.sys_ctl.SystemController.is_service_running') as mock_is_running:
+        with patch('core.scheduler.Scheduler.is_model_running') as mock_is_running:
             mock_is_running.return_value = True
-            
-            with patch('core.sys_ctl.SystemController.stop_service') as mock_stop:
+
+            with patch('core.scheduler.Scheduler.stop_model', new_callable=AsyncMock) as mock_stop:
                 mock_stop.return_value = True
-                
+
                 response = client.post("/manage/models/gemma-4-31b/stop")
-                
+
                 assert response.status_code == 200
                 data = response.json()
                 assert data["status"] == "stopped"
@@ -120,11 +120,30 @@ class TestIntegration:
         with patch('core.scheduler.Scheduler.switch_model') as mock_switch:
             mock_switch.return_value = True
             
-            response = client.post("/manage/models/gemma-4-31b/switch")
+            response = client.post("/manage/models/gemma-4-31b/switch?test_enabled=false")
             
             assert response.status_code == 200
             data = response.json()
             assert data["status"] == "switched"
+
+    def test_switch_model_with_test(self, client):
+        with patch('core.scheduler.Scheduler.switch_model') as mock_switch:
+            mock_switch.return_value = True
+        
+            with patch('main.switch_vllm_model_with_test') as mock_test:
+                mock_test.return_value = {
+                    "success": True,
+                    "model": "gemma-4-31b",
+                    "status": "switched_and_tested",
+                    "test_result": {"success": True, "message": "Model test passed"}
+                }
+                
+                response = client.post("/manage/models/gemma-4-31b/switch")
+                
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "switched_and_tested"
+                assert "test_result" in data
 
     def test_preload_model(self, client):
         with patch('core.scheduler.Scheduler.start_model') as mock_start:

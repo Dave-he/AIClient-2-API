@@ -1,3 +1,26 @@
+/**
+ * HTTP 请求处理器 (Request Handler)
+ * 
+ * 整个系统的请求入口，负责：
+ * 1. CORS 头处理和预检请求
+ * 2. 静态文件服务（Vue 新界面 + 旧界面）
+ * 3. 插件路由分发
+ * 4. UI API 请求处理（配置、提供商、日志等）
+ * 5. 提供商路径重写（支持 /gemini-cli-oauth/v1/... 等路径格式）
+ * 6. 认证流程（通过插件系统）
+ * 7. 中间件流程（通过插件系统）
+ * 8. API 请求分发
+ * 
+ * 提供商切换机制：
+ * - 请求头：Model-Provider
+ * - URL 路径首段：/gemini-cli-oauth/, /claude-custom/ 等
+ * 
+ * 处理流程：
+ * Request → CORS → Static Files → Plugin Routes → UI API 
+ *        → Provider Path Rewrite → Auth (Plugins) → Middleware (Plugins) 
+ *        → Rate Limit → API Request → Response
+ */
+
 import deepmerge from 'deepmerge';
 import logger from '../utils/logger.js';
 import { handleError, getClientIp } from '../utils/common.js';
@@ -14,6 +37,8 @@ import { randomUUID } from 'crypto';
 import { handleGrokAssetsProxy } from '../utils/grok-assets-proxy.js';
 import { getMaxRequestSize, containsImageContent } from '../utils/network-utils.js';
 import { getRateLimiter } from '../utils/rate-limiter.js';
+import { compressionMiddleware, cacheControlMiddleware } from '../middleware/performance.js';
+import { recordRequest, recordCacheHit, recordCacheMiss } from '../utils/metrics.js';
 
 const IMAGE_ENDPOINTS = ['/v1/chat/completions', '/v1/images/validate', '/v1/images/upload'];
 
@@ -74,7 +99,10 @@ function parseRequestBody(req, config) {
 export function createRequestHandler(config, providerPoolManager) {
     const pluginManager = getPluginManager();
     return async function requestHandler(req, res) {
-        // Generate unique request ID and set it in logger context
+        const startTime = Date.now();
+        let requestSuccess = true;
+        let requestError = null;
+
         const clientIp = getClientIp(req);
         const requestId = `${clientIp}:${generateRequestId()}`;
 
@@ -106,6 +134,19 @@ export function createRequestHandler(config, providerPoolManager) {
                     return;
                 }
 
+                // Performance middleware - Cache Control
+                cacheControlMiddleware.handle(req, res, () => {});
+
+                // Performance middleware - Compression
+                await compressionMiddleware.handle(req, res, () => {});
+
+                // Ignore .well-known requests (Chrome DevTools internal)
+                if (path.startsWith('/.well-known')) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Not found' }));
+                    return;
+                }
+
                 // Serve Vue app files from vue-dist/ directory (new UI)
                 if (path.startsWith('/vue/') || path === '/vue' || path === '/vue/index.html') {
                     const vuePath = path === '/vue' ? '/vue/index.html' : path;
@@ -115,9 +156,19 @@ export function createRequestHandler(config, providerPoolManager) {
 
                 // Serve static files from static/ directory (old UI)
                 // 只提供static目录下的旧界面静态文件
-                if (path === '/' || path === '/index.html' || path === '/login.html' || 
-                    path.startsWith('/static/') || path.startsWith('/app/') || 
-                    path.startsWith('/components/') || path === '/favicon.ico') {
+                // 同时处理 SPA 路由回退（没有扩展名且不是 API/健康检查等路径）
+                const hasExtension = path.includes('.');
+                // 所有模型调用接口路径，都不应被当作 SPA 路由处理
+                const isApiOrSpecialPath = path.startsWith('/api/') || path === '/health' || path.startsWith('/metrics') ||
+                                          path.startsWith('/provider_health') || path.startsWith('/manage/') ||
+                                          path.startsWith('/vllm/') || path.startsWith('/v1/') || path.startsWith('/v1beta/') ||
+                                          path === '/api/grok/assets' || path === '/v1/messages' || path.startsWith('/count_tokens');
+                
+                if (path === '/' || path === '/index.html' || path === '/login.html' ||
+                    path.startsWith('/static/') || path.startsWith('/app/') ||
+                    path.startsWith('/components/') || path.startsWith('/assets/') || path === '/favicon.ico' ||
+                    pluginManager.isPluginStaticPath(path) ||
+                    (!hasExtension && !isApiOrSpecialPath)) {
                     const served = await serveStaticFiles(path, res, currentConfig);
                     if (served) return;
                 }
@@ -141,6 +192,21 @@ export function createRequestHandler(config, providerPoolManager) {
                         provider: currentConfig.MODEL_PROVIDER
                     }));
                     return true;
+                }
+
+                // Metrics endpoint (Prometheus format)
+                if (method === 'GET' && path === '/metrics') {
+                    try {
+                        const { getMetricsManager } = await import('../utils/metrics.js');
+                        const metrics = getMetricsManager().exportPrometheusFormat();
+                        res.writeHead(200, { 'Content-Type': 'text/plain' });
+                        res.end(metrics);
+                        return true;
+                    } catch (error) {
+                        logger.error(`[Server] Metrics endpoint error: ${error.message}`);
+                        handleError(res, { status: 500, message: 'Failed to get metrics' }, currentConfig.MODEL_PROVIDER, null, req);
+                        return;
+                    }
                 }
 
                 // Grok assets proxy endpoint
@@ -298,6 +364,13 @@ export function createRequestHandler(config, providerPoolManager) {
                 }
 
 
+                // vLLM Model Management endpoints (via Node.js proxy)
+                if (path.startsWith('/vllm/')) {
+                    logger.info(`[Node Proxy] Handling vLLM request: ${method} ${path}`);
+                    // These endpoints will be handled by handleAPIRequests
+                    // No need to handle them here, they'll be routed through the API manager
+                }
+
                 // Handle API requests
                 // Allow overriding MODEL_PROVIDER via request header
                 const modelProviderHeader = req.headers['model-provider'];
@@ -410,17 +483,29 @@ export function createRequestHandler(config, providerPoolManager) {
                     handleError(res, error, currentConfig.MODEL_PROVIDER, null, req);
                 }
             } catch (error) {
+                    requestSuccess = false;
+                    requestError = error;
                     logger.error(`[Server] Unhandled error in request handler: ${error.message}`, error);
                     try {
                         if (!res.headersSent) {
                             res.writeHead(500, { 'Content-Type': 'application/json' });
-                            res.end(JSON.stringify({ error: 'Internal Server Error' }));
                         }
+                        res.end(JSON.stringify({ error: 'Internal Server Error' }));
                     } catch (e) {
                         logger.error(`[Server] Failed to send error response: ${e.message}`);
+                        try {
+                            if (res.destroy) {
+                                res.destroy();
+                            }
+                        } catch (destroyErr) {
+                            logger.error(`[Server] Failed to destroy response: ${destroyErr.message}`);
+                        }
                     }
                 } finally {
-                    // Clear request context after request is complete
+                    const duration = Date.now() - startTime;
+                    recordRequest(duration, requestSuccess);
+                    logger.logRequestTiming(requestId, req.url, req.method, duration, 
+                        res.statusCode || (requestSuccess ? 200 : 500), requestError);
                     logger.clearRequestContext(requestId);
                 }
             });

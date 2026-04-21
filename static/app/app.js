@@ -8,15 +8,22 @@ import {
 
 import {
     showToast,
-    getProviderStats
+    getProviderStats,
+    getCurrentRunningModel
 } from './utils.js';
 
 import { t } from './i18n.js';
+
+import { eventBus, EVENTS } from './event-bus.js';
 
 import {
     initFileUpload,
     fileUploadHandler
 } from './file-upload.js';
+
+import {
+    refreshModels
+} from './models-manager.js';
 
 import { 
     initNavigation 
@@ -53,7 +60,11 @@ import {
 
 import {
     showProviderManagerModal,
-    refreshProviderConfig
+    refreshProviderConfig,
+    showModelSwitchModal,
+    switchModel,
+    startModel,
+    stopModel
 } from './modal.js';
 
 import {
@@ -92,6 +103,14 @@ import {
     CustomModelsManager
 } from './custom-models-manager.js';
 
+import { SystemMonitor } from './system-monitor.js';
+import { GPUMonitorModule } from './gpu-monitor.js';
+
+function isSectionVisible(sectionId) {
+    const activeSection = document.querySelector('.section.active');
+    return document.visibilityState === 'visible' && activeSection?.id === sectionId;
+}
+
 /**
  * 加载初始数据
  */
@@ -102,6 +121,137 @@ function loadInitialData() {
     if (window.customModelsManager) {
         window.customModelsManager.load();
     }
+}
+
+/**
+ * 初始化Provider切换器
+ */
+function initProviderSwitcher() {
+    const providerSwitchBtn = document.getElementById('providerSwitchBtn');
+    const providerDropdown = document.getElementById('providerDropdown');
+    const providerList = document.getElementById('providerList');
+    const currentProviderEl = document.getElementById('currentProvider');
+    
+    if (!providerSwitchBtn || !providerDropdown || !providerList) {
+        console.log('Provider switcher elements not found');
+        return;
+    }
+    
+    // 切换下拉菜单显示/隐藏
+    providerSwitchBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        providerDropdown.classList.toggle('show');
+    });
+    
+    // 点击页面其他地方关闭下拉菜单
+    document.addEventListener('click', (e) => {
+        if (!providerSwitchBtn.contains(e.target) && !providerDropdown.contains(e.target)) {
+            providerDropdown.classList.remove('show');
+        }
+    });
+    
+    // 加载提供商列表
+    async function loadProviderList() {
+        try {
+            providerList.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> <span data-i18n="common.loading">加载中...</span></div>';
+
+            const [data, staticData] = await Promise.all([
+                window.monitorCache.getProvidersDynamic(),
+                window.monitorCache.getProvidersStatic()
+            ]);
+            if (!data || !data.providers) return;
+
+            const providers = data.providers;
+            const providerTypes = Object.keys(providers);
+
+            if (providerTypes.length === 0) {
+                providerList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-secondary);">暂无可用的Provider</div>';
+                return;
+            }
+
+            const providerConfigs = staticData?.supportedProviders || [];
+            const configMap = providerConfigs.reduce((map, config) => {
+                map[config.id] = config;
+                return map;
+            }, {});
+            
+            providerList.innerHTML = '';
+            
+            providerTypes.forEach(async (providerType) => {
+                const accounts = providers[providerType] || [];
+                const healthyCount = accounts.filter(acc => acc.isHealthy && !acc.isDisabled).length;
+                const totalCount = accounts.length;
+                const isHealthy = healthyCount > 0;
+                
+                const providerItem = document.createElement('div');
+                providerItem.className = 'provider-item';
+                providerItem.dataset.providerType = providerType;
+                
+                const displayName = configMap[providerType]?.name || providerType;
+                
+                let modelBadge = '';
+                if (providerType === 'local-model') {
+                    const currentModel = await getCurrentRunningModel();
+                    if (currentModel) {
+                        modelBadge = `<span class="model-badge" style="font-size: 0.7rem; background: var(--success-color); color: white; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">${currentModel}</span>`;
+                    }
+                }
+                
+                providerItem.innerHTML = `
+                    <span class="provider-name">${displayName}${modelBadge}</span>
+                    <span class="provider-status ${isHealthy ? 'status-healthy' : 'status-unhealthy'}">
+                        ${healthyCount}/${totalCount}
+                    </span>
+                `;
+                
+                providerItem.addEventListener('click', async () => {
+                    try {
+                        // 切换默认提供商
+                        const configData = await window.apiClient.get('/api/config');
+                        const newConfig = {
+                            ...configData,
+                            MODEL_PROVIDER: providerType
+                        };
+                        
+                        await window.apiClient.put('/api/config', newConfig);
+                        
+                        // 更新当前显示
+                        currentProviderEl.textContent = displayName;
+                        providerDropdown.classList.remove('show');
+                        
+                        // 显示成功消息
+                        showToast(t('common.success'), `已切换到 ${displayName}`, 'success');
+                        
+                        // 重新加载配置和提供商数据
+                        loadConfiguration();
+                        loadProviders(true);
+                        
+                        // 刷新模型列表缓存，确保模型列表与新提供商同步
+                        await refreshModels();
+                    } catch (error) {
+                        console.error('Failed to switch provider:', error);
+                        showToast(t('common.error'), '切换Provider失败', 'error');
+                    }
+                });
+                
+                providerList.appendChild(providerItem);
+            });
+        } catch (error) {
+            console.error('Failed to load provider list:', error);
+            providerList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--danger-color);">加载Provider列表失败</div>';
+        }
+    }
+    
+    // 初始加载
+    loadProviderList();
+    
+    // 点击按钮时刷新列表
+    providerSwitchBtn.addEventListener('click', () => {
+        if (providerDropdown.classList.contains('show')) {
+            loadProviderList();
+        }
+    });
 }
 
 /**
@@ -131,9 +281,16 @@ function initApp() {
     initImageZoom(); // 初始化图片放大功能
     initPluginManager(); // 初始化插件管理功能
     initTutorialManager(); // 初始化教程管理功能
+    initProviderSwitcher(); // 初始化Provider切换器
     
     // 初始化自定义模型管理
     window.customModelsManager = new CustomModelsManager();
+    
+    // 初始化系统监控
+    window.systemMonitor = new SystemMonitor();
+    
+    // 初始化GPU监控模块
+    window.GPUMonitor = new GPUMonitorModule();
     
     initMobileMenu(); // 初始化移动端菜单
     loadInitialData();
@@ -148,7 +305,9 @@ function initApp() {
     
     // 定期刷新系统信息
     setInterval(() => {
-        loadProviders();
+        if (isSectionVisible('dashboard') || isSectionVisible('providers')) {
+            loadProviders();
+        }
 
         if (providerStats.activeProviders > 0) {
             const stats = getProviderStats(providerStats);
@@ -163,6 +322,58 @@ function initApp() {
             console.log('========================');
         }
     }, REFRESH_INTERVALS.SYSTEM_INFO);
+    
+    // 配置更新事件监听 - 确保所有页面在配置变更后刷新
+    eventBus.on(EVENTS.CONFIG_UPDATED, async (data) => {
+        console.log('[EventBus] Configuration updated, refreshing all modules...');
+        
+        try {
+            await Promise.all([
+                loadConfiguration(),
+                loadProviders(true),
+                refreshModels()
+            ]);
+            
+            if (window.systemMonitor) {
+                window.systemMonitor.refreshSystemInfo();
+            }
+            
+            if (window.GPUMonitor) {
+                window.GPUMonitor.refreshAllStatus();
+            }
+            
+            showToast(t('common.success'), t('common.configApplied'), 'success');
+        } catch (error) {
+            console.error('[EventBus] Error refreshing modules after config update:', error);
+            showToast(t('common.error'), t('common.refreshFailed'), 'error');
+        }
+    });
+    
+    // 配置重载事件监听
+    eventBus.on(EVENTS.CONFIG_RELOADED, () => {
+        console.log('[EventBus] Configuration reloaded');
+    });
+    
+    // 提供商更新事件监听
+    eventBus.on(EVENTS.PROVIDERS_UPDATED, () => {
+        console.log('[EventBus] Providers updated');
+        if (window.customModelsManager) {
+            window.customModelsManager.load();
+        }
+    });
+    
+    // 模型更新事件监听
+    eventBus.on(EVENTS.MODELS_UPDATED, () => {
+        console.log('[EventBus] Models updated');
+        if (window.customModelsManager) {
+            window.customModelsManager.loadModels();
+        }
+    });
+    
+    // 缓存失效事件监听
+    eventBus.on(EVENTS.CACHE_INVALIDATED, (data) => {
+        console.log(`[EventBus] Cache invalidated: ${data?.cacheKey || 'all'}`);
+    });
 
 }
 
@@ -246,6 +457,10 @@ window.showAuthModal = showAuthModal;
 window.executeGenerateAuthUrl = executeGenerateAuthUrl;
 window.handleGenerateAuthUrl = handleGenerateAuthUrl;
 window.showAddProviderGroupModal = showAddProviderGroupModal;
+window.showModelSwitchModal = showModelSwitchModal;
+window.switchModel = switchModel;
+window.startModel = startModel;
+window.stopModel = stopModel;
 
 // 配置管理相关全局函数
 window.viewConfig = viewConfig;

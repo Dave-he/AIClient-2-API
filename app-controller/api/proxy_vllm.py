@@ -17,25 +17,48 @@ class VLLMProxy:
         response.raise_for_status()
         return response.json()
     
-    async def chat_completion_stream(self, payload: Dict[str, Any]):
+    async def chat_completion_stream(self, payload: Dict[str, Any], max_retries: int = 3, retry_delay: float = 2.0):
         url = f"{self.base_url}/v1/chat/completions"
-        async with self.client.stream('POST', url, json=payload) as response:
-            async for chunk in response.aiter_lines():
-                if chunk.startswith("data: "):
-                    chunk_data = chunk[6:]
-                    if chunk_data == "[DONE]":
-                        yield {
-                            "id": f"chatcmpl-{os.urandom(12).hex()}",
-                            "object": "chat.completion.chunk",
-                            "created": int(asyncio.get_event_loop().time()),
-                            "model": payload.get("model", ""),
-                            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
-                        }
-                        break
-                    try:
-                        yield json.loads(chunk_data)
-                    except json.JSONDecodeError:
-                        continue
+        retries = 0
+        
+        while retries <= max_retries:
+            try:
+                # 为流式请求设置单独的超时配置
+                timeout = httpx.Timeout(
+                    connect=30,  # 连接超时
+                    read=120,    # 读取超时（流式响应可能需要更长时间）
+                    write=30,    # 写入超时
+                    pool=60      # 池超时
+                )
+                
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream('POST', url, json=payload) as response:
+                        response.raise_for_status()  # 检查HTTP错误
+                        async for chunk in response.aiter_lines():
+                            if chunk.startswith("data: "):
+                                chunk_data = chunk[6:]
+                                if chunk_data == "[DONE]":
+                                    yield {
+                                        "id": f"chatcmpl-{os.urandom(12).hex()}",
+                                        "object": "chat.completion.chunk",
+                                        "created": int(asyncio.get_event_loop().time()),
+                                        "model": payload.get("model", ""),
+                                        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+                                    }
+                                    return  # 成功完成，退出函数
+                                try:
+                                    yield json.loads(chunk_data)
+                                except json.JSONDecodeError:
+                                    continue
+            except (httpx.HTTPError, asyncio.TimeoutError) as e:
+                retries += 1
+                if retries > max_retries:
+                    # 达到最大重试次数，抛出异常
+                    raise
+                # 指数退避策略
+                delay = retry_delay * (2 ** (retries - 1))
+                await asyncio.sleep(delay)
+                continue
     
     async def list_models(self) -> Dict[str, Any]:
         url = f"{self.base_url}/v1/models"

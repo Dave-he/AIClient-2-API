@@ -1,6 +1,20 @@
 import { MODEL_PROTOCOL_PREFIX, MODEL_PROVIDER } from './constants.js';
 export { MODEL_PROTOCOL_PREFIX, MODEL_PROVIDER };
 
+// ==================== 时间与时区 ====================
+
+/**
+ * 获取北京时间 (UTC+8) 的日期字符串 (YYYY-MM-DD)
+ * @returns {string} - YYYY-MM-DD 格式的日期字符串
+ */
+export function getBeijingDateString() {
+    const now = new Date();
+    // 强制增加 8 小时偏移来模拟 UTC+8
+    const utc8Time = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    return utc8Time.toISOString().split('T')[0];
+}
+
+// ==================== 网络错误处理 ====================
 export { RETRYABLE_NETWORK_ERRORS, isRetryableNetworkError, getClientIp, getRequestBody } from './network-utils.js';
 
 export { formatExpiryTime, formatLog, formatExpiryLog } from './format-utils.js';
@@ -84,23 +98,15 @@ export function extractSystemPromptFromRequestBody(requestBody, protocolPrefix) 
 
         case MODEL_PROTOCOL_PREFIX.GEMINI:
             if (requestBody.systemInstruction) {
-                if (typeof requestBody.systemInstruction === 'string') {
-                    return requestBody.systemInstruction;
-                } else if (requestBody.systemInstruction.parts && Array.isArray(requestBody.systemInstruction.parts)) {
-                    return requestBody.systemInstruction.parts.map(part => part.text || '').join('');
-                }
+                return requestBody.systemInstruction;
             }
-            if (requestBody.system_instruction) {
-                if (typeof requestBody.system_instruction === 'string') {
-                    return requestBody.system_instruction;
-                } else if (requestBody.system_instruction.parts && Array.isArray(requestBody.system_instruction.parts)) {
-                    return requestBody.system_instruction.parts.map(part => part.text || '').join('');
-                }
+            if (requestBody.system) {
+                return typeof requestBody.system === 'string' ? requestBody.system : requestBody.system.content;
             }
             return null;
 
         case MODEL_PROTOCOL_PREFIX.CLAUDE:
-            if (requestBody.system && typeof requestBody.system === 'string') {
+            if (requestBody.system) {
                 return requestBody.system;
             }
             return null;
@@ -109,3 +115,4 @@ export function extractSystemPromptFromRequestBody(requestBody, protocolPrefix) 
             return null;
     }
 }
+

@@ -6,13 +6,19 @@ from core.logger import setup_logger
 logger = setup_logger()
 
 class RateLimitMiddleware:
-    def __init__(self, max_requests: int = 100, window_seconds: int = 60):
+    def __init__(self, max_requests: int = 200, window_seconds: int = 60):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.clients: Dict[str, Dict[str, int]] = {}
+        self.allowed_ips = {"127.0.0.1", "localhost", "::1"}
     
     async def __call__(self, request: Request, call_next):
         client_ip = request.client.host if request.client else "unknown"
+        
+        if client_ip in self.allowed_ips:
+            response = await call_next(request)
+            return response
+        
         now = datetime.now()
         
         if client_ip not in self.clients:

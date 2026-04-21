@@ -100,6 +100,7 @@ const KIRO_MODELS = getProviderModels(MODEL_PROVIDER.KIRO_API);
 // 完整的模型映射表
 const FULL_MODEL_MAPPING = {
     "claude-haiku-4-5":"claude-haiku-4.5",
+    "claude-opus-4-7":"claude-opus-4.7",
     "claude-opus-4-6":"claude-opus-4.6",
     "claude-sonnet-4-6":"claude-sonnet-4.6",
     "claude-opus-4-5":"claude-opus-4.5",
@@ -1001,7 +1002,7 @@ async saveCredentialsToFile(filePath, newData) {
         processedMessages.length = 0;
         processedMessages.push(...mergedMessages);
 
-        const codewhispererModel = MODEL_MAPPING[model] || MODEL_MAPPING[this.modelName];
+        const codewhispererModel = MODEL_MAPPING[model] || model;
         
         // 动态压缩 tools（保留全部工具，但过滤掉 web_search/websearch）
         let toolsContext = {};
@@ -1989,7 +1990,7 @@ async saveCredentialsToFile(filePath, newData) {
             this._markCredentialNeedRefresh('Token near expiry in generateContent');
         }
         
-        const finalModel = MODEL_MAPPING[model] ? model : this.modelName;
+        const finalModel = MODEL_MAPPING[model] ? model : model;
         logger.info(`[Kiro] Calling generateContent with model: ${finalModel}`);
         
         // Estimate input tokens before making the API call
@@ -2407,7 +2408,7 @@ async saveCredentialsToFile(filePath, newData) {
             this._markCredentialNeedRefresh('Token near expiry in generateContentStream');
         }
         
-        const finalModel = MODEL_MAPPING[model] ? model : this.modelName;
+        const finalModel = MODEL_MAPPING[model] ? model : model;
         logger.info(`[Kiro] Calling generateContentStream with model: ${finalModel} (real streaming)`);
 
         let inputTokens = 0;
@@ -2781,7 +2782,9 @@ async saveCredentialsToFile(filePath, newData) {
                 let parsedInput = currentToolCall.input;
                 try {
                     parsedInput = JSON.parse(currentToolCall.input);
-                } catch (e) {}
+                } catch (e) {
+                    logger.debug(`[Kiro] Failed to parse tool input: ${e.message}`);
+                }
                 toolCalls.push({
                     toolUseId: currentToolCall.toolUseId,
                     name: currentToolCall.name,

@@ -66,6 +66,7 @@ export const PROVIDER_MODELS = {
     'claude-custom': [],
     'claude-kiro-oauth': [
         'claude-haiku-4-5',
+        'claude-opus-4-7',
         'claude-opus-4-6',
         'claude-sonnet-4-6',
         'claude-opus-4-5',
@@ -166,7 +167,6 @@ export const MANAGED_MODEL_LIST_PROVIDERS = [
     'openai-custom',
     'openaiResponses-custom',
     'claude-custom',
-    'local-model'
 ];
 
 export function getManagedModelListProviderType(providerType) {

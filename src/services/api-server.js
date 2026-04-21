@@ -8,6 +8,11 @@ import { createRequestHandler } from '../handlers/request-handler.js';
 import { discoverPlugins, getPluginManager } from '../core/plugin-manager.js';
 import { getTLSSidecar } from '../utils/tls-sidecar.js';
 import { HEALTH_CHECK } from '../utils/constants.js';
+import { setControllerUrl } from '../utils/python-controller.js';
+import { preloadControllerData, startPeriodicRefresh, stopPeriodicRefresh } from '../ui-modules/python-controller-api.js';
+import { preloadDashboardData } from '../ui-modules/dashboard-api.js';
+import { startSystemMonitor } from '../ui-modules/system-api.js';
+import { initDefaultMetrics } from '../utils/metrics.js';
 
 /**
  * @license
@@ -162,6 +167,12 @@ function setupWorkerCommunication() {
                     }
                 });
                 break;
+            case 'heartbeat':
+                sendToMaster({
+                    type: 'heartbeat_response',
+                    pid: process.pid
+                });
+                break;
             default:
                 logger.info('[Worker] Unknown message type:', message.type);
         }
@@ -180,6 +191,13 @@ function setupWorkerCommunication() {
 async function gracefulShutdown() {
     logger.info('[Server] Initiating graceful shutdown...');
 
+    // 停止控制器数据定时刷新
+    try {
+        stopPeriodicRefresh();
+    } catch (err) {
+        logger.debug('[Server] Stop periodic refresh error:', err?.message || err);
+    }
+
     // 停止所有插件
     try {
         const pluginManager = getPluginManager();
@@ -193,7 +211,9 @@ async function gracefulShutdown() {
     // 停止 TLS sidecar
     try {
         await getTLSSidecar().stop();
-    } catch { /* ignore */ }
+    } catch (err) {
+        logger.debug('[Server] TLS sidecar stop error:', err?.message || err);
+    }
 
     if (serverInstance) {
         serverInstance.close(() => {
@@ -226,60 +246,51 @@ function setupSignalHandlers() {
     });
 
     process.on('uncaughtException', (error) => {
-        // 添加更详细的错误信息记录
-        const errorDetails = {
-            type: typeof error,
-            isObject: error instanceof Object,
-            message: error?.message || 'No message',
-            code: error?.code || 'No code',
-            stack: error?.stack || 'No stack',
-            errorString: String(error),
-            keys: error instanceof Object ? Object.keys(error) : 'Not an object'
-        };
+        logger.error('[Server] Uncaught Exception:', error);
         
-        logger.error('[Server] Uncaught exception:', errorDetails);
+        const isRecoverable = error && (
+            error.code === 'ECONNRESET' ||
+            error.code === 'EPIPE' ||
+            error.code === 'ENOTFOUND' ||
+            error.code === 'ETIMEDOUT' ||
+            error.code === 'ECONNREFUSED' ||
+            (error instanceof Error && error.message.includes('socket hang up')) ||
+            (error instanceof Error && error.message.includes('read ECONNRESET'))
+        );
         
-        // 检查是否为可重试的网络错误
-        if (isRetryableNetworkError(error)) {
-            logger.warn('[Server] Network error detected, continuing operation...');
-            return; // 不退出程序，继续运行
+        if (isRecoverable) {
+            logger.warn(`[Server] Recoverable error detected: ${error.code || error.message}, continuing`);
+        } else {
+            logger.error('[Server] Fatal uncaught exception detected, triggering graceful shutdown');
+            gracefulShutdown();
         }
-        
-        // 对于空异常对象，不关闭服务，记录警告
-        if (typeof error === 'object' && error !== null && Object.keys(error).length === 0) {
-            logger.warn('[Server] Empty exception object detected, continuing operation...');
-            return;
-        }
-        
-        // 对于其他严重错误，执行优雅关闭
-        logger.error('[Server] Fatal error detected, initiating shutdown...');
-        gracefulShutdown();
     });
 
+    const unhandledRejectionCounter = { count: 0, lastTime: 0 };
+    
     process.on('unhandledRejection', (reason, promise) => {
-        // 添加更详细的错误信息记录
-        const reasonDetails = {
-            type: typeof reason,
-            isObject: reason instanceof Object,
-            message: reason?.message || 'No message',
-            code: reason?.code || 'No code',
-            stack: reason?.stack || 'No stack',
-            reasonString: String(reason),
-            keys: reason instanceof Object ? Object.keys(reason) : 'Not an object'
-        };
+        const now = Date.now();
         
-        logger.error('[Server] Unhandled rejection at:', promise, 'reason:', reasonDetails);
-        
-        // 检查是否为可重试的网络错误
-        if (reason && isRetryableNetworkError(reason)) {
-            logger.warn('[Server] Network error in promise rejection, continuing operation...');
-            return; // 不退出程序，继续运行
+        if (reason instanceof Error) {
+            logger.error('[Server] Unhandled Promise Rejection:', reason);
+        } else {
+            logger.error('[Server] Unhandled Promise Rejection (non-Error):', reason);
         }
         
-        // 对于空异常对象，不关闭服务，记录警告
-        if (typeof reason === 'object' && reason !== null && Object.keys(reason).length === 0) {
-            logger.warn('[Server] Empty rejection reason detected, continuing operation...');
-            return;
+        unhandledRejectionCounter.count++;
+        const timeSinceLastWarning = now - unhandledRejectionCounter.lastTime;
+        
+        if (timeSinceLastWarning > 60000) {
+            unhandledRejectionCounter.count = 1;
+            unhandledRejectionCounter.lastTime = now;
+        }
+        
+        if (unhandledRejectionCounter.count >= 5) {
+            logger.error('[Server] Too many unhandled rejections in 60s, triggering graceful shutdown');
+            unhandledRejectionCounter.count = 0;
+            gracefulShutdown();
+        } else {
+            logger.warn(`[Server] Unhandled rejection count: ${unhandledRejectionCounter.count}/5 before shutdown trigger`);
         }
     });
 }
@@ -288,6 +299,14 @@ function setupSignalHandlers() {
 async function startServer() {
     // Initialize configuration
     await initializeConfig(process.argv.slice(2), 'configs/config.json');
+    
+    // Set Python controller URL from config
+    const controllerBaseUrl = CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
+    setControllerUrl(controllerBaseUrl);
+    logger.info(`[Initialization] Set Python controller URL: ${controllerBaseUrl}`);
+
+    // Start system monitor after config is loaded
+    startSystemMonitor();
     
     // 自动关联 configs 目录中的配置文件到对应的提供商
     // logger.info('[Initialization] Checking for unlinked provider configs...');
@@ -342,6 +361,27 @@ async function startServer() {
         keepAliveTimeout: 65000 // Keep-alive 超时
     }, requestHandlerInstance);
 
+    serverInstance.on('request', (req, res) => {
+        const isStreaming = req.url && (req.url.includes('stream') || req.url.includes('/v1/chat/completions'));
+        
+        if (!isStreaming) {
+            res.setTimeout(300000, () => {
+                if (!res.headersSent) {
+                    logger.warn(`[Server] Request timeout: ${req.method} ${req.url} (5min limit)`);
+                    res.writeHead(504, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        error: {
+                            message: 'Request timeout: the request took too long to process',
+                            type: 'timeout_error',
+                            code: 'request_timeout'
+                        }
+                    }));
+                }
+                req.destroy();
+            });
+        }
+    });
+
     // 设置服务器的最大连接数
     serverInstance.maxConnections = 1000;
     serverInstance.listen(CONFIG.SERVER_PORT, CONFIG.HOST, async () => {
@@ -367,6 +407,10 @@ async function startServer() {
         logger.info(`  • Gemini-compatible: /v1beta/models, /v1beta/models/{model}:generateContent`);
         logger.info(`  • Claude-compatible: /v1/messages`);
         logger.info(`  • Health check: /health`);
+        logger.info(`  • Metrics endpoint: /metrics`);
+        
+        initDefaultMetrics();
+        logger.info('[Initialization] Default metrics initialized');
         logger.info(`  • UI Management Console: http://${CONFIG.HOST}:${CONFIG.SERVER_PORT}/`);
 
         // Auto-open browser to UI (only if host is 0.0.0.0 or 127.0.0.1)
@@ -488,6 +532,25 @@ async function startServer() {
         // 如果是子进程，通知主进程已就绪
         if (IS_WORKER_PROCESS) {
             sendToMaster({ type: 'ready', pid: process.pid });
+        }
+
+        // Preload controller data (GPU status, models, queue, etc.) for faster UI response
+        logger.info('[Initialization] Preloading controller data for faster UI response...');
+        const preloadResult = await preloadControllerData();
+        if (preloadResult.success) {
+            logger.info(`[Initialization] Controller data preloaded in ${preloadResult.duration}ms`);
+            startPeriodicRefresh();
+        } else {
+            logger.warn(`[Initialization] Controller data preload failed: ${preloadResult.error}`);
+        }
+
+        // Preload dashboard summary data
+        logger.info('[Initialization] Preloading dashboard summary data...');
+        const dashboardPreloadResult = await preloadDashboardData();
+        if (dashboardPreloadResult.success) {
+            logger.info(`[Initialization] Dashboard data preloaded in ${dashboardPreloadResult.duration}ms`);
+        } else {
+            logger.warn(`[Initialization] Dashboard data preload failed: ${dashboardPreloadResult.error}`);
         }
     });
     return serverInstance; // Return the server instance for testing purposes

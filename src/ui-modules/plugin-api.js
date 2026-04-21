@@ -30,37 +30,38 @@ export async function handleGetPlugins(req, res) {
  */
 export async function handleTogglePlugin(req, res, pluginName) {
     try {
-        const body = await getRequestBody(req);
-        const { enabled } = body;
-
-        if (typeof enabled !== 'boolean') {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
+        const pluginManager = getPluginManager();
+        const plugins = pluginManager.getPluginList();
+        const plugin = plugins.find(p => p.name === pluginName);
+        
+        if (!plugin) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 error: {
-                    message: 'Enabled status must be a boolean'
+                    message: 'Plugin not found'
                 }
             }));
             return true;
         }
-
-        const pluginManager = getPluginManager();
-        await pluginManager.setPluginEnabled(pluginName, enabled);
+        
+        const newEnabledState = !plugin.enabled;
+        await pluginManager.setPluginEnabled(pluginName, newEnabledState);
 
         // 广播更新事件
         broadcastEvent('plugin_update', {
             action: 'toggle',
             pluginName,
-            enabled,
+            enabled: newEnabledState,
             timestamp: new Date().toISOString()
         });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             success: true,
-            message: `Plugin ${pluginName} ${enabled ? 'enabled' : 'disabled'} successfully`,
+            message: `Plugin ${pluginName} ${newEnabledState ? 'enabled' : 'disabled'} successfully`,
             plugin: {
                 name: pluginName,
-                enabled
+                enabled: newEnabledState
             }
         }));
         return true;

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-17T15:01:13.530Z",
+  "timestamp": "2026-04-20T17:33:48.584Z",
   "providers": {
     "claude-kiro-oauth": {
       "providerType": "claude-kiro-oauth",
@@ -31,6 +31,20 @@
     },
     "grok-custom": {
       "providerType": "grok-custom",
+      "instances": [],
+      "totalCount": 0,
+      "successCount": 0,
+      "errorCount": 0
+    },
+    "stats": {
+      "providerType": "stats",
+      "instances": [],
+      "totalCount": 0,
+      "successCount": 0,
+      "errorCount": 0
+    },
+    "tokens": {
+      "providerType": "tokens",
       "instances": [],
       "totalCount": 0,
       "successCount": 0,

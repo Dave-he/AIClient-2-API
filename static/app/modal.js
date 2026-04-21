@@ -3,6 +3,8 @@
 import { escapeHtml, showToast, getFieldLabel, getProviderTypeFields } from './utils.js';
 import { handleProviderPasswordToggle } from './event-handlers.js';
 import { t } from './i18n.js';
+import { refreshModels } from './models-manager.js';
+import { API_PATHS, formatPath } from './api-paths.js';
 
 const MANAGED_MODEL_LIST_PROVIDERS = new Set(['openai-custom', 'openaiResponses-custom', 'claude-custom']);
 
@@ -433,6 +435,9 @@ function showProviderManagerModal(data, initialSearchTerm = '') {
                         <button class="btn btn-success" onclick="window.showAddProviderForm('${providerType}')">
                             <i class="fas fa-plus"></i> <span data-i18n="modal.provider.add">添加新提供商</span>
                         </button>
+                        ${providerType === 'local-model' ? `<button class="btn btn-primary" onclick="window.showModelSwitchModal()" id="modelSwitchBtn" title="一键切换本地模型">
+                            <i class="fas fa-exchange-alt"></i> <span data-i18n="modal.provider.switchModel">切换模型</span>
+                        </button>` : ''}
                         <button class="btn btn-warning" onclick="window.resetAllProvidersHealth('${providerType}')" data-i18n="modal.provider.resetHealth" title="将所有节点的健康状态重置为健康">
                             <i class="fas fa-heartbeat"></i> 重置为健康
                         </button>
@@ -481,6 +486,11 @@ function showProviderManagerModal(data, initialSearchTerm = '') {
     
     // 初始渲染
     window.goToProviderPage(1);
+    
+    // 页面加载后自动执行健康检测
+    setTimeout(() => {
+        performHealthCheck(providerType);
+    }, 500);
 }
 
 /**
@@ -1959,10 +1969,6 @@ async function resetAllProvidersHealth(providerType) {
  * @param {string} providerType - 提供商类型
  */
 async function performHealthCheck(providerType) {
-    if (!confirm(t('modal.provider.healthCheckConfirm', {type: providerType}))) {
-        return;
-    }
-    
     try {
         showToast(t('common.info'), t('modal.provider.healthCheck') + '...', 'info');
         
@@ -2222,6 +2228,458 @@ function renderNotSupportedModelsSelector(uuid, models, notSupportedModels = [])
     container.innerHTML = html;
 }
 
+/**
+ * 显示一键切换模型模态框
+ */
+async function showModelSwitchModal() {
+    // 移除已存在的模态框
+    const existingModal = document.querySelector('.model-switch-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // 创建模态框
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay model-switch-modal';
+    modal.style.display = 'flex';
+    
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-exchange-alt"></i> <span data-i18n="modal.provider.switchModelTitle">${t('modal.provider.switchModelTitle')}</span></h3>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="modelSwitchContent" class="model-switch-content">
+                    <div class="status-loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span data-i18n="common.loading">${t('common.loading')}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-cancel" onclick="this.closest('.modal-overlay').remove()" data-i18n="modal.provider.cancel">${t('modal.provider.cancel')}</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // 加载模型列表
+    await loadModelsListForSwitch(modal);
+}
+
+/**
+ * 加载模型列表供切换
+ */
+async function loadModelsListForSwitch(modal) {
+    const container = modal.querySelector('#modelSwitchContent');
+    if (!container) return;
+
+    let lastError = null;
+
+    try {
+        let modelsObj = {};
+        let currentModel = null;
+
+        const { monitorCache } = await import('./monitor-cache.js');
+        
+        // Step 1: Try to get from cached modelsStatus
+        const cachedData = monitorCache.getCachedData('modelsStatus');
+        if (cachedData && cachedData.models && typeof cachedData.models === 'object' && !Array.isArray(cachedData.models)) {
+            modelsObj = cachedData.models;
+            console.log('[ModelSwitch] Loaded models from cache (modelsStatus)');
+        } else {
+            // Step 2: Try to fetch from models status API
+            try {
+                const result = await monitorCache.getModelsStatus();
+                if (result && result.models && typeof result.models === 'object' && !Array.isArray(result.models)) {
+                    modelsObj = result.models;
+                    console.log('[ModelSwitch] Loaded models from API (/api/python/models/status)');
+                }
+            } catch (e) {
+                lastError = e.message;
+                console.log('[ModelSwitch] Failed to get models status, trying summary:', e.message);
+            }
+        }
+
+        // Step 3: Fallback - try to get models from summary cache
+        console.log('[ModelSwitch] Step 3: modelsObj keys count =', Object.keys(modelsObj).length);
+        if (Object.keys(modelsObj).length === 0) {
+            try {
+                const cachedSummary = monitorCache.getCachedData('modelsSummary');
+                console.log('[ModelSwitch] Step 3: cachedSummary =', cachedSummary);
+                console.log('[ModelSwitch] Step 3: cachedSummary type =', typeof cachedSummary, Array.isArray(cachedSummary) ? 'array' : 'not array');
+                if (cachedSummary && Array.isArray(cachedSummary.models)) {
+                    modelsObj = {};
+                    cachedSummary.models.forEach(model => {
+                        modelsObj[model.name] = {
+                            running: model.running || false,
+                            port: model.port || null,
+                            service: 'local',
+                            active_requests: 0,
+                            preloaded: model.preloaded || false,
+                            supports_images: model.supports_images || false,
+                            required_memory: model.required_memory || '',
+                            description: model.description || ''
+                        };
+                    });
+                    console.log('[ModelSwitch] Loaded models from cache (modelsSummary)');
+                }
+            } catch (e) {
+                lastError = e.message;
+                console.log('[ModelSwitch] Failed to get models from summary cache:', e.message);
+            }
+        }
+
+        // Step 4: Second fallback - directly fetch from summary API
+        console.log('[ModelSwitch] Step 4: modelsObj keys count =', Object.keys(modelsObj).length);
+        if (Object.keys(modelsObj).length === 0) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                const summaryResponse = await fetch(API_PATHS.PYTHON.MODELS.SUMMARY, {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                if (summaryResponse.ok) {
+                    const summaryData = await summaryResponse.json();
+                    console.log('[ModelSwitch] Step 4: summaryData =', summaryData);
+                    if (summaryData && Array.isArray(summaryData.models)) {
+                        modelsObj = {};
+                        summaryData.models.forEach(model => {
+                            modelsObj[model.name] = {
+                                running: model.running || false,
+                                port: model.port || null,
+                                service: 'local',
+                                active_requests: 0,
+                                preloaded: model.preloaded || false,
+                                supports_images: model.supports_images || false,
+                                required_memory: model.required_memory || '',
+                                description: model.description || ''
+                            };
+                        });
+                        console.log('[ModelSwitch] Loaded models from API (/api/python/models/summary)');
+                    }
+                } else {
+                    lastError = `HTTP error: ${summaryResponse.status}`;
+                }
+            } catch (e) {
+                lastError = e.message;
+                console.log('[ModelSwitch] Failed to fetch models summary:', e.message);
+            }
+        }
+
+        // 确保 modelsObj 始终是对象
+        if (typeof modelsObj !== 'object' || modelsObj === null || Array.isArray(modelsObj)) {
+            modelsObj = {};
+        }
+
+        const modelsList = Object.entries(modelsObj).map(([name, status]) => ({
+            name,
+            ...status
+        }));
+
+        const cachedSummary = monitorCache.getCachedData('summary');
+        if (cachedSummary && cachedSummary.running_model) {
+            if (cachedSummary.running_model) {
+                currentModel = typeof cachedSummary.running_model === 'string'
+                    ? cachedSummary.running_model
+                    : cachedSummary.running_model.name || null;
+            } else if (cachedSummary.models) {
+                const runningModels = cachedSummary.models.filter(m => m.running);
+                currentModel = runningModels.length > 0 ? runningModels[0].name : null;
+            }
+        } else {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                const summaryResponse = await fetch(API_PATHS.PYTHON.MODELS.SUMMARY, {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                if (summaryResponse.ok) {
+                    const summaryData = await summaryResponse.json();
+                    currentModel = summaryData?.running_model;
+                }
+            } catch (e) {
+                console.log('[ModelSwitch] Failed to load current model:', e.message);
+            }
+        }
+
+        renderModelSwitchPanel(container, modelsList, currentModel, lastError);
+    } catch (error) {
+        console.log('[ModelSwitch] Failed to load models list:', error.message);
+        container.innerHTML = `
+                <div class="status-loading">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>${t('modal.provider.loadModelsFailed')}</span>
+                    <p class="hint">${t('modal.provider.loadModelsHint')}</p>
+                    ${lastError ? `<p class="error-detail">${escapeHtml(lastError)}</p>` : ''}
+                </div>
+            `;
+        }
+}
+
+/**
+ * 渲染模型切换面板
+ */
+function renderModelSwitchPanel(container, modelsList, currentModel, lastError) {
+    if (modelsList.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-cube"></i>
+                <p>${t('modal.provider.noAvailableModels')}</p>
+                <p class="hint">${t('modal.provider.noAvailableModelsHint')}</p>
+                ${lastError ? `<p class="error-detail" style="color: var(--text-danger); font-size: 12px; margin-top: 10px;">${escapeHtml(lastError)}</p>` : ''}
+            </div>
+        `;
+        return;
+    }
+
+    const currentModelName = typeof currentModel === 'object' ? currentModel.name : currentModel;
+    
+    let html = `
+        <div class="current-model-info" style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+            <div class="current-model-label" style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 8px;">${t('modal.provider.currentModel')}</div>
+            <div class="current-model-value" style="font-size: 18px; font-weight: 600;">
+                ${currentModelName ? `<span class="model-name">${currentModelName}</span>` : `<span class="no-model">${t('modal.provider.noModel')}</span>`}
+            </div>
+        </div>
+        <div class="models-switch-list">
+    `;
+
+    modelsList.forEach(model => {
+        const isRunning = model.name === currentModelName;
+        const statusClass = isRunning ? 'status-running' : model.running ? 'status-running' : 'status-stopped';
+        const statusText = isRunning ? t('modal.provider.status.running') : model.running ? t('modal.provider.status.otherRunning') : t('modal.provider.status.stopped');
+        
+        html += `
+            <div class="model-switch-item" data-model="${model.name}" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color);">
+                <div class="model-switch-info" style="flex: 1;">
+                    <div class="model-switch-name" style="font-weight: 600;">${model.name}</div>
+                    <div class="model-switch-details" style="font-size: 12px; color: var(--text-tertiary);">
+                        <span class="model-switch-port">${t('modal.provider.modelPort')}: ${model.port || '-'}</span>
+                        <span style="margin: 0 8px;">|</span>
+                        <span class="model-switch-memory">${t('modal.provider.modelMemory')}: ${model.required_memory || '-'}</span>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span class="model-switch-status ${statusClass}" style="font-size: 12px; padding: 4px 10px; border-radius: 4px;">${statusText}</span>
+                    <div class="model-switch-actions">
+                        ${isRunning ? `
+                            <button class="btn btn-danger btn-sm" onclick="window.stopModel('${model.name}')">
+                                <i class="fas fa-stop"></i> ${t('modal.provider.action.stop')}
+                            </button>
+                        ` : model.running ? `
+                            <button class="btn btn-primary btn-sm" onclick="window.switchModel('${model.name}')">
+                                <i class="fas fa-exchange-alt"></i> ${t('modal.provider.action.switch')}
+                            </button>
+                        ` : `
+                            <button class="btn btn-success btn-sm" onclick="window.startModel('${model.name}')">
+                                <i class="fas fa-play"></i> ${t('modal.provider.action.start')}
+                            </button>
+                        `}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+/**
+ * 切换模型
+ */
+async function switchModel(modelName) {
+    const modal = document.querySelector('.model-switch-modal');
+    const modelItem = modal?.querySelector(`[data-model="${modelName}"]`);
+    
+    if (modelItem) {
+        const actionsEl = modelItem.querySelector('.model-switch-actions');
+        if (actionsEl) {
+            actionsEl.innerHTML = `
+                <button class="btn btn-primary btn-sm disabled" disabled>
+                    <i class="fas fa-spinner fa-spin"></i> ${t('modal.provider.action.switching')}
+                </button>
+            `;
+        }
+    }
+
+    try {
+        const token = window.authManager ? window.authManager.getToken() : null;
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch(formatPath(API_PATHS.PYTHON.MODELS.SWITCH, { modelName }), {
+            method: 'POST',
+            headers
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(t('common.success'), t('modal.provider.switchSuccess', { model: modelName }), 'success');
+            if (modal) modal.remove();
+            // 刷新提供商列表
+            if (window.providerManager?.loadProviders) {
+                window.providerManager.loadProviders();
+            }
+            // 刷新模型列表缓存，确保模型列表与新切换的模型同步
+            await refreshModels();
+            // 清空监控缓存，确保 getCurrentRunningModel 能获取到最新数据
+            if (window.monitorCache) {
+                window.monitorCache.invalidateCache();
+            }
+        } else {
+            throw new Error(data.error?.message || '切换失败');
+        }
+    } catch (error) {
+        console.error('Failed to switch model:', error);
+        showToast(t('common.error'), t('common.error') + ': ' + error.message, 'error');
+        if (modelItem) {
+            const actionsEl = modelItem.querySelector('.model-switch-actions');
+            if (actionsEl) {
+                actionsEl.innerHTML = `
+                    <button class="btn btn-primary btn-sm" onclick="window.switchModel('${modelName}')">
+                        <i class="fas fa-exchange-alt"></i> ${t('modal.provider.action.switch')}
+                    </button>
+                `;
+            }
+        }
+    }
+}
+
+/**
+ * 启动模型
+ */
+async function startModel(modelName) {
+    const modal = document.querySelector('.model-switch-modal');
+    const modelItem = modal?.querySelector(`[data-model="${modelName}"]`);
+    
+    if (modelItem) {
+        const actionsEl = modelItem.querySelector('.model-switch-actions');
+        if (actionsEl) {
+            actionsEl.innerHTML = `
+                <button class="btn btn-success btn-sm disabled" disabled>
+                    <i class="fas fa-spinner fa-spin"></i> ${t('modal.provider.action.starting')}
+                </button>
+            `;
+        }
+    }
+
+    try {
+        const token = window.authManager ? window.authManager.getToken() : null;
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch(formatPath(API_PATHS.PYTHON.MODELS.START, { modelName }), {
+            method: 'POST',
+            headers
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(t('common.success'), t('modal.provider.startSuccess', { model: modelName }), 'success');
+            // 刷新模型列表
+            await loadModelsListForSwitch(modal);
+        } else {
+            throw new Error(data.error?.message || '启动失败');
+        }
+    } catch (error) {
+        console.error('Failed to start model:', error);
+        showToast(t('common.error'), t('common.error') + ': ' + error.message, 'error');
+        if (modelItem) {
+            const actionsEl = modelItem.querySelector('.model-switch-actions');
+            if (actionsEl) {
+                actionsEl.innerHTML = `
+                    <button class="btn btn-success btn-sm" onclick="window.startModel('${modelName}')">
+                        <i class="fas fa-play"></i> ${t('modal.provider.action.start')}
+                    </button>
+                `;
+            }
+        }
+    }
+}
+
+/**
+ * 停止模型
+ */
+async function stopModel(modelName) {
+    const modal = document.querySelector('.model-switch-modal');
+    const modelItem = modal?.querySelector(`[data-model="${modelName}"]`);
+    
+    if (modelItem) {
+        const actionsEl = modelItem.querySelector('.model-switch-actions');
+        if (actionsEl) {
+            actionsEl.innerHTML = `
+                <button class="btn btn-danger btn-sm disabled" disabled>
+                    <i class="fas fa-spinner fa-spin"></i> ${t('modal.provider.action.stopping')}
+                </button>
+            `;
+        }
+    }
+
+    try {
+        const token = window.authManager ? window.authManager.getToken() : null;
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch(formatPath(API_PATHS.PYTHON.MODELS.STOP, { modelName }), {
+            method: 'POST',
+            headers
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(t('common.success'), t('modal.provider.stopSuccess', { model: modelName }), 'success');
+            // 刷新模型列表
+            await loadModelsListForSwitch(modal);
+        } else {
+            throw new Error(data.error?.message || '停止失败');
+        }
+    } catch (error) {
+        console.error('Failed to stop model:', error);
+        showToast(t('common.error'), t('common.error') + ': ' + error.message, 'error');
+        if (modelItem) {
+            const actionsEl = modelItem.querySelector('.model-switch-actions');
+            if (actionsEl) {
+                actionsEl.innerHTML = `
+                    <button class="btn btn-danger btn-sm" onclick="window.stopModel('${modelName}')">
+                        <i class="fas fa-stop"></i> ${t('modal.provider.action.stop')}
+                    </button>
+                `;
+            }
+        }
+    }
+}
+
 // 导出所有函数，并挂载到window对象供HTML调用
 export {
     showProviderManagerModal,
@@ -2244,7 +2702,11 @@ export {
     renderNotSupportedModelsSelector,
     goToProviderPage,
     performSingleHealthCheck,
-    refreshProviderUuid
+    refreshProviderUuid,
+    showModelSwitchModal,
+    switchModel,
+    startModel,
+    stopModel
 };
 
 // 将函数挂载到window对象

@@ -2,7 +2,7 @@
 
 <img src="src/img/logo-mid.webp" alt="logo"  style="width: 128px; height: 128px;margin-bottom: 3px;">
 
-# AIClient-2-API 🚀
+# AIClient-2-API（A2）🚀
 
 **一个能将多种仅客户端内使用的大模型 API（Gemini CLI, Antigravity, Codex, Grok, Kiro ...），模拟请求，统一封装为本地 OpenAI 兼容接口的强大代理。**
 
@@ -93,6 +93,7 @@
 > <details>
 > <summary>点击展开查看详细版本历史</summary>
 > 
+> - **2026.04.19** - 优化 GPU 监控模块：前端通过 Node.js 代理端点 `/api/python-gpu/status` 访问 Python GPU 控制器，避免直接访问服务器局域网私有 IP，并添加认证头支持
 > - **2026.03.02** - 新增 Grok 协议支持，支持通过 Cookie/SSO 方式访问 xAI Grok 系列模型（Grok 3/4），支持多模态输入、图片/视频生成、自动 token 刷新及流式输出
 > - **2026.01.26** - 新增 Codex 协议支持：支持 OpenAI Codex OAuth 授权接入
 > - **2026.01.25** - 增强 AI 监控插件：支持监控 AI 协议转换前后的请求参数和响应。优化日志管理：统一日志格式，可视化配置

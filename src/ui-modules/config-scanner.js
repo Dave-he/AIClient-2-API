@@ -38,8 +38,11 @@ export async function scanConfigFiles(currentConfig, providerPoolManager) {
     }
 
     // 检查提供商池文件中的所有OAuth凭据路径 - 标准化路径格式
-    if (providerPools) {
+    if (providerPools && typeof providerPools === 'object' && !Array.isArray(providerPools)) {
         for (const [providerType, providers] of Object.entries(providerPools)) {
+            // 确保 providers 是数组（防御性编程，防止数据结构异常）
+            if (!Array.isArray(providers)) continue;
+            
             for (const provider of providers) {
                 addToUsedPaths(usedPaths, provider.GEMINI_OAUTH_CREDS_FILE_PATH);
                 addToUsedPaths(usedPaths, provider.KIRO_OAUTH_CREDS_FILE_PATH);

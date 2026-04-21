@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#059669">
-    <title>API 大锅饭 - 我的用量</title>
+    <title data-i18n="potluck.title">API 大锅饭 - 我的用量</title>
     <link rel="stylesheet" href="app/base.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -352,7 +352,7 @@
         [data-theme="dark"] .level-2, [data-theme="dark"] .calendar-day[data-level="2"] { background: #006d32; }
         [data-theme="dark"] .level-3, [data-theme="dark"] .calendar-day[data-level="3"] { background: #26a641; }
         [data-theme="dark"] .level-4, [data-theme="dark"] .calendar-day[data-level="4"] { background: #39d353; }
-        .calendar-tooltip { position: fixed; padding: 6px 10px; background: rgba(0,0,0,0.9); color: #fff; font-size: 11px; border-radius: 4px; pointer-events: none; z-index: 1000; display: none; box-shadow: 0 3px 10px rgba(0,0,0,0.3); white-space: nowrap; line-height: 1.4; }
+        .calendar-tooltip { position: fixed; padding: 6px 10px; background: rgba(0,0,0,0.9); color: #fff; font-size: 11px; border-radius: 4px; pointer-events: none; z-index: 1000; display: none; box-shadow: 0 3px 10px rgba(0,0,0,0.3); white-space: pre-line; line-height: 1.4; }
 
     </style>
 </head>
@@ -362,21 +362,21 @@
         <div class="navbar-inner">
             <div class="navbar-brand">
                 <span class="icon">🍲</span>
-                <span>API 大锅饭</span>
-                <span class="badge">用户版</span>
+                <span data-i18n="potluck.brand">API 大锅饭</span>
+                <span class="badge" data-i18n="potluck.userBadge">用户版</span>
             </div>
             <div class="navbar-user" id="navbarUser" style="display: none;">
-                <span class="welcome">欢迎，<strong id="navUserName">-</strong></span>
-                <button class="theme-toggle" id="themeToggle" title="切换主题">
+                <span class="welcome"><span data-i18n="potluck.welcome">欢迎，</span><strong id="navUserName">-</strong></span>
+                <button class="theme-toggle" id="themeToggle" data-i18n-title="potluck.themeToggle" title="切换主题">
                     <i class="fas fa-sun"></i>
                     <i class="fas fa-moon"></i>
                 </button>
                 <button class="btn btn-secondary btn-sm" onclick="logout()">
-                    <i class="fas fa-sign-out-alt"></i> <span class="btn-text">退出</span>
+                    <i class="fas fa-sign-out-alt"></i> <span class="btn-text" data-i18n="potluck.logout">退出</span>
                 </button>
             </div>
             <!-- 未登录时显示主题切换 -->
-            <button class="theme-toggle" id="themeToggleLogin" style="display: none;" title="切换主题">
+            <button class="theme-toggle" id="themeToggleLogin" style="display: none;" data-i18n-title="potluck.themeToggle" title="切换主题">
                 <i class="fas fa-sun"></i>
                 <i class="fas fa-moon"></i>
             </button>
@@ -386,77 +386,79 @@
     <!-- 登录页面 -->
     <div class="login-container" id="loginContainer">
         <div class="login-box">
-            <h2><i class="fas fa-key"></i> 登录</h2>
-            <p class="subtitle">使用您的 API Key 登录查看用量</p>
+            <h2><i class="fas fa-key"></i> <span data-i18n="potluck.loginTitle">登录</span></h2>
+            <p class="subtitle" data-i18n="potluck.loginSubtitle">使用您的 API Key 登录查看用量</p>
             <div class="form-group">
                 <label>API Key</label>
-                <input type="text" class="form-input" id="apiKeyInput" placeholder="maki_xxxxxxxx..." autocomplete="off">
+                <input type="text" class="form-input" id="apiKeyInput" data-i18n-placeholder="potluck.apiKeyPlaceholder" placeholder="maki_xxxxxxxx..." autocomplete="off">
             </div>
             <div class="form-group">
                 <label class="form-checkbox">
                     <input type="checkbox" id="rememberKey" checked>
-                    <span>记住我的 Key</span>
+                    <span data-i18n="potluck.rememberKey">记住我的 Key</span>
                 </label>
             </div>
             <button class="btn btn-primary btn-block" id="loginBtn" onclick="login()">
-                <i class="fas fa-sign-in-alt"></i> 登录
+                <i class="fas fa-sign-in-alt"></i> <span data-i18n="potluck.loginBtn">登录</span>
             </button>
         </div>
     </div>
 
     <!-- 主内容区 -->
     <div class="main-container" id="mainContainer" style="display: none;">
-        <h3 class="section-title"><i class="fas fa-chart-bar"></i> 个人使用统计</h3>
+        <h3 class="section-title"><i class="fas fa-chart-bar"></i> <span data-i18n="potluck.personalStats">个人使用统计</span></h3>
         
         <!-- 统计卡片 -->
         <div class="stats-grid">
             <div class="stat-card orange">
-                <div class="label">最后使用</div>
-                <div class="value" id="statLastUsed">从未</div>
+                <div class="label" data-i18n="potluck.lastUsed">最后使用</div>
+                <div class="value" id="statLastUsed" data-i18n="potluck.never">从未</div>
             </div>
             <div class="stat-card purple">
-                <div class="label">每日用量</div>
+                <div class="label" data-i18n="potluck.dailyUsage">每日用量</div>
                 <div class="value">
                     <span id="statToday">0</span>
                     <span class="dim"> / <span id="statLimit">0</span></span>
                 </div>
+<div style="font-size:12px;color:var(--text-secondary);margin-top:4px">QPS: <span id="statQps" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="statMaxQps">0.00</span>) | RPM: <span id="statRpm" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="statMaxRpm">0.00</span>)</div>
             </div>
             <div class="stat-card green">
-                <div class="label">剩余额度</div>
+                <div class="label" data-i18n="potluck.remainingQuota">剩余额度</div>
                 <div class="value">
                     <span id="statRemaining">0</span>
                 </div>
             </div>
             <div class="stat-card cyan">
-                <div class="label">累计调用</div>
+                <div class="label" data-i18n="potluck.totalCalls">累计调用</div>
                 <div class="value" id="statTotal">0</div>
             </div>
             <div class="stat-card green">
-                <div class="label">今日 Tokens</div>
+                <div class="label" data-i18n="potluck.todayTokens">今日 Tokens</div>
                 <div class="value" id="statTodayTokens">0</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">TPS: <span id="statTps" style="font-weight:700;color:var(--primary-color)">0.00</span> (峰值: <span id="statMaxTps">0.00</span>)</div>
             </div>
             <div class="stat-card cyan">
-                <div class="label">今日缓存 Tokens</div>
+                <div class="label" data-i18n="potluck.todayCachedTokens">今日缓存 Tokens</div>
                 <div class="value" id="statTodayCachedTokens">0</div>
             </div>
             <div class="stat-card purple">
-                <div class="label">累计 Tokens</div>
+                <div class="label" data-i18n="potluck.totalTokens">累计 Tokens</div>
                 <div class="value" id="statTotalTokens">0</div>
             </div>
             <div class="stat-card cyan">
-                <div class="label">累计缓存 Tokens</div>
+                <div class="label" data-i18n="potluck.totalCachedTokens">累计缓存 Tokens</div>
                 <div class="value" id="statTotalCachedTokens">0</div>
             </div>
         </div>
 
         <!-- 我的使用分布统计区域 -->
         <div id="usageStatsSection" style="margin-bottom: 2.5rem; display: none;">
-            <h3 class="section-title"><i class="fas fa-chart-pie"></i> 我的使用趋势与分布 (最近 3 个月)</h3>
+            <h3 class="section-title"><i class="fas fa-chart-pie"></i> <span data-i18n="potluck.usageTrend">我的使用趋势与分布 (最近 3 个月)</span></h3>
             <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
                 <!-- Token 用量日历 -->
                 <div class="stat-card" style="text-align: left; padding: 20px;">
                     <div class="label" style="margin-bottom: 10px; font-weight: 600; display: flex; justify-content: space-between;">
-                        <span>我的 Token 消耗趋势</span>
+                        <span data-i18n="potluck.tokenTrend">我的 Token 消耗趋势</span>
                         <div class="calendar-legend" style="gap: 3px;">
                             <div class="level level-1" style="width:8px;height:8px"></div>
                             <div class="level level-4" style="width:8px;height:8px"></div>
@@ -471,7 +473,7 @@
                 <!-- 提供商分布 -->
                 <div class="stat-card" style="text-align: left; padding: 20px;">
                     <div class="label" style="margin-bottom: 15px; font-weight: 600; display: flex; justify-content: space-between;">
-                        <span>常用提供商</span>
+                        <span data-i18n="potluck.topProviders">常用提供商</span>
                         <span id="providerTotalCount" style="color: var(--primary-color);">0 次</span>
                     </div>
                     <div id="providerDistribution" class="distribution-list">
@@ -481,7 +483,7 @@
                 <!-- 模型分布 -->
                 <div class="stat-card" style="text-align: left; padding: 20px;">
                     <div class="label" style="margin-bottom: 15px; font-weight: 600; display: flex; justify-content: space-between;">
-                        <span>常用模型</span>
+                        <span data-i18n="potluck.topModels">常用模型</span>
                         <span id="modelTotalCount" style="color: var(--primary-color);">0 次</span>
                     </div>
                     <div id="modelDistribution" class="distribution-list">
@@ -516,6 +518,21 @@
 
     <script type="module">
         import { getCurrentTheme, setTheme, toggleTheme, initThemeSwitcher } from './app/theme-switcher.js';
+        import { initI18n, t } from './app/i18n.js';
+        
+        // 初始化主题和i18n
+        initThemeSwitcher('themeToggle');
+        initThemeSwitcher('themeToggleLogin');
+        
+        // 等待 DOM 加载完成后初始化 i18n
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => initI18n());
+        } else {
+            initI18n();
+        }
+        
+        // 导出 t 函数供全局使用
+        window.t = t;
         
         const API_BASE = '/api/potluckuser';
         let currentApiKey = '';
@@ -646,6 +663,14 @@
             document.getElementById('statTotalTokens').textContent = formatTokenCompact(data.tokens?.total || 0);
             document.getElementById('statTotalCachedTokens').textContent = formatTokenCompact(data.tokens?.cached || 0);
             
+            // 速率统计
+            document.getElementById('statQps').textContent = (data.usage?.qps || 0).toFixed(2);
+            document.getElementById('statMaxQps').textContent = (data.usage?.maxQps || 0).toFixed(2);
+            document.getElementById('statRpm').textContent = (data.usage?.rpm || 0).toFixed(2);
+            document.getElementById('statMaxRpm').textContent = (data.usage?.maxRpm || 0).toFixed(2);
+            document.getElementById('statTps').textContent = (data.usage?.tps || 0).toFixed(2);
+            document.getElementById('statMaxTps').textContent = (data.usage?.maxTps || 0).toFixed(2);
+            
             // 最后使用时间
             if (data.lastUsedAt) {
                 const date = new Date(data.lastUsedAt);
@@ -676,7 +701,10 @@
             Object.entries(usageHistory).forEach(([date, data]) => {
                 dailyData[date] = {
                     totalTokens: data.summary?.totalTokens || 0,
-                    requestCount: data.summary?.requestCount || 0
+                    requestCount: data.summary?.requestCount || 0,
+                    maxQps: data.summary?.maxQps || 0,
+                    maxRpm: data.summary?.maxRpm || 0,
+                    maxTps: data.summary?.maxTps || 0
                 };
             });
             
@@ -690,7 +718,9 @@
                 date.setDate(startDate.getDate() + i);
                 if (date > now) break;
                 
-                const dateKey = date.toISOString().split('T')[0];
+                // 统一使用北京时间 (UTC+8) 生成 key，与后端保持一致
+                const utc8Date = new Date(date.getTime() + (8 * 60 * 60 * 1000));
+                const dateKey = utc8Date.toISOString().split('T')[0];
                 const entry = dailyData[dateKey] || { totalTokens: 0, requestCount: 0 };
                 const tokens = entry.totalTokens;
                 const requests = entry.requestCount;
@@ -709,9 +739,9 @@
                 day.className = 'calendar-day';
                 day.dataset.level = level;
                 
-                const tipText = `${dateKey}: ${formatNumber(requests)} 次请求, ${formatTokenCompact(tokens)} Tokens`;
+                const tipText = `${dateKey}: ${formatNumber(requests)} 次请求, ${formatTokenCompact(tokens)} Tokens${entry.maxQps ? `\n峰值: ${entry.maxQps.toFixed(2)} QPS / ${entry.maxRpm.toFixed(0)} RPM / ${entry.maxTps.toFixed(2)} TPS` : ''}`;
                 day.onmouseenter = (e) => {
-                    tooltip.textContent = tipText;
+                    tooltip.innerText = tipText;
                     tooltip.style.display = 'block';
                     const rect = day.getBoundingClientRect();
                     tooltip.style.left = `${rect.left + rect.width / 2 - tooltip.offsetWidth / 2}px`;

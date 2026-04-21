@@ -1,5 +1,5 @@
 import { LocalApiService } from './local-core.js';
-import { ApiServiceAdapter } from '../adapter.js';
+import { ApiServiceAdapter } from '../api-service-adapter-base.js';
 
 export class LocalApiServiceAdapter extends ApiServiceAdapter {
     constructor(config) {
@@ -17,6 +17,10 @@ export class LocalApiServiceAdapter extends ApiServiceAdapter {
 
     async listModels() {
         return this.localApiService.listModels();
+    }
+
+    async listRunningModels() {
+        return this.localApiService.listRunningModels();
     }
 
     async refreshToken() {
@@ -41,5 +45,17 @@ export class LocalApiServiceAdapter extends ApiServiceAdapter {
 
     async stopModel(modelName) {
         return this.localApiService.stopModel(modelName);
+    }
+
+    async getModelOptions() {
+        return this.localApiService.getModelOptions();
+    }
+
+    async getCurrentModel() {
+        return this.localApiService.getCurrentModel();
+    }
+
+    async switchModel(targetModelName, options = {}) {
+        return this.localApiService.switchModel(targetModelName, options);
     }
 }

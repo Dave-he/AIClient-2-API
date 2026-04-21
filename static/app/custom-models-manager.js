@@ -70,7 +70,13 @@ export class CustomModelsManager {
         if (!client) return;
         try {
             const data = await client.get('/custom-models');
-            this.models = data || [];
+            let models = [];
+            if (data && data.models) {
+                models = Array.isArray(data.models) ? data.models : [];
+            } else if (Array.isArray(data)) {
+                models = data;
+            }
+            this.models = models;
         } catch (e) { console.error(e); }
     }
 
@@ -168,7 +174,9 @@ export class CustomModelsManager {
         const tbody = document.getElementById('customModelsTableBody');
         if (!tbody) return;
 
-        if (this.models.length === 0) {
+        const modelsArray = Array.isArray(this.models) ? this.models : [];
+
+        if (modelsArray.length === 0) {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="6" class="table-empty-state">
@@ -181,7 +189,7 @@ export class CustomModelsManager {
             return;
         }
 
-        tbody.innerHTML = this.models.map(model => `
+        tbody.innerHTML = modelsArray.map(model => `
             <tr>
                 <td>
                     <div class="model-id-cell">

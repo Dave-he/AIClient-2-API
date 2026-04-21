@@ -2,6 +2,8 @@ import { promises as fs } from 'fs';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import logger from '../../utils/logger.js';
+import { RateManager } from '../../utils/rate-tracker.js';
+import { getBeijingDateString } from '../../utils/common.js';
 
 const STATS_STORE_FILE = path.join(process.cwd(), 'configs', 'model-usage-stats.json');
 const DEFAULT_CONFIG = {
@@ -17,6 +19,7 @@ let currentPersistInterval = DEFAULT_CONFIG.persistInterval;
 let mutationVersion = 0;
 let persistPromise = null;
 
+const rateManager = new RateManager(60); // 使用 60 秒滑动窗口，更平滑
 const pendingRequests = new Map();
 
 function getTraceRequestId(requestId) {
@@ -34,6 +37,9 @@ function createEmptyUsage() {
         completionTokens: 0,
         totalTokens: 0,
         cachedTokens: 0,
+        maxQps: 0,
+        maxRpm: 0,
+        maxTps: 0,
         lastUsedAt: null
     };
 }
@@ -58,6 +64,9 @@ function normalizeUsageBlock(block) {
         completionTokens: toNumber(block.completionTokens),
         totalTokens: toNumber(block.totalTokens),
         cachedTokens: toNumber(block.cachedTokens),
+        maxQps: toNumber(block.maxQps),
+        maxRpm: toNumber(block.maxRpm),
+        maxTps: toNumber(block.maxTps),
         lastUsedAt: block.lastUsedAt || null
     };
 }
@@ -379,6 +388,9 @@ function resetUsageBlockTokens(block) {
     block.completionTokens = 0;
     block.totalTokens = 0;
     block.cachedTokens = 0;
+    block.maxQps = 0;
+    block.maxRpm = 0;
+    block.maxTps = 0;
 }
 
 export function setConfigGetter(getter) {
@@ -416,6 +428,14 @@ export async function finalizeRequest({ requestId, model, provider, fromProvider
     }
 
     const state = getPendingRequest(requestId, { model, provider, fromProvider, isStream });
+    
+    // 防重逻辑：如果该请求已经处理过速率统计，则直接删除并返回
+    if (state.rateRecorded) {
+        pendingRequests.delete(requestId);
+        return true;
+    }
+    state.rateRecorded = true;
+
     pendingRequests.delete(requestId);
 
     if (!state.hasResponse) {
@@ -423,9 +443,12 @@ export async function finalizeRequest({ requestId, model, provider, fromProvider
         return false;
     }
 
-    const timestamp = new Date().toISOString();
+    const now = new Date();
+    const timestamp = now.toISOString();
+    const dateKey = getBeijingDateString();
     const normalizedProvider = state.provider || provider || 'unknown';
     const normalizedModel = state.model || model || 'unknown';
+    
     const usage = {
         promptTokens: state.usage.promptTokens,
         completionTokens: state.usage.completionTokens,
@@ -437,12 +460,29 @@ export async function finalizeRequest({ requestId, model, provider, fromProvider
     applyUsage(ensureProviderStore(normalizedProvider).summary, usage, timestamp);
     applyUsage(ensureModelStore(normalizedProvider, normalizedModel), usage, timestamp);
 
-    // 记录每日统计
-    const dateKey = timestamp.split('T')[0];
+    // 记录速率统计
+    rateManager.record(`provider:${normalizedProvider}`, usage.totalTokens);
+    rateManager.record(`model:${normalizedModel}`, usage.totalTokens);
+
+    const globalRates = rateManager.getGlobalStats();
+    
+    // 更新持久化峰值
+    const updatePeaks = (target) => {
+        target.maxQps = Math.max(target.maxQps || 0, globalRates.qps);
+        target.maxRpm = Math.max(target.maxRpm || 0, globalRates.rpm);
+        target.maxTps = Math.max(target.maxTps || 0, globalRates.tps);
+    };
+
+    updatePeaks(statsStore.summary);
+    updatePeaks(ensureProviderStore(normalizedProvider).summary);
+    updatePeaks(ensureModelStore(normalizedProvider, normalizedModel));
+
     if (!statsStore.daily[dateKey]) {
         statsStore.daily[dateKey] = createEmptyUsage();
     }
-    applyUsage(statsStore.daily[dateKey], usage, timestamp);
+    const dailyBlock = statsStore.daily[dateKey];
+    applyUsage(dailyBlock, usage, timestamp);
+    updatePeaks(dailyBlock);
 
     // 记录每小时统计（YYYY-MM-DDTHH）
     const hourKey = timestamp.slice(0, 13); // YYYY-MM-DDTHH
@@ -458,7 +498,7 @@ export async function finalizeRequest({ requestId, model, provider, fromProvider
     }
     applyUsage(statsStore.minuteData[minuteKey], usage, timestamp);
 
-    logger.info(`${getTracePrefix(requestId)} >>> Request Finalized: Provider: ${normalizedProvider} | Model: ${normalizedModel} | Prompt: ${usage.promptTokens} | Completion: ${usage.completionTokens} | Total: ${usage.totalTokens} | Cached: ${usage.cachedTokens} | Stream: ${Boolean(state.isStream)}`);
+    logger.info(`${getTracePrefix(requestId)} >>> Request Finalized: Provider: ${normalizedProvider} | Model: ${normalizedModel} | Prompt: ${usage.promptTokens} | Completion: ${usage.completionTokens} | Total: ${usage.totalTokens} | Cached: ${usage.cachedTokens} | Stream: ${Boolean(state.isStream)} | QPS: ${globalRates.qps}`);
     markDirty();
     await persistIfDirty();
     return true;
@@ -466,13 +506,46 @@ export async function finalizeRequest({ requestId, model, provider, fromProvider
 
 export async function getStats() {
     ensureLoaded();
-    return JSON.parse(JSON.stringify(statsStore));
+    const stats = JSON.parse(JSON.stringify(statsStore));
+    
+    // 注入速率统计
+    const globalRates = rateManager.getGlobalStats();
+    stats.summary.qps = globalRates.qps;
+    stats.summary.tps = globalRates.tps;
+    stats.summary.rpm = globalRates.rpm;
+    // 峰值取持久化值和当前内存值中的较大者
+    stats.summary.maxQps = Math.max(stats.summary.maxQps || 0, globalRates.maxQps);
+    stats.summary.maxTps = Math.max(stats.summary.maxTps || 0, globalRates.maxTps);
+    stats.summary.maxRpm = Math.max(stats.summary.maxRpm || 0, globalRates.maxRpm);
+
+    for (const [provider, providerStore] of Object.entries(stats.providers || {})) {
+        const pRates = rateManager.getStats(`provider:${provider}`);
+        providerStore.summary.qps = pRates.qps;
+        providerStore.summary.tps = pRates.tps;
+        providerStore.summary.rpm = pRates.rpm;
+        providerStore.summary.maxQps = Math.max(providerStore.summary.maxQps || 0, pRates.maxQps);
+        providerStore.summary.maxTps = Math.max(providerStore.summary.maxTps || 0, pRates.maxTps);
+        providerStore.summary.maxRpm = Math.max(providerStore.summary.maxRpm || 0, pRates.maxRpm);
+
+        for (const [model, modelStore] of Object.entries(providerStore.models || {})) {
+            const mRates = rateManager.getStats(`model:${model}`);
+            modelStore.qps = mRates.qps;
+            modelStore.tps = mRates.tps;
+            modelStore.rpm = mRates.rpm;
+            modelStore.maxQps = Math.max(modelStore.maxQps || 0, mRates.maxQps);
+            modelStore.maxTps = Math.max(modelStore.maxTps || 0, mRates.maxTps);
+            modelStore.maxRpm = Math.max(modelStore.maxRpm || 0, mRates.maxRpm);
+        }
+    }
+
+    return stats;
 }
 
 export async function resetStats() {
     ensureLoaded();
     statsStore = createDefaultStore();
     pendingRequests.clear();
+    rateManager.clear(); // 同时重置速率统计
     markDirty();
     await persistIfDirty();
     logger.warn('[Model Usage Stats] Stats store reset');
@@ -499,8 +572,105 @@ export async function resetTokenStats() {
     }
 
     pendingRequests.clear();
+    rateManager.clear(); // 同时重置速率统计
     markDirty();
     await persistIfDirty();
     logger.warn('[Model Usage Stats] Token stats reset');
     return getStats();
+}
+
+export async function getProviderTimeSeries(range = 'hour', targetProvider = null) {
+    ensureLoaded();
+    const now = new Date();
+    const dataPoints = [];
+
+    const getTimeKey = (minutesAgo) => {
+        const time = new Date(now.getTime() - minutesAgo * 60000);
+        return time.toISOString().slice(0, 16);
+    };
+
+    let keys = [];
+    let count = 0;
+
+    if (range === 'hour') {
+        count = 60;
+        for (let i = count - 1; i >= 0; i--) {
+            keys.push(getTimeKey(i));
+        }
+    } else if (range === 'day') {
+        count = 24;
+        for (let i = count - 1; i >= 0; i--) {
+            keys.push(new Date(now.getTime() - i * 3600000).toISOString().slice(0, 13));
+        }
+    } else if (range === 'week') {
+        count = 7;
+        for (let i = count - 1; i >= 0; i--) {
+            const d = new Date(now.getTime() - i * 86400000);
+            keys.push(d.toISOString().slice(0, 10));
+        }
+    }
+
+    const providersToInclude = targetProvider 
+        ? [targetProvider] 
+        : Object.keys(statsStore.providers || {});
+
+    const storeRef = range === 'hour' ? statsStore.minuteData : 
+                     range === 'day' ? statsStore.hourly : 
+                     statsStore.daily;
+
+    for (const key of keys) {
+        let totalRequests = 0;
+        let totalPromptTokens = 0;
+        let totalCompletionTokens = 0;
+        let totalTokens = 0;
+
+        if (storeRef[key]) {
+            const block = storeRef[key];
+            totalRequests += block.requestCount || 0;
+            totalPromptTokens += block.promptTokens || 0;
+            totalCompletionTokens += block.completionTokens || 0;
+            totalTokens += block.totalTokens || 0;
+        }
+
+        const perProvider = {};
+        for (const provider of providersToInclude) {
+            let pRequests = 0;
+            let pPromptTokens = 0;
+            let pCompletionTokens = 0;
+            let pTotalTokens = 0;
+
+            if (statsStore.providers[provider]) {
+                const providerStore = statsStore.providers[provider];
+                for (const [model, modelStore] of Object.entries(providerStore.models || {})) {
+                    pRequests += modelStore.requestCount || 0;
+                    pPromptTokens += modelStore.promptTokens || 0;
+                    pCompletionTokens += modelStore.completionTokens || 0;
+                    pTotalTokens += modelStore.totalTokens || 0;
+                }
+            }
+
+            perProvider[provider] = {
+                requests: pRequests,
+                promptTokens: pPromptTokens,
+                completionTokens: pCompletionTokens,
+                totalTokens: pTotalTokens
+            };
+        }
+
+        dataPoints.push({
+            key,
+            totalRequests,
+            totalPromptTokens,
+            totalCompletionTokens,
+            totalTokens,
+            providers: perProvider
+        });
+    }
+
+    return {
+        range,
+        provider: targetProvider,
+        dataPoints,
+        keys
+    };
 }

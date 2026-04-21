@@ -31,6 +31,12 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
         logger.info(`[Auto Protocol Detection] Detected protocol: ${fromProvider}`);
     }
     
+    // 处理vLLM相关请求
+    if (requestPath && requestPath.startsWith('/vllm/')) {
+        logger.info(`[Node Proxy] Handling vLLM request through Node.js proxy: ${requestPath}`);
+        fromProvider = MODEL_PROTOCOL_PREFIX.OPENAI;
+    }
+    
     let toProvider = CONFIG.actualProviderType || CONFIG.MODEL_PROVIDER;
     let actualUuid = pooluuid;
     
@@ -142,7 +148,9 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
             model,
             isStream
         });
-    } catch (e) { /* 静默失败，不影响主流程 */ }
+    } catch (e) {
+        logger.debug('[ContentHandler] onContentGenerated hook failed:', e?.message || e);
+    }
 }
 
 function _extractModelAndStreamInfo(req, requestBody, fromProvider) {

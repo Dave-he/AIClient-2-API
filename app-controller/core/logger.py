@@ -3,7 +3,7 @@ import os
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
-def setup_logger(name: str = "ai_controller") -> logging.Logger:
+def setup_logger(name: str = "ai_controller", log_dir: str = None) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
     
@@ -19,7 +19,8 @@ def setup_logger(name: str = "ai_controller") -> logging.Logger:
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+    if log_dir is None:
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
     os.makedirs(log_dir, exist_ok=True)
     
     file_handler = RotatingFileHandler(

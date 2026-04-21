@@ -87,7 +87,9 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                         model,
                         requestId: hookRequestId
                     });
-                } catch (e) {}
+                } catch (e) {
+                    logger.debug('[Plugin] onStreamChunk hook failed:', e?.message || e);
+                }
             }
 
             if (!chunkToSend) {

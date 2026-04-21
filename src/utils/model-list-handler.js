@@ -210,7 +210,7 @@ export async function handleModelListRequest(req, res, service, endpointType, CO
                 throw new Error(`[ModelList] Service adapter is unavailable or does not implement listModels() for provider: ${toProvider}`);
             }
 
-            const nativeModelList = await resolvedService.listModels();
+            let nativeModelList = await resolvedService.listModels();
 
             clientModelList = nativeModelList;
             if (!getProtocolPrefix(toProvider).includes(getProtocolPrefix(fromProvider))) {

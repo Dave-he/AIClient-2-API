@@ -223,7 +223,9 @@ class TLSSidecar {
                 if (fs.existsSync(p) && fs.statSync(p).isFile()) {
                     return p;
                 }
-            } catch { /* ignore */ }
+            } catch (err) {
+                logger.debug('[TLS-Sidecar] Path check error:', err?.message || err);
+            }
         }
         return null;
     }
@@ -234,7 +236,9 @@ class TLSSidecar {
             try {
                 const ok = await this._healthCheck();
                 if (ok) return true;
-            } catch { /* retry */ }
+            } catch (err) {
+                logger.debug('[TLS-Sidecar] Health check retry:', err?.message || err);
+            }
             await sleep(500);
         }
         logger.error('[TLS-Sidecar] Timed out waiting for sidecar to become ready');

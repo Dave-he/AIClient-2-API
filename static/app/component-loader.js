@@ -151,9 +151,31 @@ async function initializeComponents() {
             { path: `${basePath}section-usage.html`, container: '#content-container', position: 'beforeend' },
             { path: `${basePath}section-logs.html`, container: '#content-container', position: 'beforeend' },
             { path: `${basePath}section-plugins.html`, container: '#content-container', position: 'beforeend' },
+            { path: `${basePath}section-gpu-monitor.html`, container: '#content-container', position: 'beforeend' },
         ];
         
         await loadComponents(sectionComponents);
+        
+        // 默认显示 dashboard 部分
+        setTimeout(() => {
+            const dashboardSection = document.getElementById('dashboard');
+            const dashboardNav = document.querySelector('.nav-item[data-section="dashboard"]');
+            if (dashboardSection) {
+                dashboardSection.classList.add('active');
+            }
+            if (dashboardNav) {
+                dashboardNav.classList.add('active');
+            }
+            
+            // 确保 GPU 监控菜单始终可见
+            const gpuNav = document.querySelector('.nav-item[data-section="gpu-monitor"]');
+            if (gpuNav) {
+                gpuNav.style.display = '';
+                console.log('[ComponentLoader] GPU monitor nav item made visible');
+            } else {
+                console.log('[ComponentLoader] GPU monitor nav item not found');
+            }
+        }, 50);
         
         console.log('All components loaded successfully');
         // 触发组件加载完成事件

@@ -2,11 +2,21 @@
   "REQUIRED_API_KEY": "sk-2e3513944ecac08f466a2e01872ba91d",
   "SERVER_PORT": 30000,
   "HOST": "0.0.0.0",
-  "MASTER_PORT": 3100,
+  "CONTROLLER_BASE_URL": "http://ssh.hamr.top:27145",
   "MODEL_PROVIDER": "local-model",
   "DEFAULT_MODEL_PROVIDERS": [
     "local-model",
-    "claude-custom"
+    "claude-custom",
+    "forward-api",
+    "gemini-cli-oauth",
+    "gemini-antigravity",
+    "claude-kiro-oauth",
+    "openai-codex-oauth",
+    "openai-qwen-oauth",
+    "openai-iflow",
+    "grok-custom",
+    "openai-custom",
+    "openaiResponses-custom"
   ],
   "SYSTEM_PROMPT_FILE_PATH": "configs/input_system_prompt.txt",
   "SYSTEM_PROMPT_MODE": "append",
@@ -39,11 +49,23 @@
   "TLS_SIDECAR_ENABLED_PROVIDERS": [],
   "TLS_SIDECAR_PORT": 9090,
   "TLS_SIDECAR_PROXY_URL": null,
-  "CONTROLLER_BASE_URL": "http://localhost:5000",
   "SCHEDULED_HEALTH_CHECK": {
-    "enabled": false,
-    "startupRun": false,
+    "enabled": true,
+    "startupRun": true,
     "interval": 600000,
-    "providerTypes": []
+    "providerTypes": [
+      "local-model",
+      "claude-custom",
+      "forward-api",
+      "gemini-cli-oauth",
+      "gemini-antigravity",
+      "claude-kiro-oauth",
+      "openai-codex-oauth",
+      "openai-qwen-oauth",
+      "openai-iflow",
+      "grok-custom",
+      "openai-custom",
+      "openaiResponses-custom"
+    ]
   }
 }

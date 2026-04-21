@@ -56,16 +56,25 @@ function initEventStream() {
  * 添加日志条目
  * @param {Object} logData - 日志数据
  */
+const MAX_LOG_ENTRIES = 500; // DOM 元素最大数量
+
 function addLogEntry(logData) {
     addLog(logData);
     
     if (!elements.logsContainer) return;
     
+    // 限制 DOM 元素数量，防止内存泄漏
+    const children = elements.logsContainer.children;
+    if (children.length >= MAX_LOG_ENTRIES) {
+        // 移除旧的日志元素（保留最新的一半）
+        const removeCount = Math.floor(MAX_LOG_ENTRIES / 2);
+        for (let i = 0; i < removeCount; i++) {
+            children[0]?.remove();
+        }
+    }
+    
     const logEntry = document.createElement('div');
     logEntry.className = 'log-entry';
-
-    const time = new Date(logData.timestamp).toLocaleTimeString();
-    const levelClass = `log-level-${logData.level}`;
 
     logEntry.innerHTML = `
         <span class="log-message">${escapeHtml(logData.message)}</span>

@@ -191,25 +191,35 @@ class PluginManager {
     async initAll(config) {
         await this.loadConfig();
         
+        const INIT_CONCURRENCY = 3;
+        const enabledPlugins = [];
+        
         for (const [name, plugin] of this.plugins) {
             const pluginConfig = this.pluginsConfig.plugins[name] || {};
-            const enabled = pluginConfig.enabled !== false; // 默认启用
+            const enabled = pluginConfig.enabled !== false;
             
             if (!enabled) {
                 logger.info(`[PluginManager] Plugin "${name}" is disabled, skipping init`);
                 continue;
             }
-
-            try {
-                if (typeof plugin.init === 'function') {
-                    await plugin.init(config);
-                    logger.info(`[PluginManager] Initialized plugin: ${name}`);
+            
+            enabledPlugins.push({ name, plugin, config: pluginConfig });
+        }
+        
+        for (let i = 0; i < enabledPlugins.length; i += INIT_CONCURRENCY) {
+            const batch = enabledPlugins.slice(i, i + INIT_CONCURRENCY);
+            await Promise.all(batch.map(async ({ name, plugin }) => {
+                try {
+                    if (typeof plugin.init === 'function') {
+                        await plugin.init(config);
+                        logger.info(`[PluginManager] Initialized plugin: ${name}`);
+                    }
+                    plugin._enabled = true;
+                } catch (error) {
+                    logger.error(`[PluginManager] Failed to init plugin "${name}":`, error.message);
+                    plugin._enabled = false;
                 }
-                plugin._enabled = true;
-            } catch (error) {
-                logger.error(`[PluginManager] Failed to init plugin "${name}":`, error.message);
-                plugin._enabled = false;
-            }
+            }));
         }
         
         this.initialized = true;

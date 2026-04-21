@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { CONFIG } from '../core/config-manager.js';
 import { getClientIp } from '../utils/common.js';
 import { PASSWORD } from '../utils/constants.js';
+import { csrfManager, validatePath, validateOrigin, generateCookieConfig } from '../utils/security.js';
 
 // Token存储到本地文件中
 const TOKEN_STORE_FILE = path.join(process.cwd(), 'configs', 'token-store.json');
@@ -120,14 +121,18 @@ async function readTokenStore() {
     try {
         if (existsSync(TOKEN_STORE_FILE)) {
             const content = await fs.readFile(TOKEN_STORE_FILE, 'utf8');
+            if (!content.trim()) {
+                await writeTokenStore({ tokens: {} });
+                return { tokens: {} };
+            }
             return JSON.parse(content);
         } else {
-            // 如果文件不存在，创建一个默认的token store
             await writeTokenStore({ tokens: {} });
             return { tokens: {} };
         }
     } catch (error) {
         logger.error('[Token Store] Failed to read token store file:', error);
+        await writeTokenStore({ tokens: {} });
         return { tokens: {} };
     }
 }
@@ -137,7 +142,21 @@ async function readTokenStore() {
  */
 async function writeTokenStore(tokenStore) {
     try {
-        await fs.writeFile(TOKEN_STORE_FILE, JSON.stringify(tokenStore, null, 2), 'utf8');
+        const content = JSON.stringify(tokenStore, null, 2);
+        const tempFile = TOKEN_STORE_FILE + '.tmp';
+        
+        await fs.writeFile(tempFile, content, 'utf8');
+        
+        try {
+            await fs.rename(tempFile, TOKEN_STORE_FILE);
+        } catch (renameError) {
+            if (renameError.code === 'ENOENT') {
+                await fs.writeFile(TOKEN_STORE_FILE, content, 'utf8');
+                await fs.unlink(tempFile).catch(() => {});
+            } else {
+                throw renameError;
+            }
+        }
     } catch (error) {
         logger.error('[Token Store] Failed to write token store file:', error);
     }
@@ -281,36 +300,127 @@ export async function cleanupExpiredTokens() {
 }
 
 /**
- * 检查token验证
+ * 检查token验证（同时支持 Header 和 Cookie）
  */
 export async function checkAuth(req) {
+    let token = null;
+
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+    }
+
+    if (!token) {
+        const cookieHeader = req.headers.cookie;
+        if (cookieHeader) {
+            const cookies = cookieHeader.split(';').map(c => c.trim());
+            for (const cookie of cookies) {
+                const [name, value] = cookie.split('=');
+                if (name === 'auth_token') {
+                    token = value;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!token) {
         return false;
     }
 
-    const token = authHeader.substring(7);
     const tokenInfo = await verifyToken(token);
-    
+
     return tokenInfo !== null;
 }
 
 /**
+ * 获取 CSRF Token
+ */
+export async function handleGetCsrfToken(req, res) {
+    const authHeader = req.headers.authorization;
+    let token = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+    }
+
+    if (!token) {
+        const cookieHeader = req.headers.cookie;
+        if (cookieHeader) {
+            const cookies = cookieHeader.split(';').map(c => c.trim());
+            for (const cookie of cookies) {
+                const [name, value] = cookie.split('=');
+                if (name === 'auth_token') {
+                    token = value;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!token) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: false,
+            message: 'No authentication token provided'
+        }));
+        return true;
+    }
+
+    const tokenInfo = await verifyToken(token);
+    if (!tokenInfo) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: false,
+            message: 'Invalid or expired token'
+        }));
+        return true;
+    }
+
+    const csrfToken = csrfManager.generateToken(token);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+        success: true,
+        csrfToken
+    }));
+    return true;
+}
+
+/**
  * 验证登录Token有效性（供前端检查登录状态使用）
+ * 同时支持 Authorization Header 和 Cookie 中的 Token
  */
 export async function handleValidateToken(req, res) {
+    let token = null;
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+    }
+
+    if (!token) {
+        const cookieHeader = req.headers.cookie;
+        if (cookieHeader) {
+            const cookies = cookieHeader.split(';').map(c => c.trim());
+            for (const cookie of cookies) {
+                const [name, value] = cookie.split('=');
+                if (name === 'auth_token') {
+                    token = value;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!token) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ valid: false, message: 'No token provided' }));
         return true;
     }
 
-    const token = authHeader.substring(7);
     const tokenInfo = await verifyToken(token);
-    
+
     if (tokenInfo) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ valid: true, message: 'Token is valid' }));
@@ -337,13 +447,39 @@ export async function handleLoginRequest(req, res) {
 
     const ip = getClientIp(req);
     
-    // 1. 检查锁定状态
+    // 1. 验证请求来源 (CSRF 防护)
+    if (!validateOrigin(req)) {
+        logger.warn(`[Auth] Invalid origin from IP: ${ip}`);
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: false,
+            message: 'Invalid origin',
+            messageCode: 'login.error.invalidOrigin'
+        }));
+        return true;
+    }
+
+    // 2. 验证 CSRF Token (如果请求头中有)
+    const csrfToken = req.headers['x-csrf-token'];
+    const sessionId = req.headers['x-session-id'];
+    if (sessionId && csrfToken && !csrfManager.validateToken(sessionId, csrfToken)) {
+        logger.warn(`[Auth] Invalid CSRF token from IP: ${ip}`);
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: false,
+            message: 'Invalid CSRF token',
+            messageCode: 'login.error.invalidCsrf'
+        }));
+        return true;
+    }
+
+    // 3. 检查锁定状态
     const lockout = loginAttemptManager.isLockedOut(ip);
     if (lockout.locked) {
         logger.warn(`[Auth] Login attempt from locked IP: ${ip}, reason: account_locked, remaining: ${lockout.remainingTime}s`);
         res.writeHead(429, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-            success: false, 
+        res.end(JSON.stringify({
+            success: false,
             message: `Account temporarily locked due to too many failed attempts. Please try again in ${lockout.remainingTime} seconds.`,
             messageCode: 'login.error.locked',
             messageParams: { time: lockout.remainingTime }
@@ -351,12 +487,12 @@ export async function handleLoginRequest(req, res) {
         return true;
     }
 
-    // 2. 频率限制
+    // 4. 频率限制
     if (loginAttemptManager.isTooFrequent(ip)) {
         logger.warn(`[Auth] Login attempt too frequent from IP: ${ip}, reason: rate_limit`);
         res.writeHead(429, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-            success: false, 
+        res.end(JSON.stringify({
+            success: false,
             message: 'Too many requests, please slow down.',
             messageCode: 'login.error.tooFrequent'
         }));
@@ -382,27 +518,35 @@ export async function handleLoginRequest(req, res) {
         
         if (isValid) {
             logger.info(`[Auth] Login successful from IP: ${ip}`);
-            // 登录成功，重置计数
             loginAttemptManager.reset(ip);
 
-            // Generate simple token
             const token = generateToken();
             const loginExpiry = CONFIG.LOGIN_EXPIRY || 3600;
             const expiryTime = Date.now() + (loginExpiry * 1000);
-            
-            // Store token info to local file
+            const rememberMe = requestData.rememberMe === true;
+
             await saveToken(token, {
                 username: 'admin',
                 loginTime: Date.now(),
-                expiryTime
+                expiryTime,
+                userAgent: req.headers['user-agent'],
+                ip: ip
             });
 
-             res.writeHead(200, { 'Content-Type': 'application/json' });
+            const csrfToken = csrfManager.generateToken(token);
+            const isProduction = process.env.NODE_ENV === 'production';
+
+            res.setHeader('Set-Cookie', [
+                `auth_token=${token}; ${generateCookieConfig(rememberMe, isProduction)}`,
+                `csrf_token=${csrfToken}; Path=/; SameSite=Strict${isProduction ? '; Secure' : ''}`
+            ]);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 success: true,
                 message: 'Login successful',
-                token,
-                expiresIn: `${loginExpiry} seconds`
+                expiresIn: `${loginExpiry} seconds`,
+                csrfToken
             }));
         } else {
             // 登录失败，记录

@@ -59,13 +59,17 @@ function generateResponsePage(isSuccess, message, provider = null) {
                             success: true
                         }, window.location.origin);
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.debug('[Gemini OAuth] Failed to notify opener:', e);
+                }
             };
             notifyOpener();
             setTimeout(() => {
                 try {
                     window.close();
-                } catch (e) {}
+                } catch (e) {
+                    console.debug('[Gemini OAuth] Failed to close window:', e);
+                }
             }, 300);
             let countdown = 10;
             const timer = setInterval(() => {

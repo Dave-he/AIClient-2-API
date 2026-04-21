@@ -13,6 +13,7 @@ import {
     getFileName,
     formatSystemPath
 } from '../utils/provider-utils.js';
+import { withFileLock, atomicWriteFile } from '../utils/file-lock.js';
 import { MODEL_PROVIDER } from '../utils/constants.js';
 
 // 存储 ProviderPoolManager 实例
@@ -88,7 +89,9 @@ export async function autoLinkProviderConfigs(config, options = {}) {
     if (totalNewProviders > 0) {
         const filePath = config.PROVIDER_POOLS_FILE_PATH || 'configs/provider_pools.json';
         try {
-            await pfs.writeFile(filePath, JSON.stringify(config.providerPools, null, 2), 'utf8');
+            await withFileLock(filePath, async () => {
+                await atomicWriteFile(filePath, JSON.stringify(config.providerPools, null, 2), 'utf8');
+            });
             logger.info(`[Auto-Link] Added ${totalNewProviders} new config(s) to provider pools:`);
             for (const [displayName, providers] of Object.entries(allNewProviders)) {
                 logger.info(`  ${displayName}: ${providers.length} config(s)`);
@@ -428,7 +431,25 @@ export async function getApiService(config, requestedModel = null, options = {})
             const customNameDisplay = serviceConfig.customName ? ` (${serviceConfig.customName})` : '';
             logger.info(`[API Service] Using pooled configuration for ${config.MODEL_PROVIDER}: ${serviceConfig.uuid}${customNameDisplay}${actualModelName ? ` (model: ${actualModelName})` : ''}`);
         } else {
-            const errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            const poolConfigs = config.providerPools?.[config.MODEL_PROVIDER];
+            let errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            
+            // 添加详细的诊断信息
+            if (!poolConfigs || poolConfigs.length === 0) {
+                errorMsg += `. Provider pool '${config.MODEL_PROVIDER}' is empty or not configured.`;
+            } else {
+                const healthyCount = poolConfigs.filter(p => p.isHealthy !== false && !p.isDisabled).length;
+                const totalCount = poolConfigs.length;
+                errorMsg += `. Pool has ${totalCount} node(s), but only ${healthyCount} healthy.`;
+            }
+            
+            // 添加配置建议
+            if (config.MODEL_PROVIDER === 'local-model') {
+                errorMsg += ` To use local models, please configure vLLM endpoints in configs/provider_pools.json or start the Python controller service.`;
+            } else {
+                errorMsg += ` Please check provider pool configuration in configs/provider_pools.json.`;
+            }
+            
             logger.error(errorMsg);
             throw new Error(errorMsg);
         }
@@ -504,7 +525,25 @@ export async function getApiServiceWithFallback(config, requestedModel = null, o
                 serviceConfig.MODEL_PROVIDER = actualProviderType;
             }
         } else {
-            const errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            const poolConfigs = config.providerPools?.[config.MODEL_PROVIDER];
+            let errorMsg = `[API Service] No healthy provider found in pool for ${config.MODEL_PROVIDER}${actualModelName ? ` supporting model: ${actualModelName}` : ''}`;
+            
+            // 添加详细的诊断信息
+            if (!poolConfigs || poolConfigs.length === 0) {
+                errorMsg += `. Provider pool '${config.MODEL_PROVIDER}' is empty or not configured.`;
+            } else {
+                const healthyCount = poolConfigs.filter(p => p.isHealthy !== false && !p.isDisabled).length;
+                const totalCount = poolConfigs.length;
+                errorMsg += `. Pool has ${totalCount} node(s), but only ${healthyCount} healthy.`;
+            }
+            
+            // 添加配置建议
+            if (config.MODEL_PROVIDER === 'local-model') {
+                errorMsg += ` To use local models, please configure vLLM endpoints in configs/provider_pools.json or start the Python controller service.`;
+            } else {
+                errorMsg += ` Please check provider pool configuration in configs/provider_pools.json.`;
+            }
+            
             logger.error(errorMsg);
             throw new Error(errorMsg);
         }
@@ -558,9 +597,19 @@ export async function getProviderStatus(config, options = {}) {
     try {
         if (providerPoolManager && providerPoolManager.providerPools) {
             providerPools = providerPoolManager.providerPools;
-        } else if (filePath && fs.existsSync(filePath)) {
-            const poolsData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-            providerPools = poolsData;
+        } else if (filePath) {
+            const fileExists = await (async () => {
+                try {
+                    await fs.promises.access(filePath, fs.constants.F_OK);
+                    return true;
+                } catch {
+                    return false;
+                }
+            })();
+            if (fileExists) {
+                const poolsData = await fs.promises.readFile(filePath, 'utf-8');
+                providerPools = JSON.parse(poolsData);
+            }
         }
     } catch (error) {
         logger.warn('[API Service] Failed to load provider pools:', error.message);

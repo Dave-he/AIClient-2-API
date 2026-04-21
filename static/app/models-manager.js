@@ -5,6 +5,7 @@
 
 import { t } from './i18n.js';
 import { apiClient } from './auth.js';
+import { eventBus, EVENTS } from './event-bus.js';
 
 // 模型数据缓存
 let modelsCache = null;
@@ -320,6 +321,7 @@ async function initModelsManager() {
 async function refreshModels() {
     modelsCache = null;
     await initModelsManager();
+    eventBus.emit(EVENTS.MODELS_UPDATED);
 }
 
 // 导出到全局作用域供 HTML 调用

@@ -2,6 +2,7 @@
 let eventSource = null;
 let autoScroll = true;
 let logs = [];
+const MAX_LOGS = 1000;
 
 // 提供商统计全局变量
 let providerStats = {
@@ -22,6 +23,7 @@ const elements = {
     get navItems() { return document.querySelectorAll('.nav-item'); },
     get logsContainer() { return document.getElementById('logsContainer'); },
     get clearLogsBtn() { return document.getElementById('clearLogs'); },
+    get clearAllLogsBtn() { return document.getElementById('clearAllLogs'); },
     get downloadLogsBtn() { return document.getElementById('downloadLogs'); },
     get toggleAutoScrollBtn() { return document.getElementById('toggleAutoScroll'); },
     get saveConfigBtn() { return document.getElementById('saveConfig'); },
@@ -42,7 +44,8 @@ export {
     logs,
     providerStats,
     elements,
-    REFRESH_INTERVALS
+    REFRESH_INTERVALS,
+    MAX_LOGS
 };
 
 // 更新函数
@@ -56,6 +59,20 @@ export function setAutoScroll(value) {
 
 export function addLog(log) {
     logs.push(log);
+    // FIFO 队列：超出限制时移除最旧的日志
+    if (logs.length > MAX_LOGS) {
+        logs.shift();
+    }
+}
+
+export function getLogCount() {
+    return logs.length;
+}
+
+export function clearOldLogs(keepCount = 500) {
+    if (logs.length > keepCount) {
+        logs = logs.slice(-keepCount);
+    }
 }
 
 export function clearLogs() {
@@ -65,3 +82,9 @@ export function clearLogs() {
 export function updateProviderStats(newStats) {
     providerStats = { ...providerStats, ...newStats };
 }
+
+// 导出清理函数
+export {
+    getLogCount,
+    clearOldLogs
+};

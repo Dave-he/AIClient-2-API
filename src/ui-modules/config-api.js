@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import logger from '../utils/logger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -9,37 +9,40 @@ import { initApiService } from '../services/service-manager.js';
 import { getRequestBody } from '../utils/common.js';
 import { broadcastEvent } from '../ui-modules/event-broadcast.js';
 import { HEALTH_CHECK, PASSWORD, NETWORK, RETRY } from '../utils/constants.js';
-import { getConfigHotReloader, HOT_RELOADABLE_CONFIGS } from '../utils/config-hot-reload.js';
+import { ENDPOINT_TYPE } from '../utils/common.js';
+import { withFileLock, atomicWriteFile } from '../utils/file-lock.js';
 
 /**
  * 重载配置文件
- * 动态导入config-manager并重新初始化配置
- * @returns {Promise<Object>} 返回重载后的配置对象
  */
 export async function reloadConfig(providerPoolManager) {
     try {
-        // Import config manager dynamically
-        const { initializeConfig } = await import('../core/config-manager.js');
-        
-        // Reload main config
-        const newConfig = await initializeConfig(process.argv.slice(2), 'configs/config.json');
-        // Update provider pool manager if available
-        if (providerPoolManager) {
-            providerPoolManager.providerPools = newConfig.providerPools;
-            providerPoolManager.initializeProviderStatus();
-        }
-        
-        // Update global CONFIG
-        Object.assign(CONFIG, newConfig);
-        logger.info('[UI API] Configuration reloaded:');
+        const configPath = 'configs/config.json';
+        // 使用文件锁进行重载，防止在写入期间读取
+        return await withFileLock(configPath, async () => {
+            // Import config manager dynamically
+            const { initializeConfig } = await import('../core/config-manager.js');
 
-        // Update initApiService - 清空并重新初始化服务实例
-        Object.keys(serviceInstances).forEach(key => delete serviceInstances[key]);
-        initApiService(CONFIG);
-        
-        logger.info('[UI API] Configuration reloaded successfully');
-        
-        return newConfig;
+            // Reload main config
+            const newConfig = await initializeConfig(process.argv.slice(2), configPath);
+            // Update provider pool manager if available
+            if (providerPoolManager) {
+                providerPoolManager.providerPools = newConfig.providerPools;
+                providerPoolManager.initializeProviderStatus(true);
+            }
+
+            // Update global CONFIG
+            Object.assign(CONFIG, newConfig);
+            logger.info('[UI API] Configuration reloaded:');
+
+            // Update initApiService - 清空并重新初始化服务实例
+            Object.keys(serviceInstances).forEach(key => delete serviceInstances[key]);
+            initApiService(CONFIG);
+
+            logger.info('[UI API] Configuration reloaded successfully');
+
+            return newConfig;
+        });
     } catch (error) {
         logger.error('[UI API] Failed to reload configuration:', error);
         throw error;
@@ -109,9 +112,19 @@ export async function handleGetConfig(req, res, currentConfig) {
 /**
  * 更新配置
  */
-export async function handleUpdateConfig(req, res, currentConfig) {
+export async function handleUpdateConfig(req, res, currentConfig, providerPoolManager = null) {
     try {
         const body = await getRequestBody(req);
+        const configPath = 'configs/config.json';
+        return await withFileLock(configPath, () => _handleUpdateConfig(req, res, currentConfig, body));
+    } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'File operation failed: ' + err.message } }));
+        return true;
+    }
+}
+async function _handleUpdateConfig(req, res, currentConfig, body) {
+    try {
         const newConfig = body;
 
         // Update config values in memory（含类型校验）
@@ -131,9 +144,43 @@ export async function handleUpdateConfig(req, res, currentConfig) {
             if (Number.isInteger(port) && port >= NETWORK.MIN_PORT && port <= NETWORK.MAX_PORT) currentConfig.SERVER_PORT = port;
         }
         if (newConfig.MODEL_PROVIDER !== undefined) {
+            const oldProvider = currentConfig.MODEL_PROVIDER;
             currentConfig.MODEL_PROVIDER = newConfig.MODEL_PROVIDER;
             currentConfig.DEFAULT_MODEL_PROVIDERS = [];
             normalizeConfiguredProviders(currentConfig);
+            
+            // 如果提供商发生变化，需要重新初始化服务实例
+            if (oldProvider !== currentConfig.MODEL_PROVIDER) {
+                Object.keys(serviceInstances).forEach(key => delete serviceInstances[key]);
+                await initApiService(currentConfig);
+                
+                // 更新 providerPoolManager
+                if (providerPoolManager) {
+                    providerPoolManager.initializeProviderStatus();
+                }
+                
+                logger.info('[UI API] Service instances reinitialized due to MODEL_PROVIDER change');
+            }
+        }
+        
+        if (newConfig.DEFAULT_MODEL_PROVIDERS !== undefined && Array.isArray(newConfig.DEFAULT_MODEL_PROVIDERS)) {
+            const oldProviders = [...(currentConfig.DEFAULT_MODEL_PROVIDERS || [])];
+            currentConfig.DEFAULT_MODEL_PROVIDERS = [];
+            normalizeConfiguredProviders(currentConfig);
+            
+            // 如果提供商列表发生变化，需要重新初始化服务实例
+            const providersChanged = JSON.stringify(oldProviders) !== JSON.stringify(currentConfig.DEFAULT_MODEL_PROVIDERS);
+            if (providersChanged) {
+                Object.keys(serviceInstances).forEach(key => delete serviceInstances[key]);
+                await initApiService(currentConfig);
+                
+                // 更新 providerPoolManager
+                if (providerPoolManager) {
+                    providerPoolManager.initializeProviderStatus();
+                }
+                
+                logger.info('[UI API] Service instances reinitialized due to DEFAULT_MODEL_PROVIDERS change');
+            }
         }
         if (newConfig.SYSTEM_PROMPT_FILE_PATH !== undefined) {
             const p = String(newConfig.SYSTEM_PROMPT_FILE_PATH);
@@ -178,8 +225,26 @@ export async function handleUpdateConfig(req, res, currentConfig) {
         if (newConfig.MAX_ERROR_COUNT !== undefined) currentConfig.MAX_ERROR_COUNT = newConfig.MAX_ERROR_COUNT;
         if (newConfig.WARMUP_TARGET !== undefined) currentConfig.WARMUP_TARGET = newConfig.WARMUP_TARGET;
         if (newConfig.REFRESH_CONCURRENCY_PER_PROVIDER !== undefined) currentConfig.REFRESH_CONCURRENCY_PER_PROVIDER = newConfig.REFRESH_CONCURRENCY_PER_PROVIDER;
-        if (newConfig.providerFallbackChain !== undefined) currentConfig.providerFallbackChain = newConfig.providerFallbackChain;
-        if (newConfig.modelFallbackMapping !== undefined) currentConfig.modelFallbackMapping = newConfig.modelFallbackMapping;
+        if (newConfig.providerFallbackChain !== undefined) {
+            const oldFallbackChain = JSON.stringify(currentConfig.providerFallbackChain || {});
+            currentConfig.providerFallbackChain = newConfig.providerFallbackChain;
+            
+            // 更新 providerPoolManager 中的 fallbackChain
+            if (providerPoolManager && oldFallbackChain !== JSON.stringify(currentConfig.providerFallbackChain)) {
+                providerPoolManager.fallbackChain = currentConfig.providerFallbackChain;
+                logger.info('[UI API] Provider fallback chain updated');
+            }
+        }
+        if (newConfig.modelFallbackMapping !== undefined) {
+            const oldMapping = JSON.stringify(currentConfig.modelFallbackMapping || {});
+            currentConfig.modelFallbackMapping = newConfig.modelFallbackMapping;
+            
+            // 更新 providerPoolManager 中的 modelFallbackMapping
+            if (providerPoolManager && oldMapping !== JSON.stringify(currentConfig.modelFallbackMapping)) {
+                providerPoolManager.modelFallbackMapping = currentConfig.modelFallbackMapping;
+                logger.info('[UI API] Model fallback mapping updated');
+            }
+        }
         
         // Proxy settings
         if (newConfig.PROXY_URL !== undefined) currentConfig.PROXY_URL = newConfig.PROXY_URL;
@@ -270,7 +335,7 @@ export async function handleUpdateConfig(req, res, currentConfig) {
             const promptPath = currentConfig.SYSTEM_PROMPT_FILE_PATH || 'configs/input_system_prompt.txt';
             try {
                 const relativePath = path.relative(process.cwd(), promptPath);
-                writeFileSync(promptPath, newConfig.systemPrompt, 'utf-8');
+                await atomicWriteFile(promptPath, newConfig.systemPrompt, 'utf-8');
 
                 // 广播更新事件
                 broadcastEvent('config_update', {
@@ -331,7 +396,7 @@ export async function handleUpdateConfig(req, res, currentConfig) {
                 SCHEDULED_HEALTH_CHECK: currentConfig.SCHEDULED_HEALTH_CHECK
             };
 
-            writeFileSync(configPath, JSON.stringify(configToSave, null, 2), 'utf-8');
+            await atomicWriteFile(configPath, JSON.stringify(configToSave, null, 2), 'utf-8');
             logger.info('[UI API] Configuration saved to configs/config.json');
             
             // 广播更新事件
@@ -419,22 +484,22 @@ export async function handleUpdateAdminPassword(req, res) {
 
         if (!password || password.trim() === '') {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ 
-                error: { 
+            res.end(JSON.stringify({
+                error: {
                     message: 'Password cannot be empty',
                     messageCode: 'common.passwordEmpty'
-                } 
+                }
             }));
             return true;
         }
 
         if (password.trim().length < PASSWORD.MIN_LENGTH) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ 
-                error: { 
+            res.end(JSON.stringify({
+                error: {
                     message: `Password must be at least ${PASSWORD.MIN_LENGTH} characters`,
                     messageCode: 'common.passwordTooShort'
-                } 
+                }
             }));
             return true;
         }
@@ -449,8 +514,12 @@ export async function handleUpdateAdminPassword(req, res) {
         const stored = `pbkdf2:${salt}:${hash}`;
 
         const pwdFilePath = path.join(process.cwd(), 'configs', 'pwd');
-        await fs.writeFile(pwdFilePath, stored, 'utf-8');
-        
+
+        // 使用文件锁和原子化写入
+        await withFileLock(pwdFilePath, async () => {
+            await atomicWriteFile(pwdFilePath, stored, 'utf-8');
+        });
+
         logger.info('[UI API] Admin password updated successfully');
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -469,171 +538,4 @@ export async function handleUpdateAdminPassword(req, res) {
         }));
         return true;
     }
-}
-
-export async function handleHotReloadStatus(req, res) {
-    try {
-        const hotReloader = getConfigHotReloader();
-        const status = hotReloader.getStatus();
-        
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            success: true,
-            data: status
-        }));
-        return true;
-    } catch (error) {
-        logger.error('[UI API] Failed to get hot reload status:', error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            error: {
-                message: 'Failed to get hot reload status: ' + error.message
-            }
-        }));
-        return true;
-    }
-}
-
-export async function handleHotReloadUpdate(req, res) {
-    try {
-        const body = await getRequestBody(req);
-        const { updates, options = {} } = body;
-        
-        const hotReloader = getConfigHotReloader();
-        const result = await hotReloader.updateConfig(updates, options);
-        
-        if (result.success) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                success: true,
-                message: 'Configuration updated successfully',
-                changes: result.changes
-            }));
-        } else {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                success: false,
-                message: 'Failed to update configuration',
-                errors: result.errors,
-                changes: result.changes
-            }));
-        }
-        return true;
-    } catch (error) {
-        logger.error('[UI API] Failed to hot reload config:', error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            error: {
-                message: 'Failed to hot reload config: ' + error.message
-            }
-        }));
-        return true;
-    }
-}
-
-export async function handleHotReloadReloadAll(req, res) {
-    try {
-        const hotReloader = getConfigHotReloader();
-        const result = await hotReloader.reloadAll();
-        
-        if (result.success) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                success: true,
-                message: result.message,
-                duration: result.duration
-            }));
-        } else {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                success: false,
-                message: result.message
-            }));
-        }
-        return true;
-    } catch (error) {
-        logger.error('[UI API] Failed to reload all config:', error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            error: {
-                message: 'Failed to reload all config: ' + error.message
-            }
-        }));
-        return true;
-    }
-}
-
-export async function handleHotReloadAuditLog(req, res) {
-    try {
-        const hotReloader = getConfigHotReloader();
-        const query = req.url?.split('?')[1] || '';
-        const params = new URLSearchParams(query);
-        const limit = parseInt(params.get('limit') || '50');
-        const action = params.get('action');
-        
-        const log = hotReloader.getAuditLog({ limit, action });
-        
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            success: true,
-            data: log
-        }));
-        return true;
-    } catch (error) {
-        logger.error('[UI API] Failed to get hot reload audit log:', error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            error: {
-                message: 'Failed to get hot reload audit log: ' + error.message
-            }
-        }));
-        return true;
-    }
-}
-
-export async function handleHotReloadInvalidateAdapter(req, res) {
-    try {
-        const body = await getRequestBody(req);
-        const { providerType, uuid } = body;
-        
-        if (!providerType) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                success: false,
-                message: 'providerType is required'
-            }));
-            return true;
-        }
-        
-        const hotReloader = getConfigHotReloader();
-        const result = await hotReloader.invalidateProviderAdapter(providerType, uuid);
-        
-        if (result.success) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                success: true,
-                message: 'Adapter invalidated successfully'
-            }));
-        } else {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                success: false,
-                message: result.message
-            }));
-        }
-        return true;
-    } catch (error) {
-        logger.error('[UI API] Failed to invalidate adapter:', error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            error: {
-                message: 'Failed to invalidate adapter: ' + error.message
-            }
-        }));
-        return true;
-    }
-}
-
-export function getHotReloadableConfigs() {
-    return HOT_RELOADABLE_CONFIGS;
 }

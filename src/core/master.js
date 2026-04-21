@@ -19,12 +19,12 @@ import { fileURLToPath } from 'url';
 import { isRetryableNetworkError } from '../utils/common.js';
 import os from 'os';
 import { initializeConfig, CONFIG } from '../core/config-manager.js';
+import { getIPCManager } from './ipc-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 子进程实例
-let workerProcess = null;
+const ipcManager = getIPCManager();
 
 // 子进程状态
 let workerStatus = {
@@ -52,8 +52,9 @@ const resourceMonitorStatus = {
  * 启动子进程
  */
 function startWorker() {
-    if (workerProcess) {
-        logger.info('[Master] Worker process already running, PID:', workerProcess.pid);
+    if (ipcManager.getStats().workerConnected) {
+        const stats = ipcManager.getStats();
+        logger.info('[Master] Worker process already running, PID:', stats.workerConnected ? workerStatus.pid : 'unknown');
         return;
     }
 
@@ -61,7 +62,7 @@ function startWorker() {
     logger.info('[Master] Worker script:', config.workerScript);
     logger.info('[Master] Worker args:', config.args.join(' '));
 
-    workerProcess = fork(config.workerScript, config.args, {
+    const worker = fork(config.workerScript, config.args, {
         stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
         env: {
             ...process.env,
@@ -69,34 +70,39 @@ function startWorker() {
         }
     });
 
-    workerStatus.pid = workerProcess.pid;
+    workerStatus.pid = worker.pid;
     workerStatus.startTime = new Date().toISOString();
 
-    logger.info('[Master] Worker process started, PID:', workerProcess.pid);
+    logger.info('[Master] Worker process started, PID:', worker.pid);
 
-    // 监听子进程消息
-    workerProcess.on('message', (message) => {
-        logger.info('[Master] Received message from worker:', message);
-        handleWorkerMessage(message);
-    });
-
-    // 监听子进程退出
-    workerProcess.on('exit', (code, signal) => {
+    ipcManager.onWorkerDisconnect = (code, signal) => {
         logger.info(`[Master] Worker process exited with code ${code}, signal ${signal}`);
-        workerProcess = null;
         workerStatus.pid = null;
-
-        // 如果不是主动重启导致的退出，尝试自动重启
         if (!workerStatus.isRestarting && code !== 0) {
             logger.info('[Master] Worker crashed, attempting auto-restart...');
             scheduleRestart();
         }
+    };
+
+    ipcManager.onHeartbeatTimeout = () => {
+        logger.error('[Master] Worker heartbeat timeout, triggering restart...');
+        restartWorker();
+    };
+
+    ipcManager.registerMessageHandler('ready', (message) => {
+        logger.info('[Master] Worker is ready');
     });
 
-    // 监听子进程错误
-    workerProcess.on('error', (error) => {
-        logger.error('[Master] Worker process error:', error.message);
+    ipcManager.registerMessageHandler('restart_request', (message) => {
+        logger.info('[Master] Worker requested restart');
+        restartWorker();
     });
+
+    ipcManager.registerMessageHandler('status', (message) => {
+        logger.info('[Master] Worker status:', message.data);
+    });
+
+    ipcManager.setWorkerProcess(worker);
 }
 
 /**
@@ -106,36 +112,37 @@ function startWorker() {
  */
 function stopWorker(graceful = true) {
     return new Promise((resolve) => {
-        if (!workerProcess) {
+        const stats = ipcManager.getStats();
+        if (!stats.workerConnected) {
             logger.info('[Master] No worker process to stop');
             resolve();
             return;
         }
 
-        logger.info('[Master] Stopping worker process, PID:', workerProcess.pid);
+        logger.info('[Master] Stopping worker process, PID:', workerStatus.pid);
 
         const timeout = setTimeout(() => {
-            if (workerProcess) {
+            const worker = ipcManager.workerProcess;
+            if (worker) {
                 logger.info('[Master] Force killing worker process...');
-                workerProcess.kill('SIGKILL');
+                worker.kill('SIGKILL');
             }
             resolve();
-        }, 5000); // 5秒超时后强制杀死
+        }, 5000);
 
-        workerProcess.once('exit', () => {
+        const handleExit = () => {
             clearTimeout(timeout);
-            workerProcess = null;
-            workerStatus.pid = null;
             logger.info('[Master] Worker process stopped');
             resolve();
-        });
+        };
+
+        ipcManager.onWorkerDisconnect = handleExit;
 
         if (graceful) {
-            // 发送优雅关闭信号
-            workerProcess.send({ type: 'shutdown' });
-            workerProcess.kill('SIGTERM');
+            ipcManager.send({ type: 'shutdown' });
+            ipcManager.workerProcess?.kill('SIGTERM');
         } else {
-            workerProcess.kill('SIGKILL');
+            ipcManager.workerProcess?.kill('SIGKILL');
         }
     });
 }
@@ -199,40 +206,18 @@ function scheduleRestart() {
 }
 
 /**
- * 处理来自子进程的消息
- * @param {Object} message - 消息对象
- */
-function handleWorkerMessage(message) {
-    if (!message || !message.type) return;
-
-    switch (message.type) {
-        case 'ready':
-            logger.info('[Master] Worker is ready');
-            break;
-        case 'restart_request':
-            logger.info('[Master] Worker requested restart');
-            restartWorker();
-            break;
-        case 'status':
-            logger.info('[Master] Worker status:', message.data);
-            break;
-        default:
-            logger.info('[Master] Unknown message type:', message.type);
-    }
-}
-
-/**
  * 获取子进程资源使用情况
  * @returns {Object|null}
  */
 function getWorkerResourceUsage() {
-    if (!workerProcess) {
+    const worker = ipcManager.workerProcess;
+    if (!worker) {
         return null;
     }
 
     try {
-        const usage = workerProcess.resourceUsage ? workerProcess.resourceUsage() : null;
-        const memory = workerProcess.memoryUsage ? workerProcess.memoryUsage() : null;
+        const usage = worker.resourceUsage ? worker.resourceUsage() : null;
+        const memory = worker.memoryUsage ? worker.memoryUsage() : null;
         
         const totalMemory = process.platform === 'win32' 
             ? (() => {
@@ -246,7 +231,7 @@ function getWorkerResourceUsage() {
             : os.totalmem();
 
         return {
-            pid: workerProcess.pid,
+            pid: worker.pid,
             cpu: usage ? {
                 user: usage.userCPUTime,
                 system: usage.systemCPUTime,
@@ -385,7 +370,7 @@ function startResourceMonitor() {
 
     // 设置定时任务
     setInterval(() => {
-        if (workerProcess && !workerStatus.isRestarting) {
+        if (ipcManager.workerProcess && !workerStatus.isRestarting) {
             recordResourceUsage();
         }
     }, config.resourceMonitor.interval);
@@ -404,7 +389,7 @@ function getStatus() {
             pid: process.pid,
             uptime: process.uptime(),
             memoryUsage: process.memoryUsage(),
-            memoryPercentage: ((process.memoryUsage().rss / require('os').totalmem()) * 100).toFixed(2)
+            memoryPercentage: ((process.memoryUsage().rss / os.totalmem()) * 100).toFixed(2)
         },
         worker: {
             pid: workerStatus.pid,
@@ -412,7 +397,7 @@ function getStatus() {
             restartCount: workerStatus.restartCount,
             lastRestartTime: workerStatus.lastRestartTime,
             isRestarting: workerStatus.isRestarting,
-            isRunning: workerProcess !== null,
+            isRunning: ipcManager.workerProcess !== null,
             resourceUsage: workerUsage,
             cpuPercentage: cpuPercent.toFixed(2),
             recentCpuUsage: [...resourceMonitorStatus.recentCpuUsage],
@@ -432,10 +417,46 @@ function getStatus() {
 }
 
 /**
- * 创建主进程管理 HTTP 服务器
+ * 检查端口是否被占用
  */
-function createMasterServer() {
-    const server = http.createServer(async (req, res) => {
+function isPortInUse(port) {
+    return new Promise((resolve) => {
+        const server = http.createServer();
+        server.once('error', () => resolve(true));
+        server.once('listening', () => {
+            server.close(() => resolve(false));
+        });
+        server.listen(port);
+    });
+}
+
+/**
+ * 创建管理服务器
+ */
+async function createMasterServer() {
+    const port = config.masterPort;
+    
+    const inUse = await isPortInUse(port);
+    if (inUse) {
+        logger.warn(`[Master] Port ${port} is already in use, attempting to find existing master...`);
+        
+        try {
+            const response = await fetch(`http://localhost:${port}/master/status`);
+            if (response.ok) {
+                const status = await response.json();
+                logger.warn(`[Master] Found existing master process, PID: ${status.pid || 'unknown'}`);
+                logger.warn(`[Master] This instance will exit to avoid conflicts`);
+                process.exit(1);
+            }
+        } catch {
+            logger.warn(`[Master] Port ${port} occupied but no response from existing master`);
+        }
+        
+        logger.error(`[Master] Cannot start: port ${port} is already in use`);
+        process.exit(1);
+    }
+    
+    const server = http.createServer((req, res) => {
         const url = new URL(req.url, `http://${req.headers.host}`);
         const path = url.pathname;
         const method = req.method;
@@ -461,18 +482,28 @@ function createMasterServer() {
         // 重启端点
         if (method === 'POST' && path === '/master/restart') {
             logger.info('[Master] Restart requested via API');
-            const result = await restartWorker();
-            res.writeHead(result.success ? 200 : 500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(result));
+            restartWorker().then(result => {
+                res.writeHead(result.success ? 200 : 500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            }).catch(error => {
+                logger.error('[Master] Restart error:', error.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, message: 'Restart failed: ' + error.message }));
+            });
             return;
         }
 
         // 停止端点
         if (method === 'POST' && path === '/master/stop') {
             logger.info('[Master] Stop requested via API');
-            await stopWorker(true);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true, message: 'Worker stopped' }));
+            stopWorker(true).then(() => {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, message: 'Worker stopped' }));
+            }).catch(error => {
+                logger.error('[Master] Stop error:', error.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, message: 'Stop failed: ' + error.message }));
+            });
             return;
         }
 
@@ -551,12 +582,14 @@ function setupSignalHandlers() {
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-        logger.error('[Master] Unhandled rejection at:', promise, 'reason:', reason);
-        
-        // 检查是否为可重试的网络错误
-        if (reason && isRetryableNetworkError(reason)) {
-            logger.warn('[Master] Network error in promise rejection, continuing operation...');
-            return; // 不退出程序，继续运行
+        if (reason instanceof Error) {
+            logger.error('[Master] Unhandled rejection at:', promise, 'reason:', reason.message);
+            if (isRetryableNetworkError(reason)) {
+                logger.warn('[Master] Network error in promise rejection, continuing operation...');
+                return;
+            }
+        } else {
+            logger.error('[Master] Unhandled rejection with non-Error reason:', reason);
         }
     });
 }
@@ -601,7 +634,7 @@ async function main() {
     setupSignalHandlers();
 
     // 创建管理服务器
-    createMasterServer();
+    await createMasterServer();
 
     // 启动子进程
     startWorker();

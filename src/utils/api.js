@@ -2,13 +2,17 @@ import axios from 'axios';
 import { router } from '@/router/index.js';
 import { performanceMonitor } from '@/utils/performance.js';
 import { logger } from '@/utils/logger.js';
+import { cache, pendingRequests, isCacheable, requestConfig } from '@/utils/request-cache.js';
+import { errorHandler } from '@/utils/error-handler.js';
+
+const getCsrfToken = () => {
+  return sessionStorage.getItem('csrfToken') || null;
+};
 
 const createApiInstance = (baseURL = window.location.origin) => {
-  const token = localStorage.getItem('authToken');
   const instance = axios.create({
     baseURL,
     headers: {
-      'Authorization': token ? `Bearer ${token}` : '',
       'Content-Type': 'application/json'
     },
     timeout: 30000,
@@ -17,9 +21,9 @@ const createApiInstance = (baseURL = window.location.origin) => {
 
   instance.interceptors.request.use(
     (config) => {
-      const currentToken = localStorage.getItem('authToken');
-      if (currentToken) {
-        config.headers.Authorization = `Bearer ${currentToken}`;
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        config.headers['X-CSRF-Token'] = csrfToken;
       }
       return config;
     },
@@ -34,16 +38,14 @@ const createApiInstance = (baseURL = window.location.origin) => {
     },
     (error) => {
       if (error.response?.status === 401) {
-        localStorage.removeItem('authToken');
+        sessionStorage.removeItem('csrfToken');
         if (router) {
           router.push('/login');
         } else {
           window.location.href = '/vue/login';
         }
-      } else if (error.response?.status === 403) {
-        window.$toast?.error('权限不足');
-      } else if (error.response?.status === 500) {
-        window.$toast?.error('服务器内部错误');
+      } else {
+        errorHandler.handleApiError(error);
       }
       return Promise.reject(error);
     }
@@ -84,11 +86,59 @@ const withPerformance = async (fn, method, url) => {
 
 export const apiClient = {
   get: async (url, config = {}) => {
-    return withPerformance(
+    const cacheKey = `GET:${url}:${JSON.stringify(config.params || {})}`;
+    
+    // Check cache first for GET requests
+    if (isCacheable({ method: 'get', url })) {
+      const cachedData = cache.get(cacheKey);
+      if (cachedData) {
+        logger.debug(`Cache hit for ${url}`);
+        return cachedData;
+      }
+    }
+
+    // Deduplicate pending requests
+    if (requestConfig.enableDeduplication) {
+      const pendingKey = pendingRequests.getKey({ method: 'get', url, params: config.params });
+      if (pendingRequests.has(pendingKey)) {
+        logger.debug(`Deduplicating request for ${url}`);
+        return pendingRequests.get(pendingKey);
+      }
+    }
+
+    const requestPromise = withPerformance(
       () => requestWithRetry(() => api.get(url, config)),
       'GET',
       url
-    );
+    ).then(response => {
+      // Cache the response
+      if (isCacheable({ method: 'get', url })) {
+        cache.set(cacheKey, response);
+      }
+      
+      // Remove from pending
+      if (requestConfig.enableDeduplication) {
+        const pendingKey = pendingRequests.getKey({ method: 'get', url, params: config.params });
+        pendingRequests.remove(pendingKey);
+      }
+      
+      return response;
+    }).catch(error => {
+      // Remove from pending on error
+      if (requestConfig.enableDeduplication) {
+        const pendingKey = pendingRequests.getKey({ method: 'get', url, params: config.params });
+        pendingRequests.remove(pendingKey);
+      }
+      throw error;
+    });
+
+    // Add to pending requests
+    if (requestConfig.enableDeduplication) {
+      const pendingKey = pendingRequests.getKey({ method: 'get', url, params: config.params });
+      pendingRequests.add(pendingKey, requestPromise);
+    }
+
+    return requestPromise;
   },
 
   post: async (url, data = {}, config = {}) => {
@@ -190,16 +240,21 @@ export const apiClient = {
 };
 
 export const getToken = () => {
-  return localStorage.getItem('authToken');
+  return null;
 };
 
 export const setToken = (token) => {
-  localStorage.setItem('authToken', token);
 };
 
 export const removeToken = () => {
-  localStorage.removeItem('authToken');
+  sessionStorage.removeItem('csrfToken');
 };
+
+export const setCsrfToken = (token) => {
+  sessionStorage.setItem('csrfToken', token);
+};
+
+export const getCsrfToken = getCsrfToken;
 
 export const refreshApiInstance = (baseURL) => {
   return createApiInstance(baseURL);

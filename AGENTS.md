@@ -85,7 +85,7 @@ AIClient-2-API/
 │       ├── tls-sidecar.js        # TLS Sidecar 管理
 │       ├── grok-assets-proxy.js  # Grok 资源代理
 │       └── constants.js          # 全局常量定义
-├── static/                       # 前端静态资源
+├── static/                       # 旧前端静态资源（原生 JS）
 │   ├── app/                      # 前端应用核心
 │   │   ├── app.js                # 主应用逻辑
 │   │   ├── auth.js               # 认证逻辑
@@ -97,6 +97,20 @@ AIClient-2-API/
 │   ├── components/               # Web Components
 │   ├── index.html                # 主页面
 │   └── login.html                # 登录页面
+├── app-vue/                      # 新前端（Vue 3 + Vite）
+│   ├── src/                      # 源代码
+│   │   ├── components/           # Vue 组件
+│   │   ├── composables/          # 组合式函数
+│   │   ├── views/                # 页面视图
+│   │   ├── router/               # 路由配置
+│   │   ├── locales/              # 国际化文件
+│   │   ├── utils/                # 工具函数
+│   │   ├── App.vue               # 根组件
+│   │   └── main.js               # 入口文件
+│   ├── dist/                     # 构建输出目录
+│   ├── vite.config.js            # Vite 配置
+│   ├── package.json              # 依赖管理
+│   └── .env.example              # 环境变量示例
 ├── configs/                      # 配置文件目录
 │   ├── config.json               # 主配置文件
 │   ├── plugins.json              # 插件配置
@@ -286,6 +300,91 @@ Score = baseScore + usageScore + sequenceScore + loadScore + freshBonus
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### 7. Vue 前端架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Vue 前端 (app-vue/)                        │
+│                    独立 Vue 3 应用                           │
+├─────────────────────────────────────────────────────────────┤
+│  技术栈：                                                    │
+│  ├── Vue 3 + Composition API                               │
+│  ├── Vue Router 4（路由管理）                               │
+│  ├── Vite 8（构建工具）                                      │
+│  ├── Element Plus（UI 组件库）                              │
+│  ├── Vue I18n（国际化）                                     │
+│  ├── Axios（HTTP 请求）                                     │
+│  └── Tailwind CSS（样式框架）                               │
+│                                                             │
+│  目录结构：                                                  │
+│  ├── src/components/     # 可复用组件                       │
+│  │   ├── Header.vue       # 页头（语言/主题切换）            │
+│  │   ├── Sidebar.vue      # 侧边栏导航                      │
+│  │   ├── Layout.vue       # 布局容器                       │
+│  │   ├── Modal.vue        # 模态框                         │
+│  │   ├── Toast.vue        # 消息提示                       │
+│  │   ├── Loading.vue      # 加载状态                       │
+│  │   └── ...              # 其他组件                        │
+│  ├── src/composables/     # 组合式函数                      │
+│  │   ├── useApi.js        # API 调用封装                    │
+│  │   ├── useAuth.js       # 认证逻辑                       │
+│  │   ├── useConfig.js     # 配置管理                       │
+│  │   ├── useDashboard.js  # 仪表板数据                     │
+│  │   ├── useProviders.js  # 提供商管理                     │
+│  │   └── ...              # 其他 composables               │
+│  ├── src/views/           # 页面视图                        │
+│  │   ├── core/            # 核心页面（Dashboard/Login）      │
+│  │   ├── config/          # 配置页面                       │
+│  │   ├── providers/       # 提供商管理                     │
+│  │   ├── stats/           # 统计页面                       │
+│  │   ├── plugins/         # 插件页面                       │
+│  │   └── tools/           # 工具页面                       │
+│  ├── src/router/          # 路由配置                        │
+│  ├── src/locales/         # 国际化文件（zh-CN/en）          │
+│  └── src/utils/           # 工具函数                        │
+│                                                             │
+│  独立运行：                                                  │
+│  ├── npm run dev      # 开发模式（端口 5173）               │
+│  ├── npm run build    # 构建生产版本                       │
+│  ├── npm run preview  # 预览构建结果                       │
+│  └── 环境变量配置：.env 文件                                │
+│                                                             │
+│  与后端集成：                                               │
+│  ├── 开发模式：Vite proxy 代理到后端 API                    │
+│  └── 生产模式：构建后由 ui-manager.js 服务                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**独立开发流程**：
+```bash
+# 1. 进入 Vue 项目目录
+cd app-vue
+
+# 2. 安装依赖（推荐使用 pnpm）
+pnpm install
+
+# 或使用 npm
+npm install
+
+# 3. 配置环境变量（复制示例文件）
+cp .env.example .env
+
+# 4. 启动开发服务器
+pnpm dev
+
+# 或使用 npm
+npm run dev
+
+# 5. 访问 http://localhost:5173
+```
+
+**环境变量配置**（`.env`）：
+```
+VITE_PORT=5173
+VITE_API_BASE_URL=http://localhost:3000
+VITE_PREVIEW_PORT=9090
+```
+
 ---
 
 ## 支持的提供商
@@ -411,9 +510,31 @@ journalctl -u aiclient-python -f
 ```
 
 ### 日志位置
-- 日志目录：`logs/`
+- **Node.js 部分**：通过 `configs/config.json` 中的 `LOG_DIR` 配置项指定，默认为 `logs/`
+- **Python 部分**：通过 `app-controller/config.yaml` 中的 `settings.logging.log_dir` 配置项指定，默认为 `logs/`
 - 最大文件大小：10MB
 - 最大保留文件数：10
+
+### 日志路径配置示例
+
+**Node.js 配置** (`configs/config.json`)：
+```json
+{
+  "LOG_DIR": "/path/to/your/logs"
+}
+```
+
+**Python 配置** (`app-controller/config.yaml`)：
+```yaml
+settings:
+  logging:
+    log_dir: /path/to/your/logs
+```
+
+**Python 命令行参数**：
+```bash
+python main.py --log-dir /path/to/your/logs
+```
 
 ### 管理端点
 - `GET /master/status` - 主进程状态
@@ -471,19 +592,83 @@ journalctl -u aiclient-python -f
 
 ---
 
+## 启动方式
+
+### 后端服务启动
+
+```bash
+# 进入项目根目录
+cd /root/AIClient-2-API
+
+# 使用 pnpm 安装依赖
+pnpm install
+
+# 启动主进程（推荐方式）
+pnpm start
+
+# 或直接运行主进程
+node src/core/master.js
+
+# 指定端口启动
+node src/core/master.js --port 3000
+
+# 指定配置文件
+node src/core/master.js --config configs/config.json
+```
+
+### Vue 前端开发模式
+
+```bash
+# 进入 Vue 项目目录
+cd app-vue
+
+# 使用 pnpm 安装依赖
+pnpm install
+
+# 启动开发服务器
+pnpm dev
+
+# 构建生产版本
+pnpm build
+
+# 预览构建结果
+pnpm preview
+```
+
+### 服务管理（Linux 系统）
+
+```bash
+# 使用 systemctl 管理服务
+sudo systemctl start aiclient-node
+sudo systemctl stop aiclient-node
+sudo systemctl restart aiclient-node
+sudo systemctl status aiclient-node
+
+# 查看服务日志
+journalctl -u aiclient-node -f
+```
+
+---
+
 ## 测试
 
 ```bash
-# 运行所有测试
-npm test
+# 使用 pnpm 运行所有测试
+pnpm test
 
 # 运行单元测试
-npm run test:unit
+pnpm test:unit
 
 # 运行集成测试
-npm run test:integration
+pnpm test:integration
 
 # 测试摘要
+pnpm test:summary
+
+# 或使用 npm
+npm test
+npm run test:unit
+npm run test:integration
 npm run test:summary
 ```
 
