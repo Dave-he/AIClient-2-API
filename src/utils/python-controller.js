@@ -1,11 +1,11 @@
 import logger from './logger.js';
 import { CONFIG } from '../core/config-manager.js';
 
-function getDefaultControllerUrl() {
-    return CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
+function resolveControllerUrl() {
+    return controllerUrl || CONFIG.CONTROLLER_BASE_URL || 'http://localhost:5000';
 }
 
-let controllerUrl = getDefaultControllerUrl();
+let controllerUrl = null;
 
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_RETRY_DELAY = 1000;
@@ -19,7 +19,7 @@ export function setControllerUrl(url) {
 }
 
 export function getControllerUrl() {
-    return controllerUrl;
+    return resolveControllerUrl();
 }
 
 function createCacheKey(endpoint, method, body) {
@@ -51,7 +51,7 @@ async function retryAsync(fn, maxRetries, delay, context) {
 }
 
 async function callPythonController(endpoint, method = 'GET', body = null, headers = {}, options = {}) {
-    const url = `${controllerUrl}${endpoint}`;
+    const url = `${resolveControllerUrl()}${endpoint}`;
     const {
         timeout = DEFAULT_TIMEOUT,
         maxRetries = DEFAULT_MAX_RETRIES,
@@ -273,7 +273,7 @@ export async function getCacheStats() {
 }
 
 export async function callPythonControllerRaw(endpoint, method = 'GET', body = null, options = {}) {
-    const url = `${controllerUrl}${endpoint}`;
+    const url = `${resolveControllerUrl()}${endpoint}`;
     const {
         timeout = DEFAULT_TIMEOUT,
         maxRetries = DEFAULT_MAX_RETRIES,
